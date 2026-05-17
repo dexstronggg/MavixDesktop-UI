@@ -159,12 +159,13 @@ class JoystickCard(AnimatedCard):
         self.setStyleSheet(self._style_normal)
 
         lay = QVBoxLayout(self)
-        lay.setAlignment(Qt.AlignTop)
         lay.setSpacing(6)
-        # Нижний margin 4px — буквально на одну линию hover-полосы
+        # Нижний margin 6px — буквально на одну линию hover-полосы
         # AnimatedCard (она 3px и рисуется у низа карточки), чтобы
         # полоса оказалась прямо под рядом кнопок, без воздуха.
-        lay.setContentsMargins(14, 14, 14, 4)
+        # AlignTop НЕ ставим: actions_row пиннится к низу через
+        # addStretch ниже.
+        lay.setContentsMargins(14, 14, 14, 6)
 
         icon_lbl = QLabel()
         icon_lbl.setAlignment(Qt.AlignCenter)
@@ -206,9 +207,13 @@ class JoystickCard(AnimatedCard):
         lay.addWidget(icon_lbl)
         lay.addWidget(name_lbl)
         lay.addWidget(status_row)
-        lay.addSpacing(6)
+        # Пустое растяжение между статусом и действиями — actions_row
+        # уезжает к нижней границе карточки. Без него (с AlignTop)
+        # actions_row сидела сразу за статусом, а под ней оставалось
+        # ~60px воздуха до hover-полосы внизу.
+        lay.addStretch()
 
-        # ── Явные кнопки действий вместо ...-меню (сразу под статусом) ────────
+        # ── Явные кнопки действий вместо ...-меню (прижаты к низу) ────────────
         actions_row = QWidget()
         actions_row.setStyleSheet('background: transparent; border: none;')
         ar = QHBoxLayout(actions_row)
