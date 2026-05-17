@@ -4,8 +4,8 @@ import time
 from typing import Callable
 
 import pygame
-from PySide6.QtCore import Qt, QSize, QTimer, Signal, QPoint, QPointF
-from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QRadialGradient, QColor, QPainterPath
+from PySide6.QtCore import Qt, QSize, QTimer, Signal, QPoint
+from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtWidgets import (
     QWidget, QDialog, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QMessageBox, QFileDialog,
@@ -17,10 +17,7 @@ from mavixdesktop.ui.style import theme
 from mavixdesktop.joystick import calibration as joystick_calibration
 from mavixdesktop.joystick.input import JoystickInput
 from mavixdesktop.joystick.manager import build_sdl_config, list_joysticks
-from .utils import (
-    svg_pixmap, AnimatedCard, CardGrid,
-    accent_line, make_page_header, StatusPill,
-)
+from .utils import svg_pixmap, AnimatedCard, CardGrid
 from .widgets import StickWidget
 
 
@@ -187,14 +184,25 @@ class JoystickCard(AnimatedCard):
             'font-weight: 600; background: transparent; border: none;'
         )
 
-        # Status-pill вместо «● + текст»: ONLINE/OFFLINE.
         status_row = QWidget()
         status_row.setStyleSheet('background: transparent; border: none;')
         sr = QHBoxLayout(status_row)
         sr.setAlignment(Qt.AlignCenter)
-        sr.setSpacing(0)
+        sr.setSpacing(6)
         sr.setContentsMargins(0, 0, 0, 0)
-        sr.addWidget(StatusPill('ready' if calibrated else 'offline'))
+
+        dot = QLabel('●')
+        dot.setStyleSheet(
+            f'color: {theme.STATUS_READY if calibrated else theme.STATUS_ERROR}; font-size: 11px;'
+            'background: transparent; border: none;'
+        )
+        status_lbl = QLabel('откалиброван' if calibrated else 'не откалиброван')
+        status_lbl.setStyleSheet(
+            f'color: {theme.TEXT_MUTED}; font-size: 12px;'
+            'background: transparent; border: none;'
+        )
+        sr.addWidget(dot)
+        sr.addWidget(status_lbl)
 
         lay.addWidget(icon_lbl)
         lay.addWidget(name_lbl)
@@ -247,29 +255,6 @@ class JoystickCard(AnimatedCard):
         if event.button() == Qt.LeftButton:
             self.clicked.emit(self._index)
         super().mousePressEvent(event)
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        # Cyan-«отблеск» в правом верхнем углу — выравнивает карточку
-        # джойстика с дроновыми.
-        p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
-        path = QPainterPath()
-        path.addRoundedRect(
-            0, 0, self.width(), self.height(),
-            theme.RADIUS_LG, theme.RADIUS_LG,
-        )
-        p.setClipPath(path)
-        grad = QRadialGradient(
-            QPointF(self.width() - 10, 6), self.width() * 0.75
-        )
-        grad.setColorAt(0.0, QColor(34, 211, 238, 40))
-        grad.setColorAt(0.6, QColor(34, 211, 238, 10))
-        grad.setColorAt(1.0, QColor(34, 211, 238, 0))
-        p.setPen(Qt.NoPen)
-        p.setBrush(grad)
-        p.drawRect(self.rect())
-        p.end()
 
 
 class _JoystickGrid(CardGrid):
@@ -481,12 +466,6 @@ class JoystickSetupPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
 
         root.addWidget(self.__build_top_bar(on_back))
-        root.addWidget(accent_line(self))
-        root.addWidget(make_page_header(
-            'Контроллеры',
-            'Подключение джойстика',
-            'Выберите контроллер из списка и откалибруйте перед взлётом.',
-        ))
 
         self._grid = _JoystickGrid()
         scroll = QScrollArea()
@@ -495,30 +474,13 @@ class JoystickSetupPage(QWidget):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        # Empty state с крупной иллюстрацией.
-        self._empty = QWidget()
-        self._empty.setStyleSheet('background: transparent;')
-        ev = QVBoxLayout(self._empty)
-        ev.setAlignment(Qt.AlignCenter)
-        ev.setSpacing(14)
-        empty_icon = QLabel()
-        empty_icon.setAlignment(Qt.AlignCenter)
-        empty_icon.setPixmap(svg_pixmap('joystick.svg', 96, color=theme.BORDER_HOVER))
-        empty_icon.setStyleSheet('background: transparent;')
-        empty_title = QLabel('Контроллеры не найдены')
-        empty_title.setAlignment(Qt.AlignCenter)
-        empty_title.setStyleSheet(
-            f'color: {theme.TEXT_PRIMARY}; background: transparent;'
-            f'font-size: {theme.FONT_SIZE_LG}px; font-weight: 600;'
+        self._empty = QLabel(
+            'Контроллеры не найдены\n\nПодключите джойстик по USB —\nсписок обновится автоматически'
         )
-        empty_sub = QLabel('Подключите джойстик по USB — список\nобновится автоматически.')
-        empty_sub.setAlignment(Qt.AlignCenter)
-        empty_sub.setStyleSheet(
-            f'color: {theme.TEXT_MUTED}; background: transparent; font-size: 13px;'
+        self._empty.setAlignment(Qt.AlignCenter)
+        self._empty.setStyleSheet(
+            f'color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_BASE}px;'
         )
-        ev.addWidget(empty_icon)
-        ev.addWidget(empty_title)
-        ev.addWidget(empty_sub)
         self._empty.hide()
 
         root.addWidget(scroll, 1)
@@ -549,6 +511,8 @@ class JoystickSetupPage(QWidget):
         from mavixdesktop.ui.screens.drone_list_page import _brand_widget, _icon_button
 
         top_bar = QWidget()
+        # #objectName-селектор, чтобы фон не каскадировал в дочерние
+        # лейблы/кнопки (они должны брать стили из QSS_GLOBAL).
         top_bar.setObjectName('topBar')
         top_bar.setStyleSheet(f"""
             QWidget#topBar {{
@@ -556,14 +520,30 @@ class JoystickSetupPage(QWidget):
                 border-bottom: 1px solid {theme.BORDER};
             }}
         """)
-        top_bar.setFixedHeight(56)
+        top_bar.setFixedHeight(64)
         tb = QHBoxLayout(top_bar)
         tb.setContentsMargins(28, 0, 28, 0)
         tb.setSpacing(12)
 
+        # Лево: бренд + разделитель + название раздела.
         tb.addWidget(_brand_widget(top_bar))
+        sep = QFrame()
+        sep.setFixedSize(1, 22)
+        sep.setStyleSheet(f'background: {theme.BORDER}; border: none;')
+        tb.addSpacing(8)
+        tb.addWidget(sep)
+        tb.addSpacing(8)
+
+        title = QLabel('Джойстики')
+        title.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; font-size: {theme.FONT_SIZE_LG}px;'
+            f'font-weight: 600; background: transparent; border: none;'
+            f'font-family: {theme.FONT_FAMILY};'
+        )
+        tb.addWidget(title)
         tb.addStretch()
 
+        # Право: «Назад» — ghost-кнопка как в шапке dashboard.
         back_btn = _icon_button('arrow_back.svg', 'Назад', top_bar)
         back_btn.setToolTip('Назад к экрану дрона')
         back_btn.clicked.connect(on_back)
