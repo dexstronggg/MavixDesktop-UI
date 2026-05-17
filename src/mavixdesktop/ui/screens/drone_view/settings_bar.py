@@ -32,9 +32,34 @@ class SettingsBar(QWidget):
 
     def __init__(self, on_save: Callable, on_calibrate: Callable):
         super().__init__()
-        self.setStyleSheet(
-            f'background: {theme.BG_SURFACE}; border-top: 1px solid {theme.BORDER};'
-        )
+        # objectName-селектор: фон относится только к этому виджету
+        # и не каскадирует в дочерние QComboBox / QLineEdit.
+        # Сразу здесь же задаём явные стили полей настроек — раньше
+        # они были «прозрачными» на чёрном из-за наследования.
+        self.setObjectName('settingsBar')
+        self.setStyleSheet(f"""
+            QWidget#settingsBar {{
+                background: {theme.BG_SURFACE};
+                border-top: 1px solid {theme.BORDER};
+            }}
+            QWidget#settingsBar QComboBox,
+            QWidget#settingsBar QLineEdit {{
+                background: {theme.BG_INPUT};
+                color: {theme.TEXT_PRIMARY};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_MD}px;
+                padding: 6px 10px;
+                font-size: {theme.FONT_SIZE_SM}px;
+            }}
+            QWidget#settingsBar QComboBox:hover,
+            QWidget#settingsBar QLineEdit:hover {{
+                border-color: {theme.BORDER_HOVER};
+            }}
+            QWidget#settingsBar QComboBox:focus,
+            QWidget#settingsBar QLineEdit:focus {{
+                border-color: {theme.ACCENT};
+            }}
+        """)
         self.setFixedHeight(72)
 
         self._params = []
