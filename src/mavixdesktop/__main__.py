@@ -90,6 +90,30 @@ def _server_reachable(timeout_sec: float = 2.0) -> bool:
         return False
 
 
+class _PointingCursorFilter:
+    """Event-filter, ставит PointingHandCursor на каждый QPushButton при
+    его первом polish-событии. Так не нужно вручную дёргать setCursor
+    на каждом сайте создания кнопки — в том числе на сторонних виджетах
+    из библиотек.
+    """
+
+    def __init__(self):
+        from PySide6.QtCore import QObject
+        from PySide6.QtWidgets import QPushButton
+
+        class _Filter(QObject):
+            def eventFilter(self_, obj, event):
+                from PySide6.QtCore import QEvent, Qt
+                if event.type() == QEvent.Polish and isinstance(obj, QPushButton):
+                    obj.setCursor(Qt.PointingHandCursor)
+                return False
+
+        self._filter = _Filter()
+
+    def attach_to(self, app) -> None:
+        app.installEventFilter(self._filter)
+
+
 def _run_gui(demo: bool = False) -> int:
     from PySide6.QtGui import QFont
     from PySide6.QtWidgets import QApplication
@@ -120,6 +144,13 @@ def _run_gui(demo: bool = False) -> int:
     # Глобальные QSS-правила: тёмная палитра + cyan-акцент,
     # выровнено со стилем сайта.
     app.setStyleSheet(theme.QSS_GLOBAL)
+    # Глобальный pointing-hand cursor для всех QPushButton.
+    # QSS-свойство cursor Qt не поддерживает, ставим через
+    # event-filter на Polish (срабатывает один раз для каждой
+    # кнопки до первого show).
+    cursor_filter = _PointingCursorFilter()
+    cursor_filter.attach_to(app)
+    app._mavix_cursor_filter = cursor_filter  # type: ignore[attr-defined]
 
     window = App(demo=demo)
     window.show()
