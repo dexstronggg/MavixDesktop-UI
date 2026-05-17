@@ -73,11 +73,37 @@ async def _run_headless(email: str | None, password: str | None) -> None:
 
 # ---------- GUI mode ----------
 
-def _run_gui() -> int:
+def _server_reachable(timeout_sec: float = 2.0) -> bool:
+    """Быстрый sync-пинг сервера на /api/v1/health. True = жив, иначе False.
+
+    Используется только как сигнал «включать ли авто-демо-режим» при
+    старте GUI — на интерактивный логин не влияет.
+    """
+    import urllib.error
+    import urllib.request
+    url = settings.http_url.rstrip('/') + '/api/v1/health'
+    try:
+        with urllib.request.urlopen(url, timeout=timeout_sec) as resp:
+            return 200 <= resp.status < 400
+    except Exception as exc:
+        logger.info('[bootstrap] health check failed: %s', exc)
+        return False
+
+
+def _run_gui(demo: bool = False) -> int:
     from PySide6.QtGui import QFont
     from PySide6.QtWidgets import QApplication
     from mavixdesktop.ui.app import App
     from mavixdesktop.ui.style import theme
+
+    # Авто-фолбэк: если пользователь не указал --demo, но сервер не
+    # отвечает на /health за 2 с — поднимаем демо-режим автоматически,
+    # чтобы можно было хотя бы посмотреть/потрогать UI.
+    if not demo and not _server_reachable():
+        logger.warning(
+            '[bootstrap] signal server unreachable, falling back to demo mode'
+        )
+        demo = True
 
     app = QApplication(sys.argv)
     # Inter — основной интерфейсный шрифт, как на сайте Mavix. Если он
@@ -91,7 +117,7 @@ def _run_gui() -> int:
     # выровнено со стилем сайта.
     app.setStyleSheet(theme.QSS_GLOBAL)
 
-    window = App()
+    window = App(demo=demo)
     window.show()
     return app.exec()
 
@@ -102,6 +128,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog='mavixdesktop', description='Mavix GCS')
     parser.add_argument('--headless', action='store_true',
                         help='Run the coordinator without the Qt UI')
+    parser.add_argument('--demo', action='store_true',
+                        help='Запустить UI с мок-данными (без сервера). '
+                             'Принимает любые email/пароль, показывает '
+                             'тестовых дронов и один мок-джойстик.')
     parser.add_argument('--email', help='login email (first launch, headless or GUI)')
     parser.add_argument('--password', help='login password (first launch, headless only)')
     args = parser.parse_args()
@@ -114,7 +144,7 @@ def main() -> None:
             pass
         return
 
-    sys.exit(_run_gui())
+    sys.exit(_run_gui(demo=args.demo))
 
 
 if __name__ == '__main__':

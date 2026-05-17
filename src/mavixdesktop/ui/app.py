@@ -21,6 +21,7 @@ from mavixdesktop.joystick.guard import JoystickGuard
 from mavixdesktop.qgc.launcher import is_qgc_running, launch_qgc, save_qgc_path
 from mavixdesktop.ui.login_page import LoginPage
 from mavixdesktop.ui.managers.connection import ConnectionManager
+from mavixdesktop.ui.managers.demo_connection import DemoConnectionManager
 from mavixdesktop.ui.managers.video import VideoManager
 from mavixdesktop.ui.screens.bridge import Bridge
 from mavixdesktop.ui.screens.drone_list_page import DroneListPage
@@ -31,9 +32,11 @@ from mavixdesktop.ui.state import SessionState
 
 
 class App(QMainWindow):
-    def __init__(self) -> None:
+    def __init__(self, demo: bool = False) -> None:
         super().__init__()
-        self.setWindowTitle('Mavix')
+        self._demo = demo
+        title = 'Mavix · ДЕМО-РЕЖИМ' if demo else 'Mavix'
+        self.setWindowTitle(title)
         self.setMinimumSize(1300, 600)
         self.resize(1300, 600)
 
@@ -47,7 +50,13 @@ class App(QMainWindow):
         self._nav_history: list[int] = []
         self._bridge = Bridge()
 
-        self._conn = ConnectionManager(bridge=self._bridge)
+        # Demo-режим подменяет настоящий ConnectionManager заглушкой
+        # с мок-данными (см. ui/managers/demo_connection.py).
+        self._conn = (
+            DemoConnectionManager(bridge=self._bridge)
+            if demo else
+            ConnectionManager(bridge=self._bridge)
+        )
         self._video = VideoManager(
             on_frame=lambda img: self.drone_view_page.show_frame(img),
             on_cam_changed=self._on_cam_changed,
@@ -87,6 +96,7 @@ class App(QMainWindow):
         self.joystick_setup_page = JoystickSetupPage(
             on_back=self._handle_back_from_joystick,
             on_takeoff=self._handle_joystick_selected,
+            demo=demo,
         )
 
         self.stack = QStackedWidget()

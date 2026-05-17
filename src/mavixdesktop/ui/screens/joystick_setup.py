@@ -430,7 +430,10 @@ class QGCLaunchingOverlay(QDialog):
 
 
 class JoystickSetupPage(QWidget):
-    def __init__(self, on_back: Callable, on_takeoff: Callable = None):
+    DEMO_JOYSTICK_NAME = 'Демо-контроллер (Mock)'
+
+    def __init__(self, on_back: Callable, on_takeoff: Callable = None,
+                 demo: bool = False):
         super().__init__()
         # None sentinel forces the very first _refresh to populate the UI even
         # when there are zero joysticks (which would otherwise compare equal
@@ -438,6 +441,7 @@ class JoystickSetupPage(QWidget):
         self._joystick_names: list[str] | None = None
         self._on_takeoff = on_takeoff
         self._fc_type: str = 'none'
+        self._demo = demo
 
         root = QVBoxLayout(self)
         root.setSpacing(0)
@@ -528,7 +532,15 @@ class JoystickSetupPage(QWidget):
         self._fc_type = fc_type
 
     def _refresh(self):
-        names = JoystickManager.list_joysticks()
+        # В демо-режиме pygame.joystick.get_count() вернёт 0 на машине
+        # без подключённого контроллера. Подсовываем один мок-имя, чтобы
+        # UI было что показать. Реальные взаимодействия с pygame в
+        # демо-режиме перехватываются ниже (см. _on_card_clicked /
+        # _on_card_action).
+        if self._demo:
+            names = [self.DEMO_JOYSTICK_NAME]
+        else:
+            names = JoystickManager.list_joysticks()
 
         # Auto-refresh tick: skip the rebuild if the device list hasn't changed,
         # so we don't churn QWidget children (and stomp on any open menu) 3x/sec.
@@ -555,6 +567,12 @@ class JoystickSetupPage(QWidget):
         self._grid.set_cards(cards)
 
     def _on_card_clicked(self, index: int):
+        if self._demo:
+            QMessageBox.information(
+                self, 'Демо-режим',
+                'Калибровка и подключение реального джойстика недоступны в демо-режиме.'
+            )
+            return
         name = self._joystick_names[index]
         takeoff_cb = self._on_takeoff if self._fc_type in ('crsf', 'mavlink') else None
         saved = JoystickCalibration.load(name)
@@ -571,6 +589,12 @@ class JoystickSetupPage(QWidget):
                 dlg.exec()
 
     def _on_card_action(self, index: int, action: str):
+        if self._demo:
+            QMessageBox.information(
+                self, 'Демо-режим',
+                'Действия с реальным джойстиком недоступны в демо-режиме.'
+            )
+            return
         name = self._joystick_names[index]
         if action == 'file':
             self._load_from_file(index, name)
