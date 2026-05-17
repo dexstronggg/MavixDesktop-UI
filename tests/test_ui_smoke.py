@@ -61,7 +61,7 @@ def test_drone_list_page_update_with_new_format(qapp):
     page = DroneListPage(
         on_select=lambda _id: None,
         on_refresh=lambda: None,
-        on_change_token=lambda: None,
+        on_logout=lambda: None,
         on_joystick_cfg=lambda: None,
     )
     # New format from MavixServer /ws/gcs
@@ -79,7 +79,7 @@ def test_drone_list_page_update_with_legacy_format(qapp):
     page = DroneListPage(
         on_select=lambda _id: None,
         on_refresh=lambda: None,
-        on_change_token=lambda: None,
+        on_logout=lambda: None,
         on_joystick_cfg=lambda: None,
     )
     page.update([{'session_id': 'legacy', 'status': 'ready'}])

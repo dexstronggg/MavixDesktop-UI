@@ -1,31 +1,40 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 #  DESIGN SYSTEM — единственный файл для всех визуальных настроек
 #  Чтобы изменить цвет, шрифт, отступ или размер — редактируй только здесь.
+#
+#  Палитра выровнена со стилем сайта Mavix (тёмный фон + cyan-акцент).
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # ── Цвета ─────────────────────────────────────────────────────────────────────
-BG            = "#1e1e1e"   # фон окна / страниц
-BG_SURFACE    = "#252525"   # фон карточек / панелей
-BG_INPUT      = "#2a2a2a"   # фон полей ввода
-BG_HOVER      = "#2e2e2e"   # фон при наведении (универсальный)
-BORDER        = "#3a3a3a"   # рамка по умолчанию
-BORDER_HOVER  = "#505050"   # рамка при наведении
-BORDER_FOCUS  = "#2a82da"   # рамка при фокусе / активном состоянии
-ACCENT        = "#2a82da"   # основной голубой акцент
-ACCENT_HOVER  = "#3d9ae8"   # акцент при наведении (светлее)
-ACCENT_PRESS  = "#1f6ab0"   # акцент при нажатии (темнее)
-ACCENT_SUBTLE = "rgba(42, 130, 218, 0.15)"  # очень лёгкая голубая подсветка
-CYAN          = "#00D4FF"   # вторичный акцент (виджет джойстика)
-TEXT_PRIMARY  = "#ffffff"
-TEXT_MUTED    = "#aaaaaa"
-TEXT_DISABLED = "#555555"
-BORDER_DARK   = "#444444"   # тёмная сетка / разделители (StickWidget)
-STATUS_READY  = "#4caf50"   # зелёный — дрон готов / откалиброван
-STATUS_ERROR  = "#f44336"   # красный — дрон недоступен / не откалиброван
-STATUS_ARM    = "#44ff44"   # ARM (полётный экран)
-STATUS_DISARM = "#ff4444"   # DISARM (полётный экран)
-WARNING       = "#e8a000"   # предупреждение
+BG            = "#07090E"   # deep space navy — основной фон окна
+BG_SURFACE    = "#11151D"   # панели, шапки, тулбары
+BG_INPUT      = "#161B24"   # карточки, поля ввода
+BG_HOVER      = "#1A2030"   # фон при наведении
+BORDER        = "#1F2733"   # рамка по умолчанию
+BORDER_HOVER  = "#2A3340"   # рамка при наведении
+BORDER_FOCUS  = "#22d3ee"   # рамка при фокусе — cyan-акцент
+ACCENT        = "#22d3ee"   # основной cyan-акцент (Tailwind cyan-400)
+ACCENT_HOVER  = "#67e8f9"   # акцент при наведении (светлее)
+ACCENT_PRESS  = "#06b6d4"   # акцент при нажатии (темнее)
+ACCENT_SUBTLE = "rgba(34, 211, 238, 0.12)"  # лёгкая cyan-подсветка
+CYAN          = "#22d3ee"   # синоним ACCENT для существующих ссылок
+TEXT_PRIMARY  = "#E8EEF5"   # основной текст
+TEXT_MUTED    = "#8893A4"   # вторичный / приглушённый
+TEXT_DISABLED = "#4A5563"   # неактивный
+BORDER_DARK   = "#0E1117"   # тёмная сетка / разделители (StickWidget)
+STATUS_READY  = "#4ADE80"   # зелёный — готов / онлайн
+STATUS_ERROR  = "#F87171"   # красный — недоступен / ошибка
+STATUS_ARM    = "#4ADE80"   # ARM (полётный экран)
+STATUS_DISARM = "#F87171"   # DISARM (полётный экран)
+WARNING       = "#FBBF24"   # жёлтое предупреждение
 BG_VIDEO      = "#000000"   # фон видеопотока
+
+# ── Шрифты ────────────────────────────────────────────────────────────────────
+# Inter — основной интерфейсный, JetBrains Mono — для моноширинных
+# (ID дронов, токены). Если Inter не установлен в системе, Qt
+# подставит дефолтный sans-serif из цепочки fallback.
+FONT_FAMILY      = '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif'
+FONT_FAMILY_MONO = '"JetBrains Mono", "SF Mono", "Cascadia Mono", Consolas, monospace'
 
 # ── Отступы (px) ──────────────────────────────────────────────────────────────
 SPACE_XS = 4
@@ -40,11 +49,11 @@ RADIUS_MD = 8
 RADIUS_LG = 12
 
 # ── Размеры шрифта (px) ───────────────────────────────────────────────────────
-FONT_SIZE_SM    = 15
-FONT_SIZE_BASE  = 20
-FONT_SIZE_LG    = 24
-FONT_SIZE_TITLE = 28
-FONT_SIZE_HERO  = 34
+FONT_SIZE_SM    = 14
+FONT_SIZE_BASE  = 16
+FONT_SIZE_LG    = 20
+FONT_SIZE_TITLE = 24
+FONT_SIZE_HERO  = 32
 
 # ── Размеры кнопок-иконок оверлея (px) ───────────────────────────────────────
 OVERLAY_BTN_CORNER      = 60   # назад / джойстик (угловые)
@@ -57,25 +66,38 @@ ANIM_FAST = 150   # мс — короткие переходы (hover)
 ANIM_MED  = 200   # мс — focus glow, появление
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  ГЛОБАЛЬНЫЙ STYLESHEET — применяется ко всему приложению через app.setStyleSheet()
-#  Охватывает все стандартные Qt-виджеты. Виджет-специфичные стили ниже
-#  могут дополнять или переопределять отдельные правила.
+#  ГЛОБАЛЬНЫЙ STYLESHEET — применяется ко всему приложению через
+#  app.setStyleSheet() в __main__.py. Охватывает все стандартные Qt-виджеты.
+#  Виджет-специфичные стили ниже могут дополнять или переопределять.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 QSS_GLOBAL = f"""
 
-/* ── Кнопки (универсальный стиль) ─────────────────────────────────────────── */
+/* ── Базовые элементы ─────────────────────────────────────────────────────── */
+QWidget {{
+    background-color: {BG};
+    color: {TEXT_PRIMARY};
+    font-family: {FONT_FAMILY};
+    font-size: {FONT_SIZE_BASE}px;
+}}
+
+QMainWindow, QDialog {{
+    background-color: {BG};
+}}
+
+/* ── Кнопки (универсальный стиль, ghost / outline) ────────────────────────── */
 QPushButton {{
-    background-color: {BG_SURFACE};
+    background-color: transparent;
     color: {TEXT_PRIMARY};
     border: 1px solid {BORDER};
     border-radius: {RADIUS_MD}px;
-    padding: 7px 16px;
+    padding: 8px 16px;
     font-size: {FONT_SIZE_SM}px;
+    font-weight: 500;
 }}
 QPushButton:hover {{
     background-color: {BG_HOVER};
-    border-color: {BORDER_FOCUS};
+    border-color: {BORDER_HOVER};
     color: {TEXT_PRIMARY};
 }}
 QPushButton:pressed {{
@@ -90,7 +112,7 @@ QPushButton:disabled {{
 QPushButton:checked {{
     background-color: {ACCENT_SUBTLE};
     border-color: {ACCENT};
-    color: {ACCENT_HOVER};
+    color: {ACCENT};
 }}
 
 /* ── Поля ввода ────────────────────────────────────────────────────────────── */
@@ -99,15 +121,15 @@ QLineEdit {{
     color: {TEXT_PRIMARY};
     border: 1px solid {BORDER};
     border-radius: {RADIUS_MD}px;
-    padding: 8px 12px;
+    padding: 9px 12px;
     selection-background-color: {ACCENT};
-    selection-color: {TEXT_PRIMARY};
+    selection-color: {BG};
 }}
 QLineEdit:hover:!focus {{
     border-color: {BORDER_HOVER};
 }}
 QLineEdit:focus {{
-    border-color: {BORDER_FOCUS};
+    border-color: {ACCENT};
 }}
 QLineEdit:disabled {{
     color: {TEXT_DISABLED};
@@ -120,14 +142,14 @@ QComboBox {{
     color: {TEXT_PRIMARY};
     border: 1px solid {BORDER};
     border-radius: {RADIUS_MD}px;
-    padding: 7px 12px;
+    padding: 8px 12px;
     min-width: 80px;
 }}
 QComboBox:hover {{
     border-color: {BORDER_HOVER};
 }}
 QComboBox:focus {{
-    border-color: {BORDER_FOCUS};
+    border-color: {ACCENT};
 }}
 QComboBox::drop-down {{
     width: 0;
@@ -147,12 +169,11 @@ QComboBox QAbstractItemView {{
     padding: 4px;
 }}
 QComboBox QAbstractItemView::item {{
-    padding: 6px 12px;
+    padding: 7px 12px;
     border-radius: {RADIUS_SM}px;
 }}
 QComboBox QAbstractItemView::item:hover {{
     background-color: {BG_HOVER};
-    border: 1px solid {BORDER_FOCUS};
 }}
 
 /* ── Списки (QListWidget) ──────────────────────────────────────────────────── */
@@ -165,13 +186,12 @@ QListWidget {{
 }}
 QListWidget::item {{
     color: {TEXT_PRIMARY};
-    padding: 8px 12px;
+    padding: 9px 12px;
     border-radius: {RADIUS_SM}px;
     border: 1px solid transparent;
 }}
 QListWidget::item:hover {{
     background-color: {BG_HOVER};
-    border-color: {BORDER_FOCUS};
 }}
 QListWidget::item:selected {{
     background-color: {ACCENT_SUBTLE};
@@ -192,7 +212,6 @@ QAbstractItemView {{
 }}
 QAbstractItemView::item:hover {{
     background-color: {BG_HOVER};
-    border: 1px solid {BORDER_FOCUS};
 }}
 
 /* ── Чекбоксы и радиокнопки ────────────────────────────────────────────────── */
@@ -212,7 +231,7 @@ QCheckBox::indicator, QRadioButton::indicator {{
     background: {BG_INPUT};
 }}
 QCheckBox::indicator:hover, QRadioButton::indicator:hover {{
-    border-color: {BORDER_FOCUS};
+    border-color: {ACCENT};
     background: {BG_HOVER};
 }}
 QCheckBox::indicator:checked {{
@@ -247,17 +266,16 @@ QGroupBox::title {{
 QTabBar::tab {{
     background: transparent;
     color: {TEXT_MUTED};
-    padding: 8px 18px;
+    padding: 9px 18px;
     border: none;
     border-bottom: 2px solid transparent;
+    font-size: {FONT_SIZE_SM}px;
 }}
 QTabBar::tab:hover {{
     color: {TEXT_PRIMARY};
-    border-bottom-color: {BORDER_FOCUS};
-    background: {ACCENT_SUBTLE};
 }}
 QTabBar::tab:selected {{
-    color: {TEXT_PRIMARY};
+    color: {ACCENT};
     border-bottom-color: {ACCENT};
 }}
 QTabWidget::pane {{
@@ -278,7 +296,7 @@ QScrollBar::handle:vertical {{
     min-height: 24px;
 }}
 QScrollBar::handle:vertical:hover {{
-    background: {TEXT_DISABLED};
+    background: {BORDER_HOVER};
 }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
     height: 0px;
@@ -295,7 +313,7 @@ QScrollBar::handle:horizontal {{
     min-width: 24px;
 }}
 QScrollBar::handle:horizontal:hover {{
-    background: {TEXT_DISABLED};
+    background: {BORDER_HOVER};
 }}
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
     width: 0px;
@@ -306,7 +324,7 @@ QToolTip {{
     background-color: {BG_SURFACE};
     color: {TEXT_PRIMARY};
     border: 1px solid {BORDER};
-    padding: 5px 10px;
+    padding: 6px 10px;
     border-radius: {RADIUS_SM}px;
     font-size: {FONT_SIZE_SM}px;
 }}
@@ -329,25 +347,16 @@ QMenu {{
     padding: 4px;
 }}
 QMenu::item {{
-    padding: 7px 20px 7px 12px;
+    padding: 8px 20px 8px 14px;
     border-radius: {RADIUS_SM}px;
 }}
 QMenu::item:hover {{
     background: {BG_HOVER};
-    border: 1px solid {BORDER_FOCUS};
 }}
 QMenu::separator {{
     height: 1px;
     background: {BORDER};
     margin: 4px 8px;
-}}
-
-/* ── QDialog / QMessageBox ─────────────────────────────────────────────────── */
-QDialog {{
-    background: {BG};
-}}
-QMessageBox {{
-    background: {BG};
 }}
 
 /* ── Слайдер ───────────────────────────────────────────────────────────────── */
@@ -406,23 +415,27 @@ QLineEdit {{
     color: {TEXT_PRIMARY};
     border: 1px solid {BORDER};
     border-radius: {RADIUS_MD}px;
-    padding: 10px 14px;
+    padding: 11px 14px;
     font-size: {FONT_SIZE_BASE}px;
     selection-background-color: {ACCENT};
+    selection-color: {BG};
 }}
 QLineEdit:hover:!focus {{
     border-color: {BORDER_HOVER};
 }}
+QLineEdit:focus {{
+    border-color: {ACCENT};
+}}
 """
 
-# Основная кнопка (заливка акцентом)
+# Основная кнопка (cyan-заливка, тёмный текст — как btn-primary на сайте)
 QSS_BUTTON_PRIMARY = f"""
 QPushButton {{
     background-color: {ACCENT};
-    color: {TEXT_PRIMARY};
+    color: {BG};
     border: none;
     border-radius: {RADIUS_MD}px;
-    padding: 10px 20px;
+    padding: 11px 22px;
     font-size: {FONT_SIZE_BASE}px;
     font-weight: 600;
 }}
@@ -434,25 +447,26 @@ QPushButton:pressed {{
     background-color: {ACCENT_PRESS};
 }}
 QPushButton:disabled {{
-    background-color: #333;
+    background-color: {BG_HOVER};
     color: {TEXT_DISABLED};
     border: none;
 }}
 """
 
-# Вторичная кнопка (ghost / outline)
+# Вторичная кнопка (ghost / outline) — для шапки кабинета, действий в карточках
 QSS_BUTTON_SECONDARY = f"""
 QPushButton {{
     background-color: transparent;
     color: {TEXT_MUTED};
     border: 1px solid {BORDER};
     border-radius: {RADIUS_MD}px;
-    padding: 6px 14px;
+    padding: 8px 16px;
     font-size: {FONT_SIZE_SM}px;
+    font-weight: 500;
 }}
 QPushButton:hover {{
     background-color: {BG_HOVER};
-    border-color: {BORDER_FOCUS};
+    border-color: {BORDER_HOVER};
     color: {TEXT_PRIMARY};
 }}
 QPushButton:pressed {{
@@ -461,10 +475,10 @@ QPushButton:pressed {{
 }}
 """
 
-# Карточка на экране токена
+# Карточка на экране токена (большая, со скруглёнными краями)
 QSS_TOKEN_CARD = f"""
 QWidget#tokenCard {{
-    background-color: {BG_SURFACE};
+    background-color: {BG_INPUT};
     border: 1px solid {BORDER};
     border-radius: {RADIUS_LG}px;
 }}

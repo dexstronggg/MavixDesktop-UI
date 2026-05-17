@@ -72,7 +72,7 @@ class App(QMainWindow):
         self.drone_list_page = DroneListPage(
             on_select=self._handle_select_drone,
             on_refresh=self._handle_refresh,
-            on_change_token=self._handle_logout,
+            on_logout=self._handle_logout,
             on_joystick_cfg=self._open_joystick_setup,
         )
         self.drone_view_page = DroneViewPage(

@@ -124,7 +124,7 @@ class _DroneGrid(CardGrid):
 
 class DroneListPage(QWidget):
     def __init__(self, on_select: Callable, on_refresh: Callable,
-                 on_change_token: Callable, on_joystick_cfg: Callable):
+                 on_logout: Callable, on_joystick_cfg: Callable):
         super().__init__()
         self._on_select = on_select
         self._icon = svg_pixmap('drone_list.svg', _ICON_SIZE)
@@ -151,15 +151,15 @@ class DroneListPage(QWidget):
         joy_btn.setStyleSheet(theme.QSS_BUTTON_SECONDARY)
         joy_btn.clicked.connect(on_joystick_cfg)
 
-        token_btn = QPushButton('Сменить токен')
-        token_btn.setStyleSheet(theme.QSS_BUTTON_SECONDARY)
-        token_btn.clicked.connect(on_change_token)
+        logout_btn = QPushButton('Выйти')
+        logout_btn.setStyleSheet(theme.QSS_BUTTON_SECONDARY)
+        logout_btn.clicked.connect(on_logout)
 
         tb.addWidget(title)
         tb.addStretch()
         tb.addWidget(joy_btn)
         tb.addSpacing(8)
-        tb.addWidget(token_btn)
+        tb.addWidget(logout_btn)
 
         self._grid = _DroneGrid()
 

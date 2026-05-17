@@ -74,10 +74,23 @@ async def _run_headless(email: str | None, password: str | None) -> None:
 # ---------- GUI mode ----------
 
 def _run_gui() -> int:
+    from PySide6.QtGui import QFont
     from PySide6.QtWidgets import QApplication
     from mavixdesktop.ui.app import App
+    from mavixdesktop.ui.style import theme
 
     app = QApplication(sys.argv)
+    # Inter — основной интерфейсный шрифт, как на сайте Mavix. Если он
+    # не установлен в системе, Qt автоматически подставит следующий
+    # из цепочки fallback (через FONT_FAMILY в QSS-правилах).
+    font = QFont('Inter')
+    font.setStyleStrategy(QFont.PreferAntialias)
+    font.setPixelSize(theme.FONT_SIZE_BASE)
+    app.setFont(font)
+    # Глобальные QSS-правила: тёмная палитра + cyan-акцент,
+    # выровнено со стилем сайта.
+    app.setStyleSheet(theme.QSS_GLOBAL)
+
     window = App()
     window.show()
     return app.exec()

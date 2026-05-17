@@ -233,7 +233,6 @@ class JoystickCard(AnimatedCard):
         items = [
             ('Загрузить из файла', lambda: self.action.emit(self._index, 'file')),
             ('Калибровка',         lambda: self.action.emit(self._index, 'calibrate')),
-            ('Копировать SDL',     lambda: self.action.emit(self._index, 'sdl')),
             ('Сохранить в файл',   lambda: self.action.emit(self._index, 'file_save')),
         ]
         self._active_menu = _CardMenu(items)
@@ -579,8 +578,6 @@ class JoystickSetupPage(QWidget):
             dlg = JoystickCalibrationDialog(index, name, parent=self)
             if dlg.exec() == QDialog.Accepted and dlg.calibration:
                 self._refresh()
-        elif action == 'sdl':
-            self._copy_sdl(index, name)
         elif action == 'file_save':
             self._save_to_file(index, name)
 
@@ -626,27 +623,6 @@ class JoystickSetupPage(QWidget):
             return
         QMessageBox.information(self, 'Сохранено',
                                 f'Калибровка сохранена в:\n{path}')
-
-    def _copy_sdl(self, index: int, name: str):
-        cal = JoystickCalibration.load(name)
-        if not cal:
-            QMessageBox.warning(self, 'Нет калибровки',
-                                f'Джойстик «{name}» не откалиброван.')
-            return
-        sdl = cal.get('sdl_gamecontrollerconfig', '')
-        if not sdl:
-            QMessageBox.warning(self, 'Нет SDL строки',
-                                'SDL строка отсутствует в файле калибровки.')
-            return
-        QGuiApplication.clipboard().setText(
-            'export SDL_GAMECONTROLLERCONFIG="' + sdl + '"'
-        )
-        QMessageBox.information(
-            self, 'Скопировано',
-            f'SDL строка скопирована в буфер обмена.\n\n'
-            f'Добавьте в терминал перед запуском QGroundControl:\n'
-            f'export SDL_GAMECONTROLLERCONFIG="{sdl}"'
-        )
 
 
 class JoystickCalibrationDialog(QDialog):
