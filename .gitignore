@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+
+# Local config — never commit secrets
+.env
+
+# Logs
+src/_logs/

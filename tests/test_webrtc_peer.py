@@ -1,0 +1,190 @@
+"""End-to-end PeerSession test: real aiortc loopback drone↔gcs in-process.
+
+The 'drone' side here is a plain aiortc RTCPeerConnection that creates
+data channels and produces an offer; the GCS side is our PeerSession
+applying the offer and producing an answer.
+"""
+from __future__ import annotations
+
+import asyncio
+
+import pytest
+from aiortc import RTCPeerConnection, RTCSessionDescription
+
+from mavixdesktop.webrtc.peer import (
+    PeerSession,
+    _build_configuration,
+    _patch_dtls_setup_passive,
+)
+
+
+def test_build_configuration_no_servers():
+    cfg = _build_configuration([])
+    assert cfg.iceServers == []
+
+
+def test_build_configuration_with_stun():
+    cfg = _build_configuration([{'urls': 'stun:stun.example:3478'}])
+    assert len(cfg.iceServers) == 1
+    assert cfg.iceServers[0].urls == 'stun:stun.example:3478'
+
+
+def test_build_configuration_with_turn_creds():
+    cfg = _build_configuration([{
+        'urls': 'turn:turn.example:3478',
+        'username': 'alice',
+        'credential': 'secret',
+    }])
+    assert cfg.iceServers[0].username == 'alice'
+    assert cfg.iceServers[0].credential == 'secret'
+
+
+def test_build_configuration_ignores_entries_without_urls():
+    cfg = _build_configuration([{'username': 'x'}, {'urls': 'stun:y:3478'}])
+    assert len(cfg.iceServers) == 1
+
+
+# ---------- _patch_dtls_setup_passive ----------
+# The drone runs GStreamer webrtcbin which always wants to be the DTLS
+# client (a=setup:active). aiortc, by default, also returns
+# a=setup:active in its answer. With both sides claiming active, DTLS
+# never completes. Rewriting our answer to passive is required.
+
+def test_patch_dtls_replaces_setup_active_line():
+    sdp = (
+        'v=0\r\n'
+        'a=group:BUNDLE 0\r\n'
+        'a=setup:active\r\n'
+        'a=ice-ufrag:abc\r\n'
+    )
+    out = _patch_dtls_setup_passive(sdp)
+    assert 'a=setup:passive\r\n' in out
+    assert 'a=setup:active' not in out
+
+
+def test_patch_dtls_replaces_every_occurrence():
+    sdp = (
+        'a=setup:active\r\n'
+        'm=video 9 UDP/TLS/RTP/SAVPF 96\r\n'
+        'a=setup:active\r\n'
+        'm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n'
+        'a=setup:active\r\n'
+    )
+    out = _patch_dtls_setup_passive(sdp)
+    assert out.count('a=setup:passive') == 3
+    assert 'a=setup:active' not in out
+
+
+def test_patch_dtls_handles_lf_only_newlines():
+    sdp = 'a=setup:active\na=ice-ufrag:x\n'
+    out = _patch_dtls_setup_passive(sdp)
+    assert out == 'a=setup:passive\na=ice-ufrag:x\n'
+
+
+def test_patch_dtls_does_not_touch_other_lines():
+    sdp = (
+        'v=0\r\n'
+        'a=ice-options:trickle\r\n'
+        'a=fingerprint:sha-256 AA:BB\r\n'
+        'a=setup:active\r\n'
+    )
+    out = _patch_dtls_setup_passive(sdp)
+    # Only the setup line changed
+    assert 'v=0\r\n' in out
+    assert 'a=ice-options:trickle\r\n' in out
+    assert 'a=fingerprint:sha-256 AA:BB\r\n' in out
+    assert 'a=setup:passive\r\n' in out
+
+
+def test_patch_dtls_does_not_touch_setup_passive_or_actpass():
+    sdp = 'a=setup:passive\r\na=setup:actpass\r\n'
+    out = _patch_dtls_setup_passive(sdp)
+    assert out == sdp
+
+
+def test_patch_dtls_does_not_match_attribute_substring():
+    # A made-up line that *contains* "setup:active" as a substring but
+    # is not exactly that attribute — must be left alone.
+    sdp = 'a=setup:active-but-not-really\r\na=setup:active\r\n'
+    out = _patch_dtls_setup_passive(sdp)
+    assert 'a=setup:active-but-not-really\r\n' in out
+    assert 'a=setup:passive\r\n' in out
+
+
+def test_patch_dtls_noop_on_empty_string():
+    assert _patch_dtls_setup_passive('') == ''
+
+
+async def test_apply_offer_produces_valid_answer():
+    drone_pc = RTCPeerConnection()
+    drone_pc.createDataChannel('packet-channel')
+    drone_pc.createDataChannel('config-channel')
+
+    offer = await drone_pc.createOffer()
+    await drone_pc.setLocalDescription(offer)
+    offer_sdp = drone_pc.localDescription.sdp
+
+    peer = PeerSession('drone-loopback', ice_servers=[])
+    try:
+        answer_sdp = await peer.apply_offer(offer_sdp)
+        assert isinstance(answer_sdp, str)
+        assert answer_sdp.startswith('v=0')
+        # The DTLS-passive rewrite is load-bearing: GStreamer webrtcbin
+        # on the drone always wants active, so our answer must be passive.
+        assert 'a=setup:passive' in answer_sdp
+        assert 'a=setup:active' not in answer_sdp
+    finally:
+        await peer.close()
+        await drone_pc.close()
+
+
+async def test_datachannel_callback_fires_on_drone_open(monkeypatch):
+    """Drone opens channel → after offer/answer exchange, peer receives it.
+
+    This test exercises the data-channel path in an aiortc↔aiortc loopback;
+    the DTLS-passive rewrite is bypassed for the loopback (see _patch_dtls
+    unit tests above for full coverage). With a real GStreamer drone the
+    rewrite is required, but with two aiortc peers the role mismatch
+    introduced by the rewrite prevents DTLS from completing.
+    """
+    monkeypatch.setattr(
+        'mavixdesktop.webrtc.peer._patch_dtls_setup_passive', lambda s: s
+    )
+    drone_pc = RTCPeerConnection()
+    drone_pc.createDataChannel('packet-channel')
+
+    received_labels: list[str] = []
+    peer = PeerSession('drone-loopback', ice_servers=[])
+    peer.on_datachannel = lambda ch: received_labels.append(ch.label)
+
+    try:
+        offer = await drone_pc.createOffer()
+        await drone_pc.setLocalDescription(offer)
+        answer_sdp = await peer.apply_offer(drone_pc.localDescription.sdp)
+        await drone_pc.setRemoteDescription(RTCSessionDescription(sdp=answer_sdp, type='answer'))
+
+        # Give negotiation a moment to complete and trigger the datachannel event
+        for _ in range(50):
+            if received_labels:
+                break
+            await asyncio.sleep(0.05)
+        assert 'packet-channel' in received_labels
+    finally:
+        await peer.close()
+        await drone_pc.close()
+
+
+async def test_add_remote_ice_invalid_payload_returns_false():
+    peer = PeerSession('drone', ice_servers=[])
+    try:
+        ok = await peer.add_remote_ice({'sdpMLineIndex': 0})  # missing 'candidate'
+        assert ok is False
+    finally:
+        await peer.close()
+
+
+async def test_close_is_idempotent_ish():
+    peer = PeerSession('drone', ice_servers=[])
+    await peer.close()
+    # Calling close again may log but must not raise
+    await peer.close()
