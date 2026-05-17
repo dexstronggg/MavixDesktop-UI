@@ -6,41 +6,76 @@ full-width primary-кнопка.
 """
 from __future__ import annotations
 
+import math
+import time
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtCore import Qt, QTimer, QPointF
+from PySide6.QtGui import QFont, QPainter, QRadialGradient, QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QFrame, QGraphicsDropShadowEffect, QSizePolicy,
 )
-from PySide6.QtGui import QColor
 
 from mavixdesktop.ui.style import theme
 from mavixdesktop.ui.screens.utils import svg_pixmap, mavix_logo_pixmap
 
 
 class _AuthBackground(QWidget):
-    """Фон страницы — тёмный с двумя мягкими cyan-«пятнами»."""
+    """Анимированный фон страницы входа — несколько полупрозрачных
+    цветовых «пятен» (cyan/blue), которые медленно плавают по
+    синусоидам. Аналог bg-fx с лендинга сайта Mavix.
+    """
+
+    # Один блоб = (базовая x в %, базовая y в %, амплитуда x в %,
+    # амплитуда y в %, период сек, фаза, радиус в % мин-стороны, цвет rgba).
+    _BLOBS = [
+        (25, 25,  18, 12, 32.0, 0.0,  55, (34, 211, 238, 36)),   # cyan
+        (75, 75,  22, 14, 38.0, 1.3,  60, (6,  182, 212, 30)),   # cyan-darker
+        (60, 30,  16, 18, 44.0, 2.1,  50, (29, 78,  216, 28)),   # blue
+    ]
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setAutoFillBackground(True)
-        self.setStyleSheet(f"""
-            QWidget#authBg {{
-                background:
-                    qradialgradient(cx:0.2, cy:0.15, radius:0.6,
-                        fx:0.2, fy:0.15,
-                        stop:0 rgba(34,211,238,0.10),
-                        stop:1 transparent),
-                    qradialgradient(cx:0.8, cy:0.85, radius:0.6,
-                        fx:0.8, fy:0.85,
-                        stop:0 rgba(6,182,212,0.08),
-                        stop:1 transparent),
-                    {theme.BG};
-            }}
-        """)
         self.setObjectName('authBg')
+        # Свой paintEvent — отключаем фоновую заливку Qt-stylesheet,
+        # рисуем всё сами (стиль из родителя/QSS_GLOBAL не помешает).
+        self.setAttribute(Qt.WA_StyledBackground, False)
+
+        self._t0 = time.monotonic()
+        # 30 FPS — достаточно для очень медленной анимации, нагрузка
+        # минимальная (3 радиальных градиента на кадр).
+        self._timer = QTimer(self)
+        self._timer.setInterval(33)
+        self._timer.timeout.connect(self.update)
+        self._timer.start()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+
+        # Базовая заливка фона.
+        p.fillRect(self.rect(), QColor(theme.BG))
+
+        w = self.width()
+        h = self.height()
+        min_side = min(w, h)
+        t = time.monotonic() - self._t0
+
+        p.setPen(Qt.NoPen)
+        for bx, by, ax, ay, period, phase, rad_pct, rgba in self._BLOBS:
+            # медленные перемещения по синусу/косинусу
+            cx = (bx + ax * math.sin(2 * math.pi * t / period + phase)) / 100.0 * w
+            cy = (by + ay * math.cos(2 * math.pi * t / period + phase * 1.2)) / 100.0 * h
+            radius = rad_pct / 100.0 * min_side
+
+            grad = QRadialGradient(QPointF(cx, cy), radius)
+            grad.setColorAt(0.0, QColor(*rgba))
+            grad.setColorAt(1.0, QColor(rgba[0], rgba[1], rgba[2], 0))
+            p.setBrush(grad)
+            p.drawEllipse(QPointF(cx, cy), radius, radius)
+
+        p.end()
 
 
 class _IconLineEdit(QFrame):
