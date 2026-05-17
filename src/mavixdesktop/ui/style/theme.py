@@ -483,3 +483,23 @@ QWidget#tokenCard {{
     border-radius: {RADIUS_LG}px;
 }}
 """
+
+# Икон-кнопка без рамки и фона — для icon-only кнопок (eye, joystick
+# card actions). На hover — лёгкая подложка, на pressed — чуть темнее.
+QSS_BUTTON_ICON = f"""
+QPushButton {{
+    background: transparent;
+    border: none;
+    border-radius: {RADIUS_MD}px;
+    padding: 6px;
+}}
+QPushButton:hover {{
+    background-color: {BG_HOVER};
+}}
+QPushButton:pressed {{
+    background-color: {BG_INPUT};
+}}
+QPushButton:disabled {{
+    background: transparent;
+}}
+"""

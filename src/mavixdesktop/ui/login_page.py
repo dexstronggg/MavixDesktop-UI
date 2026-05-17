@@ -231,6 +231,7 @@ class LoginPage(QWidget):
         self._show_pw_btn.setCursor(Qt.PointingHandCursor)
         self._show_pw_btn.setToolTip('Показать пароль')
         self._show_pw_btn.setFocusPolicy(Qt.NoFocus)
+        self._show_pw_btn.setStyleSheet(theme.QSS_BUTTON_ICON)
         self._show_pw_btn.toggled.connect(self._toggle_password_visibility)
         self._password_wrap.layout().addWidget(self._show_pw_btn)
         layout.addWidget(self._password_wrap)

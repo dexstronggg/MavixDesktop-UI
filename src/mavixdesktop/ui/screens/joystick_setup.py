@@ -220,7 +220,7 @@ class JoystickCard(AnimatedCard):
             b.setCursor(Qt.PointingHandCursor)
             b.setToolTip(tip)
             b.setFocusPolicy(Qt.NoFocus)
-            b.setStyleSheet(theme.QSS_BUTTON_SECONDARY)
+            b.setStyleSheet(theme.QSS_BUTTON_ICON)
             b.clicked.connect(lambda _checked=False, s=sub: self.action.emit(self._index, s))
             ar.addWidget(b, 1)
             self._action_buttons.append(b)
