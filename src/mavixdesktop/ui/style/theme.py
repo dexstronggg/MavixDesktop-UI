@@ -503,3 +503,84 @@ QPushButton:disabled {{
     background: transparent;
 }}
 """
+
+# ── Дизайн-pass: eyebrow + title + pills + accent-line ───────────────────────
+# Маленький cyan-моноширинный uppercase ярлык, как .eyebrow на сайте.
+QSS_EYEBROW = f"""
+QLabel {{
+    color: {ACCENT};
+    background: transparent;
+    font-family: {FONT_FAMILY_MONO};
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    border: none;
+}}
+"""
+
+# Крупный заголовок страницы (под eyebrow).
+QSS_PAGE_TITLE = f"""
+QLabel {{
+    color: {TEXT_PRIMARY};
+    background: transparent;
+    font-family: {FONT_FAMILY};
+    font-size: {FONT_SIZE_TITLE}px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    border: none;
+}}
+"""
+
+# Приглушённый сабтайтл.
+QSS_PAGE_SUBTITLE = f"""
+QLabel {{
+    color: {TEXT_MUTED};
+    background: transparent;
+    font-family: {FONT_FAMILY};
+    font-size: 14px;
+    line-height: 1.55;
+    border: none;
+}}
+"""
+
+# Тонкая cyan-полоска: linear-gradient transparent → cyan → transparent.
+QSS_ACCENT_LINE = f"""
+QWidget {{
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 transparent,
+        stop:0.25 rgba(34, 211, 238, 0.35),
+        stop:0.5  rgba(34, 211, 238, 0.70),
+        stop:0.75 rgba(34, 211, 238, 0.35),
+        stop:1 transparent
+    );
+    border: none;
+}}
+"""
+
+# Status-pill: rounded capsule с подсветкой по статусу.
+def qss_status_pill(color_hex: str, soft_alpha_rgba: str) -> str:
+    return f"""
+        QFrame#statusPill {{
+            background: {soft_alpha_rgba};
+            border: 1px solid {color_hex};
+            border-radius: 9px;
+            padding: 0;
+        }}
+        QFrame#statusPill QLabel {{
+            color: {color_hex};
+            background: transparent;
+            font-family: {FONT_FAMILY_MONO};
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+        }}
+    """
+
+# Inline-стиль для focus-ring на QLineEdit / QFrame#iconInput: внешняя
+# двойная рамка (1px cyan + 2px subtle).
+QSS_INPUT_FOCUSED = f"""
+QFrame#iconInput[focused="true"] {{
+    border: 1px solid {ACCENT};
+}}
+"""

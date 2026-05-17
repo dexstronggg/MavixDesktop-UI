@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from mavixdesktop.ui.style import theme
-from mavixdesktop.ui.screens.utils import svg_pixmap, mavix_logo_pixmap
+from mavixdesktop.ui.screens.utils import svg_pixmap, mavix_logo_pixmap, attach_glow
 
 
 class _AuthBackground(QWidget):
@@ -229,6 +229,12 @@ class LoginPage(QWidget):
         brand_row.addStretch()
         layout.addLayout(brand_row)
 
+        # Eyebrow над заголовком — как на сайте.
+        eyebrow = QLabel('АВТОРИЗАЦИЯ')
+        eyebrow.setAlignment(Qt.AlignCenter)
+        eyebrow.setStyleSheet(theme.QSS_EYEBROW)
+        layout.addWidget(eyebrow)
+
         title = QLabel('Вход в систему')
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet(
@@ -289,6 +295,8 @@ class LoginPage(QWidget):
         self._submit_btn.setCursor(Qt.PointingHandCursor)
         self._submit_btn.setMinimumHeight(46)
         self._submit_btn.setStyleSheet(theme.QSS_BUTTON_PRIMARY)
+        # Cyan-glow вокруг primary-кнопки — выделяет основное действие.
+        attach_glow(self._submit_btn, color_hex=theme.ACCENT, radius=24, alpha=120)
         self._submit_btn.clicked.connect(self._submit)
         layout.addWidget(self._submit_btn)
 

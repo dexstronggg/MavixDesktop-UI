@@ -1,18 +1,22 @@
 from typing import Callable
 
-from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QPixmap, QPainter, QIcon
+from PySide6.QtCore import Qt, Signal, QTimer, QPointF
+from PySide6.QtGui import QPixmap, QPainter, QIcon, QRadialGradient, QColor, QPainterPath
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QFrame,
 )
 
 from mavixdesktop.ui.style import theme
-from .utils import svg_pixmap, mavix_logo_pixmap, AnimatedCard, CardGrid
+from .utils import (
+    svg_pixmap, mavix_logo_pixmap, AnimatedCard, CardGrid,
+    accent_line, make_page_header, StatusPill,
+)
 
 
 def _brand_widget(parent: QWidget | None = None) -> QWidget:
-    """Логотип-бренд: квадратик с M + надпись MAVIX, как в шапке сайта."""
+    """Логотип-бренд: квадратик с M + надпись MAVIX + версия +
+    online-индикатор, как в шапке сайта."""
     w = QWidget(parent)
     w.setStyleSheet('background: transparent;')
     h = QHBoxLayout(w)
@@ -30,6 +34,22 @@ def _brand_widget(parent: QWidget | None = None) -> QWidget:
         f'font-size: {theme.FONT_SIZE_BASE}px; letter-spacing: 2px;'
     )
     h.addWidget(wordmark)
+    # Маленькая версия рядом с wordmark.
+    version = QLabel('v0.1.0')
+    version.setStyleSheet(
+        f'background: transparent; color: {theme.TEXT_MUTED};'
+        f'font-family: {theme.FONT_FAMILY_MONO}; font-weight: 500;'
+        f'font-size: 10px; letter-spacing: 0.5px;'
+    )
+    h.addWidget(version)
+    # Зелёная пульсирующая точка — индикатор «приложение живо».
+    h.addSpacing(4)
+    live = QLabel('●')
+    live.setStyleSheet(
+        f'background: transparent; color: {theme.STATUS_READY}; font-size: 8px;'
+    )
+    live.setToolTip('Приложение активно')
+    h.addWidget(live)
     return w
 
 
@@ -100,6 +120,7 @@ class DroneCard(AnimatedCard):
         icon_lbl = QLabel()
         icon_lbl.setAlignment(Qt.AlignCenter)
         icon_lbl.setPixmap(icon_pixmap if self._ready else _dim_pixmap(icon_pixmap))
+        icon_lbl.setStyleSheet('background: transparent; border: none;')
 
         name_lbl = QLabel(f'Дрон №{index + 1}')
         name_lbl.setAlignment(Qt.AlignCenter)
@@ -118,25 +139,15 @@ class DroneCard(AnimatedCard):
             'background: transparent; border: none;'
         )
 
+        # Status-pill вместо «● + текст».
         status_row = QWidget()
         status_row.setStyleSheet('background: transparent; border: none;')
         sr_layout = QHBoxLayout(status_row)
         sr_layout.setAlignment(Qt.AlignCenter)
-        sr_layout.setSpacing(6)
+        sr_layout.setSpacing(0)
         sr_layout.setContentsMargins(0, 0, 0, 0)
-
-        dot = QLabel('●')
-        dot.setStyleSheet(
-            f'color: {theme.STATUS_READY if self._ready else theme.STATUS_ERROR}; font-size: 11px;'
-            'background: transparent; border: none;'
-        )
-        status_lbl = QLabel('готов' if self._ready else status)
-        status_lbl.setStyleSheet(
-            f'color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_SM - 3}px;'
-            'background: transparent; border: none;'
-        )
-        sr_layout.addWidget(dot)
-        sr_layout.addWidget(status_lbl)
+        pill_status = 'ready' if self._ready else (status or 'offline')
+        sr_layout.addWidget(StatusPill(pill_status))
 
         layout.addWidget(icon_lbl)
         layout.addWidget(name_lbl)
@@ -152,6 +163,32 @@ class DroneCard(AnimatedCard):
         if self._ready and event.button() == Qt.LeftButton:
             self.clicked.emit(self._session_id)
         super().mousePressEvent(event)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        # Лёгкий cyan-«отблеск» в правом верхнем углу — иллюзия
+        # направленного света. Только для готовых карточек.
+        if not self._ready:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        # Обрезаем по форме карточки, чтобы не выходить за скругления.
+        path = QPainterPath()
+        path.addRoundedRect(
+            0, 0, self.width(), self.height(),
+            theme.RADIUS_LG, theme.RADIUS_LG,
+        )
+        p.setClipPath(path)
+        grad = QRadialGradient(
+            QPointF(self.width() - 10, 6), self.width() * 0.75
+        )
+        grad.setColorAt(0.0, QColor(34, 211, 238, 40))
+        grad.setColorAt(0.6, QColor(34, 211, 238, 10))
+        grad.setColorAt(1.0, QColor(34, 211, 238, 0))
+        p.setPen(Qt.NoPen)
+        p.setBrush(grad)
+        p.drawRect(self.rect())
+        p.end()
 
 
 class _DroneGrid(CardGrid):
@@ -180,40 +217,30 @@ class DroneListPage(QWidget):
                 border-bottom: 1px solid {theme.BORDER};
             }}
         """)
-        top_bar.setFixedHeight(64)
+        top_bar.setFixedHeight(56)
         tb = QHBoxLayout(top_bar)
         tb.setContentsMargins(28, 0, 28, 0)
         tb.setSpacing(12)
 
-        # Лево: лого-бренд + заголовок раздела.
         tb.addWidget(_brand_widget(top_bar))
-        sep = QFrame()
-        sep.setFixedSize(1, 22)
-        sep.setStyleSheet(f'background: {theme.BORDER}; border: none;')
-        tb.addSpacing(8)
-        tb.addWidget(sep)
-        tb.addSpacing(8)
-
-        title = QLabel('Дроны')
-        title.setStyleSheet(
-            f'color: {theme.TEXT_PRIMARY}; font-size: {theme.FONT_SIZE_LG}px;'
-            f'font-weight: 600; background: transparent; border: none;'
-            f'font-family: {theme.FONT_FAMILY};'
-        )
-        tb.addWidget(title)
         tb.addStretch()
 
         # Право: действия.
         joy_btn = _icon_button('joystick.svg', 'Джойстик', top_bar)
         joy_btn.clicked.connect(on_joystick_cfg)
-
-        # «Выйти» — без иконки: символ logout оптически мог читаться
-        # как G→. Текста достаточно.
         logout_btn = _icon_button(None, 'Выйти', top_bar)
         logout_btn.clicked.connect(on_logout)
-
         tb.addWidget(joy_btn)
         tb.addWidget(logout_btn)
+
+        # Cyan-полоска под шапкой — мягкий акцент вместо плоского border.
+        line = accent_line(self)
+
+        # Page header: eyebrow + title + subtitle.
+        page_head = make_page_header(
+            'Кабинет', 'Доступные дроны',
+            'Выберите дрон со статусом ONLINE, чтобы запустить видеопоток.',
+        )
 
         self._grid = _DroneGrid()
 
@@ -227,14 +254,36 @@ class DroneListPage(QWidget):
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
-        self._empty = QLabel('Дроны не найдены\n\nПодождите, список обновляется автоматически')
-        self._empty.setAlignment(Qt.AlignCenter)
-        self._empty.setStyleSheet(
-            f'color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_BASE}px;'
+        # Empty state: крупная блёклая иллюстрация дрона + заголовок + сабтекст.
+        self._empty = QWidget()
+        self._empty.setStyleSheet('background: transparent;')
+        ev = QVBoxLayout(self._empty)
+        ev.setAlignment(Qt.AlignCenter)
+        ev.setSpacing(14)
+        empty_icon = QLabel()
+        empty_icon.setAlignment(Qt.AlignCenter)
+        empty_icon.setPixmap(svg_pixmap('drone_list.svg', 96, color=theme.BORDER_HOVER))
+        empty_icon.setStyleSheet('background: transparent;')
+        empty_title = QLabel('Дроны не найдены')
+        empty_title.setAlignment(Qt.AlignCenter)
+        empty_title.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; background: transparent;'
+            f'font-size: {theme.FONT_SIZE_LG}px; font-weight: 600;'
         )
+        empty_sub = QLabel('Подключите дрон с прошивкой MavixBoard — список\nобновляется автоматически каждые 5 секунд.')
+        empty_sub.setAlignment(Qt.AlignCenter)
+        empty_sub.setStyleSheet(
+            f'color: {theme.TEXT_MUTED}; background: transparent;'
+            f'font-size: 13px;'
+        )
+        ev.addWidget(empty_icon)
+        ev.addWidget(empty_title)
+        ev.addWidget(empty_sub)
         self._empty.hide()
 
         root.addWidget(top_bar)
+        root.addWidget(line)
+        root.addWidget(page_head)
         root.addWidget(scroll, 1)
         root.addWidget(self._empty, 1)
 

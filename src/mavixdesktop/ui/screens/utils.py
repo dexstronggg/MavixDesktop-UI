@@ -244,3 +244,112 @@ class CardGrid(QWidget):
             self._layout.addWidget(card, i // cols, i % cols, Qt.AlignTop | Qt.AlignLeft)
         rows = (len(self._cards) + cols - 1) // cols if self._cards else 0
         self.setMinimumHeight(rows * (self.CARD_H + self.GAP) + self.GAP)
+
+
+# ── Дизайн-pass хелперы ──────────────────────────────────────────────────────
+
+from PySide6.QtWidgets import (
+    QLabel, QHBoxLayout, QVBoxLayout, QFrame, QGraphicsDropShadowEffect,
+)
+
+
+def accent_line(parent=None, height: int = 2) -> QWidget:
+    """Тонкая cyan-полоска transparent → cyan → transparent. Кладём
+    под шапку как акцент."""
+    w = QWidget(parent)
+    w.setObjectName('accentLine')
+    w.setFixedHeight(height)
+    w.setStyleSheet(theme.QSS_ACCENT_LINE)
+    return w
+
+
+def make_page_header(eyebrow_text: str, title_text: str,
+                     subtitle_text: str | None = None,
+                     parent: QWidget | None = None) -> QWidget:
+    """Блок «eyebrow → крупный заголовок → опциональный сабтайтл»,
+    как на лендинге Mavix. Используется на dashboard / joystick /
+    settings."""
+    block = QWidget(parent)
+    block.setStyleSheet('background: transparent;')
+    lay = QVBoxLayout(block)
+    lay.setContentsMargins(28, 22, 28, 18)
+    lay.setSpacing(6)
+
+    eb = QLabel(eyebrow_text.upper())
+    eb.setStyleSheet(theme.QSS_EYEBROW)
+    lay.addWidget(eb)
+
+    title = QLabel(title_text)
+    title.setStyleSheet(theme.QSS_PAGE_TITLE)
+    lay.addWidget(title)
+
+    if subtitle_text:
+        sub = QLabel(subtitle_text)
+        sub.setWordWrap(True)
+        sub.setStyleSheet(theme.QSS_PAGE_SUBTITLE)
+        lay.addWidget(sub)
+
+    return block
+
+
+# Маппинг статуса дрона → (название pill, hex-цвет, rgba-фон).
+_STATUS_PRESET = {
+    'ready':       ('ONLINE',     theme.STATUS_READY,  'rgba(74,222,128,0.12)'),
+    'online':      ('ONLINE',     theme.STATUS_READY,  'rgba(74,222,128,0.12)'),
+    'connecting':  ('CONNECTING', theme.WARNING,       'rgba(251,191,36,0.12)'),
+    'offline':     ('OFFLINE',    theme.STATUS_ERROR,  'rgba(248,113,113,0.12)'),
+}
+
+
+class StatusPill(QFrame):
+    """Капсульный бейдж статуса: цветная точка + uppercase-метка.
+
+    `status` — строка вида 'ready'/'online'/'connecting'/'offline' или
+    произвольный текст. Цвет берётся из preset; для неизвестных статусов
+    используется TEXT_MUTED.
+    """
+
+    def __init__(self, status: str, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName('statusPill')
+        preset = _STATUS_PRESET.get(status.lower())
+        if preset is None:
+            label_text, color_hex, soft = (
+                status.upper(), theme.TEXT_MUTED, 'rgba(136,147,164,0.10)'
+            )
+        else:
+            label_text, color_hex, soft = preset
+
+        self.setStyleSheet(theme.qss_status_pill(color_hex, soft))
+        self.setFixedHeight(18)
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(8, 0, 8, 0)
+        lay.setSpacing(5)
+
+        dot = QLabel('●')
+        dot.setStyleSheet(
+            f'color: {color_hex}; background: transparent; font-size: 8px;'
+            'font-family: sans-serif;'
+        )
+        lay.addWidget(dot)
+
+        text = QLabel(label_text)
+        lay.addWidget(text)
+
+
+def attach_glow(widget: QWidget, color_hex: str = None,
+                radius: int = 22, alpha: int = 110) -> QGraphicsDropShadowEffect:
+    """Накинуть мягкую цветную тень. Используется на primary-кнопке
+    как «glow» по hover (alpha анимируется отдельно).
+    """
+    if color_hex is None:
+        color_hex = theme.ACCENT
+    effect = QGraphicsDropShadowEffect(widget)
+    effect.setBlurRadius(radius)
+    effect.setOffset(0, 0)
+    qc = QColor(color_hex)
+    qc.setAlpha(alpha)
+    effect.setColor(qc)
+    widget.setGraphicsEffect(effect)
+    return effect
