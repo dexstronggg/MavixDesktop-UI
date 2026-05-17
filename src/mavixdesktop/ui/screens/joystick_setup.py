@@ -71,9 +71,9 @@ _STEPS = [
     'Калибровка завершена!\n\nНажмите «Готово» для сохранения.',
 ]
 
-_CARD_W  = 200
-_CARD_H  = 230
-_ICON_SZ = 72
+_CARD_W  = 220
+_CARD_H  = 280
+_ICON_SZ = 64
 _GAP     = 20
 
 
@@ -143,7 +143,7 @@ class JoystickCard(AnimatedCard):
 
         self._style_normal = f"""
             QWidget#jsCard {{
-                background: {theme.BG_SURFACE};
+                background: {theme.BG_INPUT};
                 border: 1px solid {theme.BORDER};
                 border-radius: {theme.RADIUS_LG}px;
             }}
@@ -159,9 +159,9 @@ class JoystickCard(AnimatedCard):
         self.setStyleSheet(self._style_normal)
 
         lay = QVBoxLayout(self)
-        lay.setAlignment(Qt.AlignCenter)
-        lay.setSpacing(6)
-        lay.setContentsMargins(12, 18, 12, 14)
+        lay.setAlignment(Qt.AlignTop)
+        lay.setSpacing(8)
+        lay.setContentsMargins(14, 18, 14, 14)
 
         icon_lbl = QLabel()
         icon_lbl.setAlignment(Qt.AlignCenter)
@@ -189,7 +189,7 @@ class JoystickCard(AnimatedCard):
         )
         status_lbl = QLabel('откалиброван' if calibrated else 'не откалиброван')
         status_lbl.setStyleSheet(
-            f'color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_SM - 3}px;'
+            f'color: {theme.TEXT_MUTED}; font-size: 12px;'
             'background: transparent; border: none;'
         )
         sr.addWidget(dot)
@@ -198,45 +198,45 @@ class JoystickCard(AnimatedCard):
         lay.addWidget(icon_lbl)
         lay.addWidget(name_lbl)
         lay.addWidget(status_row)
+        lay.addStretch()
 
-        self._menu_btn = QPushButton(self)
-        self._menu_btn.setFixedSize(28, 28)
-        self._menu_btn.setIcon(QIcon(svg_pixmap('three_dots.svg', 16)))
-        self._menu_btn.setIconSize(QSize(16, 16))
-        self._menu_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: none;
-                border-radius: 14px;
-            }}
-            QPushButton:hover {{
-                background: rgba(255,255,255,0.10);
-            }}
-            QPushButton:pressed {{
-                background: rgba(255,255,255,0.05);
-            }}
-        """)
-        self._menu_btn.move(_CARD_W - 28 - 6, 6)
-        self._menu_btn.clicked.connect(self.__show_menu)
+        # ── Явные кнопки действий вместо ...-меню ────────────────────────────
+        actions_row = QWidget()
+        actions_row.setStyleSheet('background: transparent; border: none;')
+        ar = QHBoxLayout(actions_row)
+        ar.setContentsMargins(0, 0, 0, 0)
+        ar.setSpacing(6)
+
+        self._action_buttons: list[QPushButton] = []
+        for ic, tip, sub in [
+            ('tune.svg',   'Калибровать',     'calibrate'),
+            ('upload.svg', 'Загрузить файл',  'file'),
+            ('save.svg',   'Сохранить файл',  'file_save'),
+        ]:
+            b = QPushButton()
+            b.setIcon(QIcon(svg_pixmap(ic, 18)))
+            b.setIconSize(QSize(18, 18))
+            b.setFixedHeight(36)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setToolTip(tip)
+            b.setFocusPolicy(Qt.NoFocus)
+            b.setStyleSheet(theme.QSS_BUTTON_SECONDARY)
+            b.clicked.connect(lambda _checked=False, s=sub: self.action.emit(self._index, s))
+            ar.addWidget(b, 1)
+            self._action_buttons.append(b)
+
+        lay.addWidget(actions_row)
 
     def _on_hover(self, hovered: bool):
         self.setStyleSheet(self._style_hover if hovered else self._style_normal)
         self._animate_bar(1000 if hovered else 0)
 
     def mousePressEvent(self, event):
+        # Клики по кнопкам действий перехватывают сами QPushButton —
+        # сюда долетают только клики по «телу» карточки.
         if event.button() == Qt.LeftButton:
-            if not self._menu_btn.geometry().contains(event.pos()):
-                self.clicked.emit(self._index)
+            self.clicked.emit(self._index)
         super().mousePressEvent(event)
-
-    def __show_menu(self):
-        items = [
-            ('Загрузить из файла', lambda: self.action.emit(self._index, 'file')),
-            ('Калибровка',         lambda: self.action.emit(self._index, 'calibrate')),
-            ('Сохранить в файл',   lambda: self.action.emit(self._index, 'file_save')),
-        ]
-        self._active_menu = _CardMenu(items)
-        self._active_menu.show_at(self._menu_btn.mapToGlobal(QPoint(0, self._menu_btn.height())))
 
 
 class _JoystickGrid(CardGrid):
@@ -487,45 +487,44 @@ class JoystickSetupPage(QWidget):
         self._auto_refresh_timer.stop()
 
     def __build_top_bar(self, on_back: Callable) -> QWidget:
+        # Локальные хелперы вынесены в drone_list_page; импортируем
+        # их здесь, чтобы шапка двух кабинетных экранов жила в одном
+        # визуальном языке.
+        from mavixdesktop.ui.screens.drone_list_page import _brand_widget, _icon_button
+
         top_bar = QWidget()
         top_bar.setStyleSheet(
             f'background: {theme.BG_SURFACE}; border-bottom: 1px solid {theme.BORDER};'
         )
-        top_bar.setFixedHeight(60)
+        top_bar.setFixedHeight(64)
         tb = QHBoxLayout(top_bar)
-        tb.setContentsMargins(16, 0, 28, 0)
+        tb.setContentsMargins(28, 0, 28, 0)
         tb.setSpacing(12)
 
-        back_btn = QPushButton()
-        back_btn.setFixedSize(theme.OVERLAY_BTN_CORNER, theme.OVERLAY_BTN_CORNER)
-        back_btn.setIcon(QIcon(svg_pixmap('arrow_back.svg', theme.OVERLAY_BTN_CORNER_ICON)))
-        back_btn.setIconSize(QSize(theme.OVERLAY_BTN_CORNER_ICON, theme.OVERLAY_BTN_CORNER_ICON))
-        back_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {theme.BG_INPUT};
-                border: 1px solid {theme.BORDER};
-                border-radius: {theme.OVERLAY_BTN_CORNER // 2}px;
-            }}
-            QPushButton:hover {{
-                background: rgba(42,130,218,0.30);
-                border-color: {theme.ACCENT};
-            }}
-            QPushButton:pressed {{
-                background: rgba(31,106,176,0.50);
-            }}
-        """)
-        back_btn.setToolTip('Назад к экрану дрона')
-        back_btn.clicked.connect(on_back)
+        # Лево: бренд + разделитель + название раздела.
+        tb.addWidget(_brand_widget(top_bar))
+        sep = QFrame()
+        sep.setFixedSize(1, 22)
+        sep.setStyleSheet(f'background: {theme.BORDER}; border: none;')
+        tb.addSpacing(8)
+        tb.addWidget(sep)
+        tb.addSpacing(8)
 
-        title = QLabel('Выбор джойстика')
+        title = QLabel('Джойстики')
         title.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY}; font-size: {theme.FONT_SIZE_LG}px;'
-            'font-weight: 700; background: transparent; border: none;'
+            f'font-weight: 600; background: transparent; border: none;'
+            f'font-family: {theme.FONT_FAMILY};'
         )
-
-        tb.addWidget(back_btn)
         tb.addWidget(title)
         tb.addStretch()
+
+        # Право: «Назад» — ghost-кнопка как в шапке dashboard.
+        back_btn = _icon_button('arrow_back.svg', 'Назад', top_bar)
+        back_btn.setToolTip('Назад к экрану дрона')
+        back_btn.clicked.connect(on_back)
+        tb.addWidget(back_btn)
+
         return top_bar
 
     def set_fc_type(self, fc_type: str):

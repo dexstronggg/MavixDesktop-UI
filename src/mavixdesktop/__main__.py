@@ -106,6 +106,10 @@ def _run_gui(demo: bool = False) -> int:
         demo = True
 
     app = QApplication(sys.argv)
+    # Fusion — кроссплатформенный стиль Qt, который корректно отрисовывает
+    # border-radius/padding из QSS на всех ОС (нативные стили Windows /
+    # macOS их часто игнорируют, и кнопки оставались бы прямоугольными).
+    app.setStyle('Fusion')
     # Inter — основной интерфейсный шрифт, как на сайте Mavix. Если он
     # не установлен в системе, Qt автоматически подставит следующий
     # из цепочки fallback (через FONT_FAMILY в QSS-правилах).

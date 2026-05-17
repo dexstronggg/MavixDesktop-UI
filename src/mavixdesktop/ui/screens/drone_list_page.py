@@ -1,7 +1,7 @@
 from typing import Callable
 
 from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtGui import QPixmap, QPainter, QIcon
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QFrame,
@@ -9,6 +9,38 @@ from PySide6.QtWidgets import (
 
 from mavixdesktop.ui.style import theme
 from .utils import svg_pixmap, AnimatedCard, CardGrid
+
+
+def _brand_widget(parent: QWidget | None = None) -> QWidget:
+    """Логотип-бренд: квадратик с M + надпись MAVIX, как в шапке сайта."""
+    w = QWidget(parent)
+    w.setStyleSheet('background: transparent;')
+    h = QHBoxLayout(w)
+    h.setContentsMargins(0, 0, 0, 0)
+    h.setSpacing(10)
+    logo = QLabel()
+    logo.setFixedSize(28, 28)
+    logo.setPixmap(svg_pixmap('mavix_logo.svg', 28))
+    logo.setStyleSheet('background: transparent;')
+    h.addWidget(logo)
+    wordmark = QLabel('MAVIX')
+    wordmark.setStyleSheet(
+        f'background: transparent; color: {theme.TEXT_PRIMARY};'
+        f'font-family: {theme.FONT_FAMILY_MONO}; font-weight: 600;'
+        f'font-size: {theme.FONT_SIZE_BASE}px; letter-spacing: 2px;'
+    )
+    h.addWidget(wordmark)
+    return w
+
+
+def _icon_button(icon_name: str, text: str, parent: QWidget | None = None) -> QPushButton:
+    """Кнопка с SVG-иконкой + текстом, в ghost-стиле."""
+    btn = QPushButton(text, parent)
+    btn.setIcon(QIcon(svg_pixmap(icon_name, 16)))
+    btn.setCursor(Qt.PointingHandCursor)
+    btn.setStyleSheet(theme.QSS_BUTTON_SECONDARY)
+    btn.setMinimumHeight(36)
+    return btn
 
 _CARD_W   = 180
 _CARD_H   = 200
@@ -39,7 +71,7 @@ class DroneCard(AnimatedCard):
 
         self._style_normal = f"""
             QWidget#droneCard {{
-                background: {theme.BG_SURFACE};
+                background: {theme.BG_INPUT};
                 border: 1px solid {theme.BORDER};
                 border-radius: {theme.RADIUS_LG}px;
             }}
@@ -137,28 +169,37 @@ class DroneListPage(QWidget):
         top_bar.setStyleSheet(
             f'background: {theme.BG_SURFACE}; border-bottom: 1px solid {theme.BORDER};'
         )
-        top_bar.setFixedHeight(60)
+        top_bar.setFixedHeight(64)
         tb = QHBoxLayout(top_bar)
         tb.setContentsMargins(28, 0, 28, 0)
+        tb.setSpacing(12)
 
-        title = QLabel('Доступные дроны')
+        # Лево: лого-бренд + заголовок раздела.
+        tb.addWidget(_brand_widget(top_bar))
+        sep = QFrame()
+        sep.setFixedSize(1, 22)
+        sep.setStyleSheet(f'background: {theme.BORDER}; border: none;')
+        tb.addSpacing(8)
+        tb.addWidget(sep)
+        tb.addSpacing(8)
+
+        title = QLabel('Дроны')
         title.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY}; font-size: {theme.FONT_SIZE_LG}px;'
-            f'font-weight: 700; background: transparent; border: none;'
+            f'font-weight: 600; background: transparent; border: none;'
+            f'font-family: {theme.FONT_FAMILY};'
         )
-
-        joy_btn = QPushButton('🎮 Джойстик')
-        joy_btn.setStyleSheet(theme.QSS_BUTTON_SECONDARY)
-        joy_btn.clicked.connect(on_joystick_cfg)
-
-        logout_btn = QPushButton('Выйти')
-        logout_btn.setStyleSheet(theme.QSS_BUTTON_SECONDARY)
-        logout_btn.clicked.connect(on_logout)
-
         tb.addWidget(title)
         tb.addStretch()
+
+        # Право: действия.
+        joy_btn = _icon_button('joystick.svg', 'Джойстик', top_bar)
+        joy_btn.clicked.connect(on_joystick_cfg)
+
+        logout_btn = _icon_button('logout.svg', 'Выйти', top_bar)
+        logout_btn.clicked.connect(on_logout)
+
         tb.addWidget(joy_btn)
-        tb.addSpacing(8)
         tb.addWidget(logout_btn)
 
         self._grid = _DroneGrid()
