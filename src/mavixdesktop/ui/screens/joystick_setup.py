@@ -72,8 +72,8 @@ _STEPS = [
 ]
 
 _CARD_W  = 220
-_CARD_H  = 280
-_ICON_SZ = 64
+_CARD_H  = 230
+_ICON_SZ = 56
 _GAP     = 20
 
 
@@ -160,8 +160,8 @@ class JoystickCard(AnimatedCard):
 
         lay = QVBoxLayout(self)
         lay.setAlignment(Qt.AlignTop)
-        lay.setSpacing(8)
-        lay.setContentsMargins(14, 18, 14, 14)
+        lay.setSpacing(6)
+        lay.setContentsMargins(14, 14, 14, 14)
 
         icon_lbl = QLabel()
         icon_lbl.setAlignment(Qt.AlignCenter)
@@ -198,9 +198,9 @@ class JoystickCard(AnimatedCard):
         lay.addWidget(icon_lbl)
         lay.addWidget(name_lbl)
         lay.addWidget(status_row)
-        lay.addStretch()
+        lay.addSpacing(6)
 
-        # ── Явные кнопки действий вместо ...-меню ────────────────────────────
+        # ── Явные кнопки действий вместо ...-меню (сразу под статусом) ────────
         actions_row = QWidget()
         actions_row.setStyleSheet('background: transparent; border: none;')
         ar = QHBoxLayout(actions_row)
