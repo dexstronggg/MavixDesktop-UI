@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QColor
 
 from mavixdesktop.ui.style import theme
-from mavixdesktop.ui.screens.utils import svg_pixmap
+from mavixdesktop.ui.screens.utils import svg_pixmap, mavix_logo_pixmap
 
 
 class _AuthBackground(QWidget):
@@ -95,10 +95,8 @@ class _IconLineEdit(QFrame):
 
         self._icon = QLabel()
         self._icon.setFixedSize(18, 18)
-        self._icon.setPixmap(svg_pixmap(icon_name, 18))
-        self._icon.setStyleSheet(
-            f'background: transparent; color: {theme.TEXT_MUTED};'
-        )
+        self._icon.setPixmap(svg_pixmap(icon_name, 18, color=theme.TEXT_MUTED))
+        self._icon.setStyleSheet('background: transparent;')
         layout.addWidget(self._icon)
 
         self.input = QLineEdit()
@@ -182,7 +180,7 @@ class LoginPage(QWidget):
 
         logo = QLabel()
         logo.setFixedSize(36, 36)
-        logo.setPixmap(svg_pixmap('mavix_logo.svg', 36))
+        logo.setPixmap(mavix_logo_pixmap(36))
         logo.setStyleSheet('background: transparent;')
         brand_row.addWidget(logo)
 
@@ -262,7 +260,7 @@ class LoginPage(QWidget):
 
     def _icon_pixmap_as_icon(self, name: str, size: int):
         from PySide6.QtGui import QIcon
-        return QIcon(svg_pixmap(name, size))
+        return QIcon(svg_pixmap(name, size, color=theme.TEXT_MUTED))
 
     # ── Public API ────────────────────────────────────────────────────────────
 

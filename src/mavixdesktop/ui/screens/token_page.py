@@ -51,7 +51,7 @@ class TokenPage(QWidget):
 
         icon_label = QLabel()
         icon_label.setAlignment(Qt.AlignCenter)
-        icon_label.setPixmap(svg_pixmap('drone.svg', 80))
+        icon_label.setPixmap(svg_pixmap('drone.svg', 80, color=theme.ACCENT))
         icon_label.setFixedHeight(88)
 
         title_label = QLabel('Mavix')

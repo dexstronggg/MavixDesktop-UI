@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 from mavixdesktop.ui.style import theme
-from .utils import svg_pixmap, AnimatedCard, CardGrid
+from .utils import svg_pixmap, mavix_logo_pixmap, AnimatedCard, CardGrid
 
 
 def _brand_widget(parent: QWidget | None = None) -> QWidget:
@@ -20,7 +20,7 @@ def _brand_widget(parent: QWidget | None = None) -> QWidget:
     h.setSpacing(10)
     logo = QLabel()
     logo.setFixedSize(28, 28)
-    logo.setPixmap(svg_pixmap('mavix_logo.svg', 28))
+    logo.setPixmap(mavix_logo_pixmap(28))
     logo.setStyleSheet('background: transparent;')
     h.addWidget(logo)
     wordmark = QLabel('MAVIX')
@@ -33,10 +33,16 @@ def _brand_widget(parent: QWidget | None = None) -> QWidget:
     return w
 
 
-def _icon_button(icon_name: str, text: str, parent: QWidget | None = None) -> QPushButton:
-    """Кнопка с SVG-иконкой + текстом, в ghost-стиле."""
+def _icon_button(icon_name: str | None, text: str,
+                 parent: QWidget | None = None) -> QPushButton:
+    """Ghost-кнопка с опциональной SVG-иконкой + текстом.
+
+    Если ``icon_name`` is None — кнопка только текстовая (используется
+    для «Выйти», чтобы не делать акцент иконкой).
+    """
     btn = QPushButton(text, parent)
-    btn.setIcon(QIcon(svg_pixmap(icon_name, 16)))
+    if icon_name is not None:
+        btn.setIcon(QIcon(svg_pixmap(icon_name, 16, color=theme.TEXT_PRIMARY)))
     btn.setCursor(Qt.PointingHandCursor)
     btn.setStyleSheet(theme.QSS_BUTTON_SECONDARY)
     btn.setMinimumHeight(36)
@@ -159,7 +165,7 @@ class DroneListPage(QWidget):
                  on_logout: Callable, on_joystick_cfg: Callable):
         super().__init__()
         self._on_select = on_select
-        self._icon = svg_pixmap('drone_list.svg', _ICON_SIZE)
+        self._icon = svg_pixmap('drone_list.svg', _ICON_SIZE, color=theme.ACCENT)
 
         root = QVBoxLayout(self)
         root.setSpacing(0)
@@ -196,7 +202,9 @@ class DroneListPage(QWidget):
         joy_btn = _icon_button('joystick.svg', 'Джойстик', top_bar)
         joy_btn.clicked.connect(on_joystick_cfg)
 
-        logout_btn = _icon_button('logout.svg', 'Выйти', top_bar)
+        # «Выйти» — без иконки: символ logout оптически мог читаться
+        # как G→. Текста достаточно.
+        logout_btn = _icon_button(None, 'Выйти', top_bar)
         logout_btn.clicked.connect(on_logout)
 
         tb.addWidget(joy_btn)

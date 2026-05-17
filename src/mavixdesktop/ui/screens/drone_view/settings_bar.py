@@ -115,7 +115,7 @@ class SettingsBar(QWidget):
         self.save_btn.setToolTip('Сохранить настройки камеры')
         self.save_btn.setEnabled(False)
         self.save_btn.clicked.connect(on_save)
-        self.save_btn.setIcon(QIcon(svg_pixmap('save.svg', 28)))
+        self.save_btn.setIcon(QIcon(svg_pixmap('save.svg', 28, color=theme.TEXT_PRIMARY)))
         self.save_btn.setIconSize(QSize(22, 22))
         self.save_btn.setStyleSheet(f"""
             QPushButton {{

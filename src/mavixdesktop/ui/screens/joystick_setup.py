@@ -165,7 +165,7 @@ class JoystickCard(AnimatedCard):
 
         icon_lbl = QLabel()
         icon_lbl.setAlignment(Qt.AlignCenter)
-        icon_lbl.setPixmap(svg_pixmap('joystick.svg', _ICON_SZ))
+        icon_lbl.setPixmap(svg_pixmap('joystick.svg', _ICON_SZ, color=theme.ACCENT))
 
         name_lbl = QLabel(name)
         name_lbl.setAlignment(Qt.AlignCenter)
@@ -214,7 +214,7 @@ class JoystickCard(AnimatedCard):
             ('save.svg',   'Сохранить файл',  'file_save'),
         ]:
             b = QPushButton()
-            b.setIcon(QIcon(svg_pixmap(ic, 18)))
+            b.setIcon(QIcon(svg_pixmap(ic, 18, color=theme.TEXT_PRIMARY)))
             b.setIconSize(QSize(18, 18))
             b.setFixedHeight(36)
             b.setCursor(Qt.PointingHandCursor)
@@ -293,7 +293,7 @@ class _StickPreviewDialog(QDialog):
         title_lbl.setWordWrap(False)
         close_btn = QPushButton()
         close_btn.setFixedSize(28, 28)
-        close_btn.setIcon(QIcon(svg_pixmap('cross.svg', 14)))
+        close_btn.setIcon(QIcon(svg_pixmap('cross.svg', 14, color=theme.TEXT_PRIMARY)))
         close_btn.setIconSize(QSize(14, 14))
         close_btn.setStyleSheet(f"""
             QPushButton {{

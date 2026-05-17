@@ -114,7 +114,7 @@ def overlay_icon_btn(svg_name: str, parent: QWidget,
         icon_size = theme.OVERLAY_BTN_CORNER_ICON
     btn = QPushButton(parent)
     btn.setFixedSize(size, size)
-    btn.setIcon(QIcon(svg_pixmap(svg_name, icon_size)))
+    btn.setIcon(QIcon(svg_pixmap(svg_name, icon_size, color=theme.TEXT_PRIMARY)))
     btn.setIconSize(QSize(icon_size, icon_size))
     btn.setStyleSheet(f"""
         QPushButton {{
