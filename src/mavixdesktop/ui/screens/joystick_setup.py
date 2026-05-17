@@ -169,6 +169,11 @@ class JoystickCard(AnimatedCard):
         icon_lbl = QLabel()
         icon_lbl.setAlignment(Qt.AlignCenter)
         icon_lbl.setPixmap(svg_pixmap('joystick.svg', _ICON_SZ, color=theme.ACCENT))
+        # Без явного transparent QSS-наследует QWidget { background: BG },
+        # и иконка отрисовывается как тёмный квадрат на чуть более
+        # светлом фоне карточки.
+        icon_lbl.setStyleSheet('background: transparent; border: none;')
+        icon_lbl.setAttribute(Qt.WA_TranslucentBackground, True)
 
         name_lbl = QLabel(name)
         name_lbl.setAlignment(Qt.AlignCenter)
@@ -223,6 +228,11 @@ class JoystickCard(AnimatedCard):
             b.setCursor(Qt.PointingHandCursor)
             b.setToolTip(tip)
             b.setFocusPolicy(Qt.NoFocus)
+            # setFlat — Fusion-стиль перестаёт рисовать фрейм/тень кнопки
+            # независимо от QSS, иначе под прозрачным QSS-фоном остаётся
+            # видимое подложение от движка стиля.
+            b.setFlat(True)
+            b.setAutoFillBackground(False)
             b.setStyleSheet(theme.QSS_BUTTON_ICON)
             b.clicked.connect(lambda _checked=False, s=sub: self.action.emit(self._index, s))
             ar.addWidget(b, 1)
