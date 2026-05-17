@@ -161,7 +161,10 @@ class JoystickCard(AnimatedCard):
         lay = QVBoxLayout(self)
         lay.setAlignment(Qt.AlignTop)
         lay.setSpacing(6)
-        lay.setContentsMargins(14, 14, 14, 14)
+        # Нижний margin 4px — буквально на одну линию hover-полосы
+        # AnimatedCard (она 3px и рисуется у низа карточки), чтобы
+        # полоса оказалась прямо под рядом кнопок, без воздуха.
+        lay.setContentsMargins(14, 14, 14, 4)
 
         icon_lbl = QLabel()
         icon_lbl.setAlignment(Qt.AlignCenter)
