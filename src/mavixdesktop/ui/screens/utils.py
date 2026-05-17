@@ -1,6 +1,6 @@
 """Shared UI utilities for screens package."""
 from PySide6.QtCore import Qt, QSize, QEvent, QPropertyAnimation, QEasingCurve, Property
-from PySide6.QtGui import QPixmap, QPainter, QColor, QIcon
+from PySide6.QtGui import QPixmap, QPainter, QColor, QIcon, QFont, QLinearGradient
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QWidget, QPushButton, QGridLayout
 
@@ -13,12 +13,62 @@ _ICONS_DIR = Path(__file__).parent.parent / 'icons'
 
 # ── SVG helpers ───────────────────────────────────────────────────────────────
 
-def svg_pixmap(name: str, size: int) -> QPixmap:
+def svg_pixmap(name: str, size: int, color: str | None = None) -> QPixmap:
+    """Загрузить SVG из ui/icons/<name> и вернуть QPixmap.
+
+    Если передан ``color`` (hex или CSS-имя), результат перекрашивается:
+    сохраняется альфа-маска отрисованных фигур, цвет RGB заменяется на
+    указанный. Это обходит ограничение QSvgRenderer, у которого нет
+    `currentColor` из CSS — без перекраски иконки рендерятся чёрным
+    stroke-ом и не видны на тёмном фоне.
+    """
     renderer = QSvgRenderer(str(_ICONS_DIR / name))
     px = QPixmap(QSize(size, size))
     px.fill(Qt.transparent)
     p = QPainter(px)
     renderer.render(p)
+    p.end()
+    if color is None:
+        return px
+    # Перекраска через composition: сначала заливаем сплошным цветом,
+    # потом DestinationIn оставляет только пиксели, где у исходного
+    # SVG была непрозрачность.
+    tinted = QPixmap(QSize(size, size))
+    tinted.fill(QColor(color))
+    p = QPainter(tinted)
+    p.setCompositionMode(QPainter.CompositionMode_DestinationIn)
+    p.drawPixmap(0, 0, px)
+    p.end()
+    return tinted
+
+
+def mavix_logo_pixmap(size: int) -> QPixmap:
+    """Логотип Mavix — cyan-градиентный квадрат со скруглёнными углами и
+    точно центрированной белой буквой ``M``. Рисуется QPainter-ом, без
+    QSvgRenderer — так Qt не теряет ни центрирование, ни шрифт.
+    """
+    px = QPixmap(QSize(size, size))
+    px.fill(Qt.transparent)
+    p = QPainter(px)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    p.setRenderHint(QPainter.TextAntialiasing, True)
+
+    # Background: cyan linear gradient
+    grad = QLinearGradient(0, 0, size, size)
+    grad.setColorAt(0.0, QColor('#22d3ee'))
+    grad.setColorAt(1.0, QColor('#06b6d4'))
+    p.setBrush(grad)
+    p.setPen(Qt.NoPen)
+    radius = size * 0.26
+    p.drawRoundedRect(0, 0, size, size, radius, radius)
+
+    # Centered M
+    font = QFont('Inter')
+    font.setPixelSize(int(size * 0.62))
+    font.setWeight(QFont.Weight.Bold)
+    p.setFont(font)
+    p.setPen(QColor('#001017'))
+    p.drawText(0, 0, size, size, Qt.AlignCenter, 'M')
     p.end()
     return px
 
