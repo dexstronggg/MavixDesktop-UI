@@ -493,9 +493,15 @@ class JoystickSetupPage(QWidget):
         from mavixdesktop.ui.screens.drone_list_page import _brand_widget, _icon_button
 
         top_bar = QWidget()
-        top_bar.setStyleSheet(
-            f'background: {theme.BG_SURFACE}; border-bottom: 1px solid {theme.BORDER};'
-        )
+        # #objectName-селектор, чтобы фон не каскадировал в дочерние
+        # лейблы/кнопки (они должны брать стили из QSS_GLOBAL).
+        top_bar.setObjectName('topBar')
+        top_bar.setStyleSheet(f"""
+            QWidget#topBar {{
+                background: {theme.BG_SURFACE};
+                border-bottom: 1px solid {theme.BORDER};
+            }}
+        """)
         top_bar.setFixedHeight(64)
         tb = QHBoxLayout(top_bar)
         tb.setContentsMargins(28, 0, 28, 0)

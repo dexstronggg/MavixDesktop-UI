@@ -172,9 +172,14 @@ class DroneListPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
 
         top_bar = QWidget()
-        top_bar.setStyleSheet(
-            f'background: {theme.BG_SURFACE}; border-bottom: 1px solid {theme.BORDER};'
-        )
+        # #objectName-селектор: фон не каскадирует в дочерние виджеты.
+        top_bar.setObjectName('topBar')
+        top_bar.setStyleSheet(f"""
+            QWidget#topBar {{
+                background: {theme.BG_SURFACE};
+                border-bottom: 1px solid {theme.BORDER};
+            }}
+        """)
         top_bar.setFixedHeight(64)
         tb = QHBoxLayout(top_bar)
         tb.setContentsMargins(28, 0, 28, 0)
