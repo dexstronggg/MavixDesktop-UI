@@ -340,8 +340,31 @@ class DroneListPage(QWidget):
         joy_btn.clicked.connect(on_joystick_cfg)
 
         # «Выйти» — без иконки: символ logout оптически мог читаться
-        # как G→. Текста достаточно.
+        # как G→. Текста достаточно. Hover красный — действие
+        # деструктивное (сброс сессии), а не нейтрально-навигационное
+        # как у соседних ghost-кнопок (joy / back).
         logout_btn = _icon_button(None, 'Выйти', top_bar)
+        logout_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {theme.TEXT_MUTED};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_MD}px;
+                padding: 8px 16px;
+                font-size: {theme.FONT_SIZE_SM}px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background-color: rgba(248, 113, 113, 0.12);
+                border-color: {theme.STATUS_ERROR};
+                color: {theme.STATUS_ERROR};
+            }}
+            QPushButton:pressed {{
+                background-color: rgba(248, 113, 113, 0.20);
+                border-color: {theme.STATUS_ERROR};
+                color: {theme.STATUS_ERROR};
+            }}
+        """)
         logout_btn.clicked.connect(on_logout)
 
         tb.addWidget(joy_btn)
