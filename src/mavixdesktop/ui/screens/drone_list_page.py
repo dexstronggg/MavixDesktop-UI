@@ -114,10 +114,6 @@ class DroneCard(AnimatedCard):
         self.setFixedSize(_CARD_W, _CARD_H)
         if self._ready:
             self.setCursor(Qt.PointingHandCursor)
-        # Полный drone_id — в tooltip, чтобы при усечении его всё равно
-        # было видно по наведению.
-        if drone_id:
-            self.setToolTip(drone_id)
 
         # Border у hover тоже окрашивается по статусу — единый цветовой
         # язык со status-точкой и hover-полосой.
@@ -330,7 +326,7 @@ class DroneListPage(QWidget):
         tb.addWidget(sep)
         tb.addSpacing(8)
 
-        title = QLabel('Дроны')
+        title = QLabel('Доступные дроны')
         title.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY}; font-size: {theme.FONT_SIZE_LG}px;'
             f'font-weight: 600; background: transparent; border: none;'
