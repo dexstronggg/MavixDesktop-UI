@@ -8,9 +8,12 @@
   * ``login`` — принимает любой email/пароль, через 150 мс эмитит
     ``login_succeeded``;
   * ``resume`` — всегда False (форсируем экран входа);
-  * ``request_drone_list`` — эмитит фиксированный набор из 3 мок-дронов с
+  * ``request_drone_list`` — эмитит фиксированный набор мок-дронов с
     разными статусами (online / offline / connecting);
-  * ``select_drone`` — заглушка, видеопотока в демо-режиме нет;
+  * ``select_drone`` — эмитит mock-конфиг камер и mock-FC info, чтобы UI
+    drone-view был полностью заполнен данными (комбобоксы разрешения/FPS,
+    кнопка взлёта активна) — это нужно для визуальной проверки дизайна;
+    видеопотока всё равно нет, но overlay калибровки гасится сразу;
   * остальные методы — no-op.
 """
 from __future__ import annotations
@@ -27,6 +30,28 @@ _MOCK_DRONES = [
     # (DroneCard рендерит этот status, если поля 'online' нет).
     {'session_id': 'demo-connecting-0003', 'status': 'connecting'},
 ]
+
+
+# Мок-конфиг одной камеры с разумным набором (resolution / FPS) комбинаций —
+# достаточно чтобы заполнить дропдауны в SettingsBar и включить save-кнопку.
+# Совпадает по форме с реальным config_received от board.
+_MOCK_CAMERAS = [
+    {
+        'device_index': 0,
+        'param_index': 0,
+        'bitrate_kbs': 2500,
+        'params': [
+            {'width': 1920, 'height': 1080, 'fps': 30},
+            {'width': 1920, 'height': 1080, 'fps': 60},
+            {'width': 1280, 'height': 720,  'fps': 30},
+            {'width': 1280, 'height': 720,  'fps': 60},
+            {'width': 640,  'height': 480,  'fps': 30},
+        ],
+    },
+]
+
+# Mock FC — CRSF чтобы кнопка «Взлёт» оказалась активной и видимой.
+_MOCK_FC = ('crsf', 'Демо-FC (Betaflight)')
 
 
 class DemoConnectionManager:
@@ -64,10 +89,14 @@ class DemoConnectionManager:
         )
 
     def select_drone(self, drone_id: str) -> None:
-        # Видеопотока нет; считаем что connect провалился — это переключит
-        # пользователя обратно на список с понятным баннером.
-        logger.info('[demo] select_drone(%s) — нет реального WebRTC', drone_id)
-        QTimer.singleShot(100, lambda: self._bridge.connect_failed.emit(drone_id))
+        # Видеопотока в демо нет, но всё что НЕ требует реального видео —
+        # заполняем mock-данными: дропдауны камеры, кнопку взлёта, статус
+        # FC. Это нужно для визуальной проверки дизайна drone-view экрана
+        # (раньше тут эмитился connect_failed, и пользователя сразу
+        # выкидывало обратно к списку с баннером «Камеры не найдены»).
+        logger.info('[demo] select_drone(%s) — эмитирую mock cameras+FC', drone_id)
+        QTimer.singleShot(120, lambda: self._bridge.config_received.emit(list(_MOCK_CAMERAS)))
+        QTimer.singleShot(140, lambda: self._bridge.fc_info_received.emit(*_MOCK_FC))
 
     def disconnect_drone(self) -> None:
         return None

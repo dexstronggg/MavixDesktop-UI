@@ -216,7 +216,11 @@ class App(QMainWindow):
         # wants a glanceable latency indicator while flying.
         self._ping_timer.start()
         self._drone_list_refresh_timer.stop()
-        self.drone_view_page.set_calibration_visible(True)
+        # В демо overlay калибровки не нужен и его нечем погасить — кадров
+        # с камеры нет, а именно первый frame сбрасывает overlay в реальной
+        # сессии. Без этого условия overlay висел бы поверх всего drone-view.
+        if not self._demo:
+            self.drone_view_page.set_calibration_visible(True)
         self.stack.setCurrentWidget(self.drone_view_page)
 
     def _handle_back_to_list(self) -> None:

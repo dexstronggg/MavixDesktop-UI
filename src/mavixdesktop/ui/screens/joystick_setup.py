@@ -591,12 +591,12 @@ class JoystickSetupPage(QWidget):
         self._grid.set_cards(cards)
 
     def _on_card_clicked(self, index: int):
-        if self._demo:
-            QMessageBox.information(
-                self, 'Демо-режим',
-                'Калибровка и подключение реального джойстика недоступны в демо-режиме.'
-            )
-            return
+        # Раньше тут стоял if self._demo: QMessageBox → return — теперь
+        # пропускаем дальше даже в демо-режиме, чтобы дизайн диалога
+        # калибровки/превью можно было увидеть глазами. Если в системе
+        # нет реального джойстика, pygame.joystick.Joystick(0) внутри
+        # диалога бросит pygame.error и диалог не откроется — это
+        # ожидаемое ограничение демо, не баг UI.
         name = self._joystick_names[index]
         takeoff_cb = self._on_takeoff if self._fc_type in ('crsf', 'mavlink') else None
         saved = JoystickCalibration.load(name)
@@ -613,12 +613,10 @@ class JoystickSetupPage(QWidget):
                 dlg.exec()
 
     def _on_card_action(self, index: int, action: str):
-        if self._demo:
-            QMessageBox.information(
-                self, 'Демо-режим',
-                'Действия с реальным джойстиком недоступны в демо-режиме.'
-            )
-            return
+        # Блокер демо-режима убран — см. комментарий в _on_card_clicked.
+        # «Загрузить файл»/«Сохранить файл» работают и без реального
+        # устройства (это работа с JSON), «Калибровать» в демо без
+        # подключённого джойстика покажет исключение pygame.
         name = self._joystick_names[index]
         if action == 'file':
             self._load_from_file(index, name)
