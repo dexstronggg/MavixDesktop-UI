@@ -86,7 +86,11 @@ class SettingsBar(QWidget):
             }}
             QWidget#settingsBar QComboBox:hover,
             QWidget#settingsBar QLineEdit:hover {{
-                border-color: {theme.ACCENT};
+                /* Только bg-tint, без смены border — как save-кнопка
+                   рядом: бордер остаётся неизменным, реагирует только
+                   заливка. Раньше hover красил бордер в ACCENT, и
+                   рамка «выскакивала» — это мешало читать панель. */
+                background: rgba(42, 130, 218, 0.10);
             }}
             QWidget#settingsBar QComboBox:focus,
             QWidget#settingsBar QLineEdit:focus {{
@@ -94,9 +98,11 @@ class SettingsBar(QWidget):
             }}
             /* Popup-список разрешения/FPS — единый язык акцента для
                item hover/selected. selection-color/background применяются
-               и для клавиатурной навигации стрелками. */
+               и для клавиатурной навигации стрелками. Фон самого popup'а
+               совпадает с background полей (BG_INPUT) — визуально
+               воспринимается как «опустившаяся часть» того же поля. */
             QWidget#settingsBar QComboBox QAbstractItemView {{
-                background: {theme.BG_SURFACE};
+                background: {theme.BG_INPUT};
                 color: {theme.TEXT_PRIMARY};
                 border: 1px solid {theme.BORDER};
                 border-radius: {theme.RADIUS_MD}px;
