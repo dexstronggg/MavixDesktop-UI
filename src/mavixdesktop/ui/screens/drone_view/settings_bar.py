@@ -272,11 +272,12 @@ class SettingsBar(QWidget):
             }}
             QWidget#settingsBar QComboBox:hover,
             QWidget#settingsBar QLineEdit:hover {{
-                /* Только bg-tint, без смены border — как save-кнопка
-                   рядом: бордер остаётся неизменным, реагирует только
-                   заливка. Раньше hover красил бордер в ACCENT, и
-                   рамка «выскакивала» — это мешало читать панель. */
-                background: rgba(42, 130, 218, 0.10);
+                /* Bg-tint 0.20 — единый оттенок с calibrate-кнопкой и
+                   overlay-кнопками камер (prev/next/back/joy). Раньше
+                   тут было 0.10, поля подсвечивались заметно слабее
+                   соседних элементов на той же панели. Border при hover
+                   не трогаем — это эталон поведения от save-кнопки. */
+                background: rgba(42, 130, 218, 0.20);
             }}
             QWidget#settingsBar QComboBox:focus,
             QWidget#settingsBar QLineEdit:focus {{
