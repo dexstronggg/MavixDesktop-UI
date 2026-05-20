@@ -166,6 +166,9 @@ class AnimatedCard(QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._bar_progress = 0
+        # Цвет hover-полосы можно переопределить у инстанса (DroneCard
+        # тонирует её под статус — green/red/amber). По умолчанию — cyan.
+        self._bar_color: str = theme.ACCENT
         self._bar_anim = QPropertyAnimation(self, b'bar_progress')
         self._bar_anim.setDuration(self._ANIM_DURATION)
         self._bar_anim.setEasingCurve(QEasingCurve.OutCubic)
@@ -206,7 +209,7 @@ class AnimatedCard(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(theme.ACCENT))
+        painter.setBrush(QColor(self._bar_color))
         painter.drawRoundedRect(r, self.height() - self._BAR_HEIGHT, bar_w, self._BAR_HEIGHT, 1, 1)
         painter.end()
 
@@ -252,6 +255,9 @@ class CardGrid(QWidget):
         self._last_cols = cols
         self.__clear_layout()
         for i, card in enumerate(self._cards):
-            self._layout.addWidget(card, i // cols, i % cols, Qt.AlignTop | Qt.AlignLeft)
+            # AlignHCenter — карточки центрируются в своих колонках, а не
+            # жмутся к левому краю. При 3 карточках в широком окне они
+            # равномерно распределяются по ширине, как в drone-list/joystick.
+            self._layout.addWidget(card, i // cols, i % cols, Qt.AlignTop | Qt.AlignHCenter)
         rows = (len(self._cards) + cols - 1) // cols if self._cards else 0
         self.setMinimumHeight(rows * (self.CARD_H + self.GAP) + self.GAP)

@@ -48,9 +48,24 @@ def _icon_button(icon_name: str | None, text: str,
     btn.setMinimumHeight(36)
     return btn
 
-_CARD_W   = 180
-_CARD_H   = 200
+_CARD_W   = 210
+_CARD_H   = 230
 _ICON_SIZE = 88
+_ID_MAX_CHARS = 16  # сколько символов drone_id влезает в карточку 210px
+
+
+# Цвета hover-полосы и статус-точки по статусу. Используется и в карточке,
+# и в stats-row выше грида — единый источник правды.
+_STATUS_COLORS = {
+    'ready':      theme.STATUS_READY,    # зелёный
+    'offline':    theme.STATUS_ERROR,    # красный
+    'connecting': theme.WARNING,         # жёлтый
+}
+_STATUS_LABELS = {
+    'ready':      'готов',
+    'offline':    'offline',
+    'connecting': 'подключение',
+}
 
 
 def _dim_pixmap(src: QPixmap, opacity: float = 0.3) -> QPixmap:
@@ -63,18 +78,50 @@ def _dim_pixmap(src: QPixmap, opacity: float = 0.3) -> QPixmap:
     return result
 
 
+def _truncate_id(drone_id: str, max_chars: int = _ID_MAX_CHARS) -> str:
+    """Middle-ellipsis для длинных drone_id.
+
+    Раньше тут было ``id[:6]`` — для ``demo-online-0001`` это давало
+    ``demo-o`` и операторы не могли отличить дроны. Теперь видна и
+    голова, и хвост: ``demo-online-0001`` → ``demo-online-0001`` (16 → 16);
+    ``e3a7...9f01`` для совсем длинных hash-id (64 hex). Полный id
+    остаётся в tooltip — копируется хоть и не через карточку, но
+    хотя бы видно при наведении.
+    """
+    if not drone_id:
+        return '——'
+    if len(drone_id) <= max_chars:
+        return drone_id
+    head = (max_chars - 3) // 2
+    tail = max_chars - 3 - head
+    return f'{drone_id[:head]}…{drone_id[-tail:]}'
+
+
 class DroneCard(AnimatedCard):
     clicked = Signal(str)
 
-    def __init__(self, session_id: str, status: str, index: int, icon_pixmap: QPixmap):
+    def __init__(self, drone_id: str, status: str, index: int, icon_pixmap: QPixmap):
         super().__init__()
-        self._session_id = session_id
+        self._drone_id = drone_id
+        self._status = status
         self._ready = (status == 'ready')
+        # Hover-полоса AnimatedCard перекрашивается под статус —
+        # ready=зелёная, offline=красная, connecting=жёлтая. На занятом
+        # экране оператор по цвету полосы под курсором сразу видит,
+        # с каким дроном он взаимодействует.
+        self._bar_color = _STATUS_COLORS.get(status, theme.ACCENT)
 
         self.setFixedSize(_CARD_W, _CARD_H)
         if self._ready:
             self.setCursor(Qt.PointingHandCursor)
+        # Полный drone_id — в tooltip, чтобы при усечении его всё равно
+        # было видно по наведению.
+        if drone_id:
+            self.setToolTip(drone_id)
 
+        # Border у hover тоже окрашивается по статусу — единый цветовой
+        # язык со status-точкой и hover-полосой.
+        hover_border = self._bar_color
         self._style_normal = f"""
             QWidget#droneCard {{
                 background: {theme.BG_INPUT};
@@ -85,7 +132,7 @@ class DroneCard(AnimatedCard):
         self._style_hover = f"""
             QWidget#droneCard {{
                 background: {theme.BG_HOVER};
-                border: 1px solid {theme.ACCENT};
+                border: 1px solid {hover_border};
                 border-radius: {theme.RADIUS_LG}px;
             }}
         """
@@ -100,6 +147,7 @@ class DroneCard(AnimatedCard):
         icon_lbl = QLabel()
         icon_lbl.setAlignment(Qt.AlignCenter)
         icon_lbl.setPixmap(icon_pixmap if self._ready else _dim_pixmap(icon_pixmap))
+        icon_lbl.setStyleSheet('background: transparent; border: none;')
 
         name_lbl = QLabel(f'Дрон №{index + 1}')
         name_lbl.setAlignment(Qt.AlignCenter)
@@ -109,39 +157,51 @@ class DroneCard(AnimatedCard):
             'background: transparent; border: none;'
         )
 
-        short_id = session_id[:6] if session_id else '??????'
-        id_lbl = QLabel(short_id)
+        id_lbl = QLabel(_truncate_id(drone_id))
         id_lbl.setAlignment(Qt.AlignCenter)
         id_lbl.setStyleSheet(
             f'color: {theme.TEXT_MUTED if self._ready else theme.TEXT_DISABLED};'
-            f'font-size: {theme.FONT_SIZE_SM - 3}px; font-family: monospace;'
+            f'font-size: {theme.FONT_SIZE_SM - 1}px;'
+            f'font-family: {theme.FONT_FAMILY_MONO};'
             'background: transparent; border: none;'
         )
 
-        status_row = QWidget()
-        status_row.setStyleSheet('background: transparent; border: none;')
-        sr_layout = QHBoxLayout(status_row)
-        sr_layout.setAlignment(Qt.AlignCenter)
-        sr_layout.setSpacing(6)
-        sr_layout.setContentsMargins(0, 0, 0, 0)
+        # Status chip — пилюля с фоном цвета статуса, заметнее чем dot+text.
+        status_chip = QLabel(_STATUS_LABELS.get(status, status))
+        status_chip.setAlignment(Qt.AlignCenter)
+        chip_color = _STATUS_COLORS.get(status, theme.TEXT_MUTED)
+        # rgba-фон через прямое декомпозицию hex — QColor.fromString дала
+        # бы то же, но f-string проще читать.
+        chip_rgba = self._hex_to_rgba(chip_color, 0.14)
+        status_chip.setStyleSheet(
+            f'color: {chip_color}; background: {chip_rgba};'
+            f'border: 1px solid {self._hex_to_rgba(chip_color, 0.30)};'
+            f'border-radius: 10px; padding: 3px 12px;'
+            f'font-size: {theme.FONT_SIZE_SM - 2}px; font-weight: 500;'
+        )
+        status_chip.setMinimumHeight(22)
 
-        dot = QLabel('●')
-        dot.setStyleSheet(
-            f'color: {theme.STATUS_READY if self._ready else theme.STATUS_ERROR}; font-size: 11px;'
-            'background: transparent; border: none;'
-        )
-        status_lbl = QLabel('готов' if self._ready else status)
-        status_lbl.setStyleSheet(
-            f'color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_SM - 3}px;'
-            'background: transparent; border: none;'
-        )
-        sr_layout.addWidget(dot)
-        sr_layout.addWidget(status_lbl)
+        status_wrap = QWidget()
+        status_wrap.setStyleSheet('background: transparent; border: none;')
+        sw = QHBoxLayout(status_wrap)
+        sw.setAlignment(Qt.AlignCenter)
+        sw.setContentsMargins(0, 0, 0, 0)
+        sw.addWidget(status_chip)
 
         layout.addWidget(icon_lbl)
         layout.addWidget(name_lbl)
         layout.addWidget(id_lbl)
-        layout.addWidget(status_row)
+        layout.addWidget(status_wrap)
+
+    @staticmethod
+    def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+        h = hex_color.lstrip('#')
+        if len(h) != 6:
+            return hex_color
+        r = int(h[0:2], 16)
+        g = int(h[2:4], 16)
+        b = int(h[4:6], 16)
+        return f'rgba({r},{g},{b},{alpha})'
 
     def _on_hover(self, hovered: bool):
         effective = hovered and self._ready
@@ -150,7 +210,7 @@ class DroneCard(AnimatedCard):
 
     def mousePressEvent(self, event):
         if self._ready and event.button() == Qt.LeftButton:
-            self.clicked.emit(self._session_id)
+            self.clicked.emit(self._drone_id)
         super().mousePressEvent(event)
 
 
@@ -158,6 +218,82 @@ class _DroneGrid(CardGrid):
     CARD_W = _CARD_W
     CARD_H = _CARD_H
     GAP    = 20
+
+
+class _StatsBar(QWidget):
+    """Сводка по флоту: всего / готов / offline / подключение.
+
+    Обновляется из ``DroneListPage.update``; пустой грид/неизвестные
+    статусы корректно дают нули. Визуально — горизонтальный ряд
+    «{число} {подпись}», с тонкими разделителями между пунктами.
+    """
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName('statsBar')
+        self.setFixedHeight(56)
+        self.setStyleSheet(f"""
+            QWidget#statsBar {{
+                background: transparent;
+                border-bottom: 1px solid {theme.BORDER};
+            }}
+        """)
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(28, 0, 28, 0)
+        lay.setSpacing(0)
+
+        self._items: dict[str, tuple[QLabel, QLabel]] = {}
+        for key, label, color in [
+            ('total',      'всего',       theme.TEXT_PRIMARY),
+            ('ready',      'готов',       _STATUS_COLORS['ready']),
+            ('offline',    'offline',     _STATUS_COLORS['offline']),
+            ('connecting', 'подключение', _STATUS_COLORS['connecting']),
+        ]:
+            block = self._build_item(label, color)
+            lay.addWidget(block)
+            if key != 'connecting':
+                sep = QFrame()
+                sep.setFixedSize(1, 22)
+                sep.setStyleSheet(f'background: {theme.BORDER}; border: none;')
+                lay.addSpacing(20)
+                lay.addWidget(sep)
+                lay.addSpacing(20)
+        lay.addStretch()
+
+    def _build_item(self, label_text: str, color: str) -> QWidget:
+        wrap = QWidget()
+        wrap.setStyleSheet('background: transparent;')
+        h = QHBoxLayout(wrap)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(8)
+
+        value = QLabel('0')
+        value.setStyleSheet(
+            f'color: {color}; background: transparent; border: none;'
+            f'font-size: {theme.FONT_SIZE_LG}px; font-weight: 700;'
+            f'font-family: {theme.FONT_FAMILY_MONO};'
+        )
+
+        caption = QLabel(label_text)
+        caption.setStyleSheet(
+            f'color: {theme.TEXT_MUTED}; background: transparent; border: none;'
+            f'font-size: {theme.FONT_SIZE_SM}px;'
+        )
+
+        h.addWidget(value)
+        h.addWidget(caption)
+        self._items[label_text] = (value, caption)
+        return wrap
+
+    def set_counts(self, total: int, ready: int, offline: int, connecting: int) -> None:
+        for label, count in [
+            ('всего', total),
+            ('готов', ready),
+            ('offline', offline),
+            ('подключение', connecting),
+        ]:
+            self._items[label][0].setText(str(count))
 
 
 class DroneListPage(QWidget):
@@ -215,6 +351,7 @@ class DroneListPage(QWidget):
         tb.addWidget(joy_btn)
         tb.addWidget(logout_btn)
 
+        self._stats = _StatsBar()
         self._grid = _DroneGrid()
 
         self._refresh_timer = QTimer(self)
@@ -235,6 +372,7 @@ class DroneListPage(QWidget):
         self._empty.hide()
 
         root.addWidget(top_bar)
+        root.addWidget(self._stats)
         root.addWidget(scroll, 1)
         root.addWidget(self._empty, 1)
 
@@ -248,6 +386,7 @@ class DroneListPage(QWidget):
 
     def update(self, drones: list):
         if not drones:
+            self._stats.set_counts(0, 0, 0, 0)
             self._empty.show()
             self._grid.hide()
             self._grid.set_cards([])
@@ -257,6 +396,7 @@ class DroneListPage(QWidget):
         self._grid.show()
 
         cards = []
+        counts = {'ready': 0, 'offline': 0, 'connecting': 0}
         for i, d in enumerate(drones):
             # Accept both new format ({drone_id, online}) and legacy
             # ({session_id, status}); prefer the new fields when present.
@@ -265,8 +405,16 @@ class DroneListPage(QWidget):
                 status = 'ready' if d.get('online') else 'offline'
             else:
                 status = d.get('status', 'unknown')
+            if status in counts:
+                counts[status] += 1
             card = DroneCard(drone_id, status, i, self._icon)
             card.clicked.connect(self._on_select)
             cards.append(card)
 
+        self._stats.set_counts(
+            total=len(drones),
+            ready=counts['ready'],
+            offline=counts['offline'],
+            connecting=counts['connecting'],
+        )
         self._grid.set_cards(cards)
