@@ -9,7 +9,7 @@
 from typing import Callable
 
 from PySide6.QtCore import QSize, QPoint, Qt, QObject, QEvent, QModelIndex
-from PySide6.QtGui import QIcon, QPainter, QColor
+from PySide6.QtGui import QIcon, QPainter, QPen, QColor
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel,
     QPushButton, QComboBox, QLineEdit, QStyle, QStyledItemDelegate,
@@ -162,6 +162,30 @@ class _BoundedComboBox(QComboBox):
         self.view().viewport().installEventFilter(self._hover_tracker)
         self._restyle_popup()
 
+    def paintEvent(self, event):
+        """Рисуем стандартный QComboBox, а сверху — chevron-down справа
+        как визуальный индикатор «это раскрывающийся список».
+
+        Используем QPainter вместо background-image в QSS: не зависим от
+        SVG-ресурсов и от дефолтного Fusion-painter'а (рисующего жирный
+        треугольник в неподходящем стиле). Right-padding 24px в scoped
+        QSS оставляет место чтобы text combobox'а не лез под chevron.
+        """
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        pen = QPen(QColor(theme.TEXT_MUTED), 1.5)
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        p.setPen(pen)
+        r = self.rect()
+        cx = r.right() - 12  # 12px от правого края
+        cy = r.center().y()
+        # ⌄ chevron: две линии 4px каждая, вершина внизу
+        p.drawLine(cx - 4, cy - 2, cx, cy + 2)
+        p.drawLine(cx, cy + 2, cx + 4, cy - 2)
+        p.end()
+
     def _restyle_popup(self):
         """Применить наши стили к view и контейнеру popup'а. Вызывается
         и в __init__, и в showPopup — контейнер создаётся Qt лениво,
@@ -240,7 +264,10 @@ class SettingsBar(QWidget):
                 color: {theme.TEXT_PRIMARY};
                 border: 1px solid {theme.BORDER};
                 border-radius: {theme.RADIUS_MD}px;
-                padding: 6px 10px;
+                /* Right-padding 24px — чтобы текст combobox'а не лез под
+                   chevron, который paintEvent рисует в правой части поля.
+                   На QLineEdit (битрейт) лишний паддинг безвреден. */
+                padding: 6px 24px 6px 10px;
                 font-size: {theme.FONT_SIZE_SM}px;
             }}
             QWidget#settingsBar QComboBox:hover,
