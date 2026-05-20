@@ -85,10 +85,21 @@ class _BoundedComboBox(QComboBox):
         """Применить наши стили к view и контейнеру popup'а. Вызывается
         и в __init__, и в showPopup — контейнер создаётся Qt лениво,
         и при __init__ его ещё может не существовать.
+
+        Дополнительно включаем mouseTracking + WA_Hover на view и его
+        viewport — без этого QStyle::State_MouseOver не ставится у
+        item'а под курсором, и правило ``QAbstractItemView::item:hover``
+        в QSS не триггерится (QListView по дефолту tracking выключен).
         """
         view = self.view()
         if view is None:
             return
+        view.setMouseTracking(True)
+        view.setAttribute(Qt.WA_Hover, True)
+        viewport = view.viewport()
+        if viewport is not None:
+            viewport.setMouseTracking(True)
+            viewport.setAttribute(Qt.WA_Hover, True)
         view.setStyleSheet(self._POPUP_VIEW_QSS)
         container = view.parentWidget()
         if container is not None and container is not view:
