@@ -81,7 +81,7 @@ class FlightWindow(QWidget):
             self._heartbeat_timer.start()
 
         self.__build_ui()
-        self._timer = QTimer(interval=20)  # 50 Hz
+        self._timer = QTimer(interval=10)  # 100 Hz — ниже Betaflight срывается в RXLOSS
         self._timer.timeout.connect(self.__tick)
         self._timer.start()
 
