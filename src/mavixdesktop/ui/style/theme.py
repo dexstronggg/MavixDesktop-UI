@@ -159,7 +159,7 @@ QComboBox::down-arrow {{
     image: none;
 }}
 QComboBox QAbstractItemView {{
-    background-color: {BG_SURFACE};
+    background-color: {BG_INPUT};
     color: {TEXT_PRIMARY};
     border: 1px solid {BORDER};
     border-radius: {RADIUS_MD}px;
