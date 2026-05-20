@@ -76,30 +76,35 @@ def mavix_logo_pixmap(size: int) -> QPixmap:
 # ── Overlay button factories ───────────────────────────────────────────────────
 
 def overlay_btn(text: str, parent: QWidget, size: int = None) -> QPushButton:
-    """Semi-transparent round button with a text symbol (arrows, etc.)."""
+    """Прозрачная круглая кнопка с текстовым символом (стрелки и т.п.).
+
+    Поверх видеопотока на flight-окне должна читаться только сама иконка/
+    символ — без плашки. На hover — едва заметная белая подложка для
+    обратной связи; рамки нет вовсе.
+    """
     if size is None:
         size = theme.OVERLAY_BTN_SIDE
     btn = QPushButton(text, parent)
     btn.setFixedSize(size, size)
+    btn.setFlat(True)
+    btn.setAutoFillBackground(False)
     btn.setStyleSheet(f"""
         QPushButton {{
-            background: rgba(0,0,0,0.55);
+            background: transparent;
             color: {theme.TEXT_PRIMARY};
-            border: 1px solid rgba(255,255,255,0.15);
+            border: none;
             border-radius: {size // 2}px;
             font-size: {theme.OVERLAY_BTN_SIDE_FONT}px;
         }}
         QPushButton:hover {{
-            background: rgba(42,130,218,0.65);
-            border-color: {theme.ACCENT};
+            background: rgba(255,255,255,0.10);
         }}
         QPushButton:pressed {{
-            background: rgba(31,106,176,0.85);
+            background: rgba(255,255,255,0.16);
         }}
         QPushButton:disabled {{
             color: rgba(255,255,255,0.20);
-            background: rgba(0,0,0,0.30);
-            border-color: rgba(255,255,255,0.05);
+            background: transparent;
         }}
     """)
     return btn
@@ -107,7 +112,13 @@ def overlay_btn(text: str, parent: QWidget, size: int = None) -> QPushButton:
 
 def overlay_icon_btn(svg_name: str, parent: QWidget,
                      size: int = None, icon_size: int = None) -> QPushButton:
-    """Semi-transparent round button with an SVG icon."""
+    """Прозрачная круглая кнопка с SVG-иконкой.
+
+    Тот же подход, что у :func:`overlay_btn`: нормально — полностью
+    прозрачно, hover — едва заметный белый тинт. Раньше под иконкой
+    рендерился полупрозрачный чёрный круг, на полётном экране это
+    читалось как тёмный квадрат и засоряло видео.
+    """
     if size is None:
         size = theme.OVERLAY_BTN_CORNER
     if icon_size is None:
@@ -116,22 +127,22 @@ def overlay_icon_btn(svg_name: str, parent: QWidget,
     btn.setFixedSize(size, size)
     btn.setIcon(QIcon(svg_pixmap(svg_name, icon_size, color=theme.TEXT_PRIMARY)))
     btn.setIconSize(QSize(icon_size, icon_size))
+    btn.setFlat(True)
+    btn.setAutoFillBackground(False)
     btn.setStyleSheet(f"""
         QPushButton {{
-            background: rgba(0,0,0,0.55);
-            border: 1px solid rgba(255,255,255,0.15);
+            background: transparent;
+            border: none;
             border-radius: {size // 2}px;
         }}
         QPushButton:hover {{
-            background: rgba(42,130,218,0.65);
-            border-color: {theme.ACCENT};
+            background: rgba(255,255,255,0.10);
         }}
         QPushButton:pressed {{
-            background: rgba(31,106,176,0.85);
+            background: rgba(255,255,255,0.16);
         }}
         QPushButton:disabled {{
-            background: rgba(0,0,0,0.30);
-            border-color: rgba(255,255,255,0.05);
+            background: transparent;
         }}
     """)
     return btn
