@@ -114,6 +114,65 @@ class _PointingCursorFilter:
         app.installEventFilter(self._filter)
 
 
+class _BoundedToolTipFilter:
+    """Event-filter, удерживающий QToolTip внутри application window.
+
+    Qt позиционирует тултип относительно курсора — если виджет с длинной
+    подсказкой стоит у нижнего края окна (как кнопка калибровки в
+    SettingsBar), тултип уходит ПОД нижнюю границу и обрезается. Здесь
+    перехватываем QEvent.ToolTip и при необходимости сами вызываем
+    QToolTip.showText с поднятой позицией.
+    """
+
+    def __init__(self):
+        from PySide6.QtCore import QObject, QEvent, QPoint
+        from PySide6.QtWidgets import QToolTip, QWidget
+
+        class _Filter(QObject):
+            def eventFilter(self_, obj, event):
+                if event.type() != QEvent.ToolTip:
+                    return False
+                if not isinstance(obj, QWidget):
+                    return False
+                tip = obj.toolTip()
+                if not tip:
+                    return False
+                win = obj.window()
+                if win is None:
+                    return False
+                # globalPos() / globalPosition() — координаты курсора при
+                # ToolTip-событии. Для PySide6 берём globalPos (deprecated
+                # в Qt6 но всё ещё работает) — globalPosition() возвращает
+                # QPointF, дальше требует .toPoint().
+                try:
+                    cursor_global = event.globalPos()
+                except AttributeError:
+                    cursor_global = event.globalPosition().toPoint()
+
+                win_top_left = win.mapToGlobal(QPoint(0, 0))
+                win_bottom_y = win_top_left.y() + win.height()
+                # Эмпирическая высота однострочного тултипа в Qt ≈ 28-30 px.
+                # Для двухстрочных будет ~50 — берём с запасом 56 чтобы
+                # не упереться в нижнюю границу при многострочном тексте.
+                tooltip_h = 56
+                # Тултип отрисовывается чуть ниже курсора (~24 px смещение).
+                tooltip_bottom_if_default = cursor_global.y() + 24 + tooltip_h
+                if tooltip_bottom_if_default <= win_bottom_y:
+                    return False  # Помещается стандартно — не мешаем Qt
+                # Не помещается: ставим тултип НАД курсором так, чтобы его
+                # нижний край пришёлся на ~16 px выше курсора.
+                adjusted_y = cursor_global.y() - tooltip_h - 8
+                adjusted_y = max(adjusted_y, win_top_left.y() + 8)
+                adjusted = QPoint(cursor_global.x(), adjusted_y)
+                QToolTip.showText(adjusted, tip, obj)
+                return True  # Подавляем дефолтное позиционирование Qt
+
+        self._filter = _Filter()
+
+    def attach_to(self, app) -> None:
+        app.installEventFilter(self._filter)
+
+
 def _run_gui(demo: bool = False) -> int:
     from PySide6.QtGui import QFont
     from PySide6.QtWidgets import QApplication
@@ -151,6 +210,12 @@ def _run_gui(demo: bool = False) -> int:
     cursor_filter = _PointingCursorFilter()
     cursor_filter.attach_to(app)
     app._mavix_cursor_filter = cursor_filter  # type: ignore[attr-defined]
+    # Удержание тултипов внутри окна — у виджетов в нижней части
+    # SettingsBar/flight-окна Qt по умолчанию ставил тултип под
+    # курсором, и длинные подписи уходили за нижнюю границу.
+    tooltip_filter = _BoundedToolTipFilter()
+    tooltip_filter.attach_to(app)
+    app._mavix_tooltip_filter = tooltip_filter  # type: ignore[attr-defined]
 
     window = App(demo=demo)
     window.show()
