@@ -21,25 +21,25 @@ def svg_pixmap(name: str, size: int, color: str | None = None) -> QPixmap:
     указанный. Это обходит ограничение QSvgRenderer, у которого нет
     `currentColor` из CSS — без перекраски иконки рендерятся чёрным
     stroke-ом и не видны на тёмном фоне.
+
+    Тинтование делается через CompositionMode_SourceIn: сначала рисуем
+    SVG в прозрачный pixmap, потом заливаем его сплошным цветом в режиме
+    SourceIn — заливка попадает только туда, где у исходного pixmap'а
+    alpha > 0. Предыдущая реализация делала DestinationIn над отдельным
+    цветным pixmap'ом, и в некоторых конфигурациях Qt тот pixmap не
+    получал alpha-канал — иконка визуально оказывалась внутри чёрного
+    квадрата.
     """
     renderer = QSvgRenderer(str(_ICONS_DIR / name))
     px = QPixmap(QSize(size, size))
     px.fill(Qt.transparent)
     p = QPainter(px)
     renderer.render(p)
+    if color is not None:
+        p.setCompositionMode(QPainter.CompositionMode_SourceIn)
+        p.fillRect(px.rect(), QColor(color))
     p.end()
-    if color is None:
-        return px
-    # Перекраска через composition: сначала заливаем сплошным цветом,
-    # потом DestinationIn оставляет только пиксели, где у исходного
-    # SVG была непрозрачность.
-    tinted = QPixmap(QSize(size, size))
-    tinted.fill(QColor(color))
-    p = QPainter(tinted)
-    p.setCompositionMode(QPainter.CompositionMode_DestinationIn)
-    p.drawPixmap(0, 0, px)
-    p.end()
-    return tinted
+    return px
 
 
 def mavix_logo_pixmap(size: int) -> QPixmap:
