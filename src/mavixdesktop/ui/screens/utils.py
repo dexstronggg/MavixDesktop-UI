@@ -97,10 +97,13 @@ def overlay_btn(text: str, parent: QWidget, size: int = None) -> QPushButton:
             font-size: {theme.OVERLAY_BTN_SIDE_FONT}px;
         }}
         QPushButton:hover {{
-            background: rgba(255,255,255,0.10);
+            /* Cyan-accent tint (rgba от theme.ACCENT = #22d3ee). Видимее
+               белого на тёмном видео и совпадает по «языку» с остальными
+               hover-состояниями приложения. */
+            background: rgba(34, 211, 238, 0.20);
         }}
         QPushButton:pressed {{
-            background: rgba(255,255,255,0.16);
+            background: rgba(34, 211, 238, 0.30);
         }}
         QPushButton:disabled {{
             color: rgba(255,255,255,0.20);
@@ -136,10 +139,13 @@ def overlay_icon_btn(svg_name: str, parent: QWidget,
             border-radius: {size // 2}px;
         }}
         QPushButton:hover {{
-            background: rgba(255,255,255,0.10);
+            /* Cyan-accent tint (rgba от theme.ACCENT = #22d3ee). Видимее
+               белого на тёмном видео и совпадает по «языку» с остальными
+               hover-состояниями приложения. */
+            background: rgba(34, 211, 238, 0.20);
         }}
         QPushButton:pressed {{
-            background: rgba(255,255,255,0.16);
+            background: rgba(34, 211, 238, 0.30);
         }}
         QPushButton:disabled {{
             background: transparent;
