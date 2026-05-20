@@ -126,7 +126,7 @@ QLineEdit {{
     selection-color: {BG};
 }}
 QLineEdit:hover:!focus {{
-    border-color: {BORDER_HOVER};
+    border-color: {ACCENT};
 }}
 QLineEdit:focus {{
     border-color: {ACCENT};
@@ -146,7 +146,7 @@ QComboBox {{
     min-width: 80px;
 }}
 QComboBox:hover {{
-    border-color: {BORDER_HOVER};
+    border-color: {ACCENT};
 }}
 QComboBox:focus {{
     border-color: {ACCENT};
@@ -164,7 +164,7 @@ QComboBox QAbstractItemView {{
     border: 1px solid {BORDER};
     border-radius: {RADIUS_MD}px;
     selection-background-color: {ACCENT_SUBTLE};
-    selection-color: {TEXT_PRIMARY};
+    selection-color: {ACCENT};
     outline: none;
     padding: 4px;
 }}
@@ -173,7 +173,8 @@ QComboBox QAbstractItemView::item {{
     border-radius: {RADIUS_SM}px;
 }}
 QComboBox QAbstractItemView::item:hover {{
-    background-color: {BG_HOVER};
+    background-color: {ACCENT_SUBTLE};
+    color: {ACCENT};
 }}
 
 /* ── Списки (QListWidget) ──────────────────────────────────────────────────── */
@@ -453,7 +454,10 @@ QPushButton:disabled {{
 }}
 """
 
-# Вторичная кнопка (ghost / outline) — для шапки кабинета, действий в карточках
+# Вторичная кнопка (ghost / outline) — для шапки кабинета, действий в карточках.
+# На hover красится в cyan-акцент (это паттерн для positive/navigation действий
+# — джойстик, назад). Если действие деструктивное (logout) — переопределить
+# QSS на сайте создания кнопки на красный, см. drone_list_page._icon_button.
 QSS_BUTTON_SECONDARY = f"""
 QPushButton {{
     background-color: transparent;
@@ -465,13 +469,14 @@ QPushButton {{
     font-weight: 500;
 }}
 QPushButton:hover {{
-    background-color: {BG_HOVER};
-    border-color: {BORDER_HOVER};
-    color: {TEXT_PRIMARY};
+    background-color: {ACCENT_SUBTLE};
+    border-color: {ACCENT};
+    color: {ACCENT};
 }}
 QPushButton:pressed {{
     background-color: {BG_INPUT};
     border-color: {ACCENT_PRESS};
+    color: {ACCENT};
 }}
 """
 
