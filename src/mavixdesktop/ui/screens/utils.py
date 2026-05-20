@@ -97,13 +97,14 @@ def overlay_btn(text: str, parent: QWidget, size: int = None) -> QPushButton:
             font-size: {theme.OVERLAY_BTN_SIDE_FONT}px;
         }}
         QPushButton:hover {{
-            /* Cyan-accent tint (rgba от theme.ACCENT = #22d3ee). Видимее
-               белого на тёмном видео и совпадает по «языку» с остальными
-               hover-состояниями приложения. */
-            background: rgba(34, 211, 238, 0.20);
+            /* Тот же блю rgba(42,130,218,...), что у hover полей
+               разрешения/FPS/битрейта и у save/calibrate-кнопок в
+               SettingsBar — даёт единый визуальный язык всех
+               интерактивных hover-состояний на drone-view. */
+            background: rgba(42, 130, 218, 0.20);
         }}
         QPushButton:pressed {{
-            background: rgba(34, 211, 238, 0.30);
+            background: rgba(42, 130, 218, 0.32);
         }}
         QPushButton:disabled {{
             color: rgba(255,255,255,0.20);
@@ -139,13 +140,14 @@ def overlay_icon_btn(svg_name: str, parent: QWidget,
             border-radius: {size // 2}px;
         }}
         QPushButton:hover {{
-            /* Cyan-accent tint (rgba от theme.ACCENT = #22d3ee). Видимее
-               белого на тёмном видео и совпадает по «языку» с остальными
-               hover-состояниями приложения. */
-            background: rgba(34, 211, 238, 0.20);
+            /* Тот же блю rgba(42,130,218,...), что у hover полей
+               разрешения/FPS/битрейта и у save/calibrate-кнопок в
+               SettingsBar — даёт единый визуальный язык всех
+               интерактивных hover-состояний на drone-view. */
+            background: rgba(42, 130, 218, 0.20);
         }}
         QPushButton:pressed {{
-            background: rgba(34, 211, 238, 0.30);
+            background: rgba(42, 130, 218, 0.32);
         }}
         QPushButton:disabled {{
             background: transparent;
