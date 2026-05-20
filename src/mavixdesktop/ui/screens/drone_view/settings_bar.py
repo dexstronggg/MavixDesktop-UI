@@ -20,19 +20,85 @@ from mavixdesktop.ui.screens.utils import svg_pixmap
 
 
 class _BoundedComboBox(QComboBox):
-    """QComboBox чей popup удерживается внутри application window.
+    """QComboBox с двумя кастомизациями:
 
-    Qt по умолчанию позиционирует popup только относительно экрана —
-    если поле в самом низу окна, дропдаун уходит вниз ЗА нижнюю границу
-    окна, оказываясь поверх таскбара ОС (или вообще обрезанным). Здесь
-    после стандартного showPopup сверяем геометрию popup'а с application
-    window и при необходимости поднимаем popup над полем.
+    1. **Стиль popup'а напрямую на view и контейнере.** На Windows Qt
+       выносит popup в отдельное top-level окно, у которого свой
+       нативный painter — QSS-цепочка от родительского комбобокса/
+       SettingsBar не достигает фона этого окна, и popup рендерится
+       серым на тёмной теме. Здесь форсим setStyleSheet на самом
+       view и на его parentWidget (контейнер popup'а), включая
+       WA_StyledBackground для гарантии что Qt будет красить фон.
 
-    Логику самого комбобокса не трогаем — только позиционирование.
+    2. **Удержание popup'а в границах application window.** Qt по
+       умолчанию ориентируется на экран, не на окно. Если поле в самом
+       низу окна, popup уходит за нижнюю границу. После super().showPopup
+       сверяем геометрию и при необходимости поднимаем popup над полем.
+
+    Логику самого комбобокса не трогаем — только стили и позиционирование.
     """
+
+    # Стиль самого QListView внутри popup'а — bg, padding, hover/selected
+    # элементов. Применяется в __init__ через self.view().setStyleSheet —
+    # это обходит QSS-цепочку, которая не доходит до popup-окна.
+    _POPUP_VIEW_QSS = f"""
+        QAbstractItemView, QListView {{
+            background: {theme.BG_INPUT};
+            color: {theme.TEXT_PRIMARY};
+            border: 1px solid {theme.BORDER};
+            outline: none;
+            padding: 4px;
+            selection-background-color: {theme.ACCENT_SUBTLE};
+            selection-color: {theme.ACCENT};
+        }}
+        QAbstractItemView::item, QListView::item {{
+            padding: 7px 12px;
+            border-radius: {theme.RADIUS_SM}px;
+            background: transparent;
+            color: {theme.TEXT_PRIMARY};
+        }}
+        QAbstractItemView::item:hover, QListView::item:hover {{
+            background: {theme.ACCENT_SUBTLE};
+            color: {theme.ACCENT};
+        }}
+        QAbstractItemView::item:selected, QListView::item:selected {{
+            background: {theme.ACCENT_SUBTLE};
+            color: {theme.ACCENT};
+        }}
+    """
+
+    # Стиль контейнера popup'а (QComboBoxPrivateContainer) — отдельного
+    # top-level окна-обёртки вокруг view. Без этого его дефолтный
+    # системный фон проступает между бордером и items как «серая плашка».
+    _POPUP_CONTAINER_QSS = f"""
+        QWidget {{
+            background: {theme.BG_INPUT};
+            border: 1px solid {theme.BORDER};
+        }}
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._restyle_popup()
+
+    def _restyle_popup(self):
+        """Применить наши стили к view и контейнеру popup'а. Вызывается
+        и в __init__, и в showPopup — контейнер создаётся Qt лениво,
+        и при __init__ его ещё может не существовать.
+        """
+        view = self.view()
+        if view is None:
+            return
+        view.setStyleSheet(self._POPUP_VIEW_QSS)
+        container = view.parentWidget()
+        if container is not None and container is not view:
+            container.setAttribute(Qt.WA_StyledBackground, True)
+            container.setStyleSheet(self._POPUP_CONTAINER_QSS)
 
     def showPopup(self):
         super().showPopup()
+        # Контейнер popup'а мог только что появиться — перекрашиваем.
+        self._restyle_popup()
         popup = self.view().window() if self.view() is not None else None
         app_win = self.window()
         if popup is None or app_win is None:
