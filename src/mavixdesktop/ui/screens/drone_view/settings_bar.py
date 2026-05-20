@@ -8,7 +8,7 @@
 """
 from typing import Callable
 
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QSize, QPoint, Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel,
@@ -17,6 +17,39 @@ from PySide6.QtWidgets import (
 
 from mavixdesktop.ui.style import theme
 from mavixdesktop.ui.screens.utils import svg_pixmap
+
+
+class _BoundedComboBox(QComboBox):
+    """QComboBox чей popup удерживается внутри application window.
+
+    Qt по умолчанию позиционирует popup только относительно экрана —
+    если поле в самом низу окна, дропдаун уходит вниз ЗА нижнюю границу
+    окна, оказываясь поверх таскбара ОС (или вообще обрезанным). Здесь
+    после стандартного showPopup сверяем геометрию popup'а с application
+    window и при необходимости поднимаем popup над полем.
+
+    Логику самого комбобокса не трогаем — только позиционирование.
+    """
+
+    def showPopup(self):
+        super().showPopup()
+        popup = self.view().window() if self.view() is not None else None
+        app_win = self.window()
+        if popup is None or app_win is None:
+            return
+        win_top_left = app_win.mapToGlobal(QPoint(0, 0))
+        win_bottom = win_top_left.y() + app_win.height()
+        popup_geom = popup.geometry()
+        if popup_geom.bottom() <= win_bottom:
+            return  # уже помещается — ничего не правим
+        # Не помещается снизу: ставим popup над полем (его верх = верх
+        # popup'а, рассчитанный от Y текущего combo'а минус высота popup).
+        field_top_global = self.mapToGlobal(QPoint(0, 0))
+        new_y = field_top_global.y() - popup_geom.height()
+        # Если и над полем места не хватает (popup выше всего окна) —
+        # просто упираем в верхнюю границу окна.
+        new_y = max(new_y, win_top_left.y())
+        popup.move(popup_geom.x(), new_y)
 
 
 class SettingsBar(QWidget):
@@ -53,11 +86,32 @@ class SettingsBar(QWidget):
             }}
             QWidget#settingsBar QComboBox:hover,
             QWidget#settingsBar QLineEdit:hover {{
-                border-color: {theme.BORDER_HOVER};
+                border-color: {theme.ACCENT};
             }}
             QWidget#settingsBar QComboBox:focus,
             QWidget#settingsBar QLineEdit:focus {{
                 border-color: {theme.ACCENT};
+            }}
+            /* Popup-список разрешения/FPS — единый язык акцента для
+               item hover/selected. selection-color/background применяются
+               и для клавиатурной навигации стрелками. */
+            QWidget#settingsBar QComboBox QAbstractItemView {{
+                background: {theme.BG_SURFACE};
+                color: {theme.TEXT_PRIMARY};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_MD}px;
+                outline: none;
+                padding: 4px;
+                selection-background-color: {theme.ACCENT_SUBTLE};
+                selection-color: {theme.ACCENT};
+            }}
+            QWidget#settingsBar QComboBox QAbstractItemView::item {{
+                padding: 7px 12px;
+                border-radius: {theme.RADIUS_SM}px;
+            }}
+            QWidget#settingsBar QComboBox QAbstractItemView::item:hover {{
+                background: {theme.ACCENT_SUBTLE};
+                color: {theme.ACCENT};
             }}
         """)
         self.setFixedHeight(72)
@@ -92,21 +146,32 @@ class SettingsBar(QWidget):
 
         # ── Правая часть: настройки камеры ────────────────────────────────────
         layout.addWidget(self.__muted('Разрешение'))
-        self.resolution_box = QComboBox()
+        self.resolution_box = _BoundedComboBox()
         self.resolution_box.setMinimumWidth(140)
         self.resolution_box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.resolution_box.currentIndexChanged.connect(self._on_resolution_changed)
+        # Курсор-рука на самом поле, и тот же курсор унаследует view списка —
+        # на dropdown items это не само QSS-property (Qt не уважает CSS
+        # `cursor: pointer` на QAbstractItemView), а setCursor на view.
+        self.resolution_box.setCursor(Qt.PointingHandCursor)
+        self.resolution_box.view().setCursor(Qt.PointingHandCursor)
         layout.addWidget(self.resolution_box)
 
         layout.addWidget(self.__muted('FPS'))
-        self.fps_box = QComboBox()
+        self.fps_box = _BoundedComboBox()
         self.fps_box.setMinimumWidth(70)
+        self.fps_box.setCursor(Qt.PointingHandCursor)
+        self.fps_box.view().setCursor(Qt.PointingHandCursor)
         layout.addWidget(self.fps_box)
 
         layout.addWidget(self.__muted('Битрейт'))
         self.bitrate_input = QLineEdit()
         self.bitrate_input.setPlaceholderText('kbps')
         self.bitrate_input.setFixedWidth(80)
+        # Курсор-рука на bitrate-поле для визуальной консистентности с
+        # combos рядом. Текст внутри (когда поле в фокусе) рендерится с
+        # обычным I-beam курсором — Qt сам переключает.
+        self.bitrate_input.setCursor(Qt.PointingHandCursor)
         layout.addWidget(self.bitrate_input)
 
         # ── Кнопка принудительной калибровки камер ────────────────────────────
