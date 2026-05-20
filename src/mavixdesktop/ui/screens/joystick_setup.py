@@ -556,15 +556,14 @@ class JoystickSetupPage(QWidget):
         self._fc_type = fc_type
 
     def _refresh(self):
-        # В демо-режиме pygame.joystick.get_count() вернёт 0 на машине
-        # без подключённого контроллера. Подсовываем один мок-имя, чтобы
-        # UI было что показать. Реальные взаимодействия с pygame в
-        # демо-режиме перехватываются ниже (см. _on_card_clicked /
-        # _on_card_action).
-        if self._demo:
+        # Всегда сначала спрашиваем pygame о реальных джойстиках — даже в
+        # демо-режиме: если у оператора есть подключённый USB-контроллер,
+        # дизайн экранов калибровки/превью нужно проверять именно на нём.
+        # Мок-имя подставляем только если демо + реального устройства нет
+        # (на голой машине без джойстика, чтобы экран не оказался пустым).
+        names = JoystickManager.list_joysticks()
+        if self._demo and not names:
             names = [self.DEMO_JOYSTICK_NAME]
-        else:
-            names = JoystickManager.list_joysticks()
 
         # Auto-refresh tick: skip the rebuild if the device list hasn't changed,
         # so we don't churn QWidget children (and stomp on any open menu) 3x/sec.
