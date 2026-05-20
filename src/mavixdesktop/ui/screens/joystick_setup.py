@@ -72,7 +72,11 @@ _STEPS = [
 ]
 
 _CARD_W  = 220
-_CARD_H  = 230
+# 14 (top margin) + 56 (icon) + 6 + 34 (имя — 2 строки) + 6 + 14 (статус)
+# + 6 + 36 (actions) + 6 (bottom margin) ≈ 178 → 184 с маленьким запасом.
+# Без addStretch внутри: actions упираются под статус, hover-полоса
+# AnimatedCard оказывается прямо под кнопками действий.
+_CARD_H  = 184
 _ICON_SZ = 56
 _GAP     = 20
 
@@ -160,11 +164,9 @@ class JoystickCard(AnimatedCard):
 
         lay = QVBoxLayout(self)
         lay.setSpacing(6)
-        # Нижний margin 6px — буквально на одну линию hover-полосы
-        # AnimatedCard (она 3px и рисуется у низа карточки), чтобы
-        # полоса оказалась прямо под рядом кнопок, без воздуха.
-        # AlignTop НЕ ставим: actions_row пиннится к низу через
-        # addStretch ниже.
+        # Нижний margin 6px — на одну линию hover-полосы AnimatedCard
+        # (она 3px и рисуется у низа карточки), чтобы полоса оказалась
+        # прямо под рядом кнопок действий, без воздуха выше.
         lay.setContentsMargins(14, 14, 14, 6)
 
         icon_lbl = QLabel()
@@ -179,6 +181,10 @@ class JoystickCard(AnimatedCard):
         name_lbl = QLabel(name)
         name_lbl.setAlignment(Qt.AlignCenter)
         name_lbl.setWordWrap(True)
+        # Фиксируем высоту под две строки — без этого карточка
+        # «дышит» когда у одного контроллера имя в одну строку, а
+        # у соседнего в две: расположение actions_row съезжает.
+        name_lbl.setFixedHeight(34)
         name_lbl.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY}; font-size: {theme.FONT_SIZE_SM}px;'
             'font-weight: 600; background: transparent; border: none;'
@@ -207,13 +213,8 @@ class JoystickCard(AnimatedCard):
         lay.addWidget(icon_lbl)
         lay.addWidget(name_lbl)
         lay.addWidget(status_row)
-        # Пустое растяжение между статусом и действиями — actions_row
-        # уезжает к нижней границе карточки. Без него (с AlignTop)
-        # actions_row сидела сразу за статусом, а под ней оставалось
-        # ~60px воздуха до hover-полосы внизу.
-        lay.addStretch()
 
-        # ── Явные кнопки действий вместо ...-меню (прижаты к низу) ────────────
+        # ── Явные кнопки действий вместо ...-меню (под статусом) ──────────────
         actions_row = QWidget()
         actions_row.setStyleSheet('background: transparent; border: none;')
         ar = QHBoxLayout(actions_row)
