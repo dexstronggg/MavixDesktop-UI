@@ -194,7 +194,7 @@ class VideoPanel(QWidget):
                 QPushButton {{
                     background: rgba(42,130,218,0.75);
                     color: {theme.TEXT_PRIMARY};
-                    border: 1px solid {theme.ACCENT};
+                    border: none;
                     border-radius: {theme.RADIUS_MD}px;
                     font-size: {theme.FONT_SIZE_SM}px;
                     font-weight: 600;
@@ -207,7 +207,7 @@ class VideoPanel(QWidget):
                 QPushButton {{
                     background: rgba(0,0,0,0.50);
                     color: rgba(255,255,255,0.25);
-                    border: 1px solid rgba(255,255,255,0.10);
+                    border: none;
                     border-radius: {theme.RADIUS_MD}px;
                     font-size: {theme.FONT_SIZE_SM}px;
                     font-weight: 600;
