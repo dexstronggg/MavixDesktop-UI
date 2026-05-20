@@ -370,7 +370,6 @@ class SettingsBar(QWidget):
         # ── Кнопка принудительной калибровки камер ────────────────────────────
         self.calibrate_btn = QPushButton('⟳ Калибровка камер')
         self.calibrate_btn.setFixedHeight(36)
-        self.calibrate_btn.setToolTip('Полная пересборка калибровки всех камер')
         self.calibrate_btn.setStyleSheet(f"""
             QPushButton {{
                 background: {theme.BG_INPUT};
@@ -395,7 +394,6 @@ class SettingsBar(QWidget):
         # ── Кнопка сохранения ─────────────────────────────────────────────────
         self.save_btn = QPushButton()
         self.save_btn.setFixedSize(40, 40)
-        self.save_btn.setToolTip('Сохранить настройки камеры')
         self.save_btn.setEnabled(False)
         self.save_btn.clicked.connect(on_save)
         self.save_btn.setIcon(QIcon(svg_pixmap('save.svg', 28, color=theme.TEXT_PRIMARY)))
