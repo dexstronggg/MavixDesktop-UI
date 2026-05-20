@@ -8,15 +8,90 @@
 """
 from typing import Callable
 
-from PySide6.QtCore import QSize, QPoint, Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QSize, QPoint, Qt, QObject, QEvent, QModelIndex
+from PySide6.QtGui import QIcon, QPainter, QColor
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel,
-    QPushButton, QComboBox, QLineEdit,
+    QPushButton, QComboBox, QLineEdit, QStyle, QStyledItemDelegate,
 )
 
 from mavixdesktop.ui.style import theme
 from mavixdesktop.ui.screens.utils import svg_pixmap
+
+
+class _PopupItemDelegate(QStyledItemDelegate):
+    """Делегат для popup'а combobox'а — рисует hover вручную.
+
+    QSS-правило ``QAbstractItemView::item:hover`` не срабатывает в
+    комбинации QListView + Fusion + scoped stylesheet: предыдущие
+    попытки через mouseTracking и WA_Hover не дали эффекта (Qt style
+    engine берёт State_MouseOver не у того виджета, либо переопределяет
+    цвет через свою палитру). Здесь рисуем hover/selected напрямую:
+    fillRect под item'ом и pen цветом ACCENT — минуя style engine.
+
+    Hover-index трекается через :class:`_HoverTracker` event-filter
+    на viewport: на каждый MouseMove запоминаем index под курсором,
+    зовём viewport.update() — paint() перерисовывает с подсветкой.
+    """
+
+    # Заливка hover/selected — rgba от theme.ACCENT (#22d3ee) с alpha
+    # ~30/255 (≈ 0.12) совпадает по визуальному весу с theme.ACCENT_SUBTLE
+    # в QSS, но через QColor — на этот раз гарантированно.
+    _HIGHLIGHT_BG = QColor(34, 211, 238, 30)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._hover_index = QModelIndex()
+
+    def set_hover_index(self, index: QModelIndex) -> None:
+        self._hover_index = QModelIndex(index) if index is not None else QModelIndex()
+
+    def paint(self, painter: QPainter, option, index: QModelIndex) -> None:
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        is_selected = bool(option.state & QStyle.State_Selected)
+        is_hover = (self._hover_index.isValid()
+                    and self._hover_index.row() == index.row())
+        is_active = is_selected or is_hover
+
+        if is_active:
+            painter.fillRect(option.rect, self._HIGHLIGHT_BG)
+
+        text = str(index.data(Qt.DisplayRole) or '')
+        # Padding 12px по горизонтали — совпадает с padding из
+        # _POPUP_VIEW_QSS чтобы текст не «прыгал» между состояниями.
+        text_rect = option.rect.adjusted(12, 0, -12, 0)
+        text_color = QColor(theme.ACCENT) if is_active else QColor(theme.TEXT_PRIMARY)
+        painter.setPen(text_color)
+        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, text)
+        painter.restore()
+
+
+class _HoverTracker(QObject):
+    """Event-filter на viewport popup-вью: трекает индекс под курсором и
+    форсит перерисовку через viewport.update(). Делегат читает индекс
+    при следующем paint() и красит hover.
+    """
+
+    def __init__(self, view, delegate: _PopupItemDelegate):
+        super().__init__(view)
+        self._view = view
+        self._delegate = delegate
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.MouseMove:
+            try:
+                pos = event.position().toPoint()
+            except AttributeError:
+                pos = event.pos()
+            index = self._view.indexAt(pos)
+            self._delegate.set_hover_index(index)
+            self._view.viewport().update()
+        elif event.type() in (QEvent.Leave, QEvent.HoverLeave):
+            self._delegate.set_hover_index(QModelIndex())
+            self._view.viewport().update()
+        return False
 
 
 class _BoundedComboBox(QComboBox):
@@ -79,6 +154,12 @@ class _BoundedComboBox(QComboBox):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Кастомный делегат + tracker для надёжного hover-painting.
+        # QSS-route оказался ненадёжным (см. _PopupItemDelegate docstring).
+        self._popup_delegate = _PopupItemDelegate(self)
+        self.view().setItemDelegate(self._popup_delegate)
+        self._hover_tracker = _HoverTracker(self.view(), self._popup_delegate)
+        self.view().viewport().installEventFilter(self._hover_tracker)
         self._restyle_popup()
 
     def _restyle_popup(self):
