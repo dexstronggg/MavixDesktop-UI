@@ -103,18 +103,19 @@ class _BoundedComboBox(QComboBox):
         app_win = self.window()
         if popup is None or app_win is None:
             return
-        win_top_left = app_win.mapToGlobal(QPoint(0, 0))
-        win_bottom = win_top_left.y() + app_win.height()
         popup_geom = popup.geometry()
-        if popup_geom.bottom() <= win_bottom:
-            return  # уже помещается — ничего не правим
-        # Не помещается снизу: ставим popup над полем (его верх = верх
-        # popup'а, рассчитанный от Y текущего combo'а минус высота popup).
+        # Всегда ставим popup НАД полем. Раньше тут был условный flip
+        # «если вышел за нижнюю границу окна — флипаем», но это давало
+        # непоследовательное поведение: в зависимости от позиции окна
+        # на экране Qt сам ставил popup то вниз, то вверх, и оператор
+        # видел разные направления для одной и той же UI-операции.
         field_top_global = self.mapToGlobal(QPoint(0, 0))
         new_y = field_top_global.y() - popup_geom.height()
-        # Если и над полем места не хватает (popup выше всего окна) —
-        # просто упираем в верхнюю границу окна.
-        new_y = max(new_y, win_top_left.y())
+        # Если над полем места не хватает (popup выше application
+        # window) — упираем в верхнюю границу окна, иначе уйдёт за
+        # title-bar и потеряет видимость.
+        win_top_global = app_win.mapToGlobal(QPoint(0, 0))
+        new_y = max(new_y, win_top_global.y())
         popup.move(popup_geom.x(), new_y)
 
 
