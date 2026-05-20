@@ -254,10 +254,28 @@ class CardGrid(QWidget):
             return
         self._last_cols = cols
         self.__clear_layout()
-        for i, card in enumerate(self._cards):
-            # AlignHCenter — карточки центрируются в своих колонках, а не
-            # жмутся к левому краю. При 3 карточках в широком окне они
-            # равномерно распределяются по ширине, как в drone-list/joystick.
-            self._layout.addWidget(card, i // cols, i % cols, Qt.AlignTop | Qt.AlignHCenter)
-        rows = (len(self._cards) + cols - 1) // cols if self._cards else 0
+        n = len(self._cards)
+
+        # Сбрасываем stretch на всех потенциально использованных колонках —
+        # иначе при переключении между режимами (N=1 ↔ N>1) остаются
+        # настройки прошлой раскладки и карточки уезжают.
+        for c in range(cols + 2):
+            self._layout.setColumnStretch(c, 0)
+
+        if n == 1:
+            # Одна карточка не должна висеть по центру широкого экрана:
+            # прижимаем к верх-левому углу и пускаем stretch-колонку
+            # справа, чтобы пустое место не растягивало ячейку. Многокарточный
+            # layout остаётся как есть — карточки распределяются по колонкам
+            # через AlignHCenter (см. ветку else).
+            self._layout.addWidget(self._cards[0], 0, 0, Qt.AlignTop | Qt.AlignLeft)
+            self._layout.setColumnStretch(1, 1)
+        else:
+            for i, card in enumerate(self._cards):
+                # AlignHCenter — карточки центрируются в своих колонках, а не
+                # жмутся к левому краю. При 3 карточках в широком окне они
+                # равномерно распределяются по ширине, как в drone-list/joystick.
+                self._layout.addWidget(card, i // cols, i % cols, Qt.AlignTop | Qt.AlignHCenter)
+
+        rows = (n + cols - 1) // cols if self._cards else 0
         self.setMinimumHeight(rows * (self.CARD_H + self.GAP) + self.GAP)
