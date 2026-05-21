@@ -407,6 +407,24 @@ class LoginPage(QWidget):
         self.error.setText(message)
         self.error.setVisible(bool(message))
 
+    def reset(self) -> None:
+        """Сбросить форму в исходное состояние при возврате на login.
+
+        Без этого после logout оставались:
+        - текст «Инструкции по восстановлению…» от прошлого forgot-flow
+        - заполненные email/password
+        - возможно error-баннер от прошлой неудачной попытки
+        Оператор приходит на «свежую» форму как при первом запуске.
+        """
+        self.email.clear()
+        self.password.clear()
+        self.set_error('')
+        self._forgot_msg.hide()
+        self._forgot_msg.clear()
+        self.set_busy(False)
+        # Возвращаем фокус в email — оператор сразу может начать печатать.
+        self.email.setFocus()
+
     def set_busy(self, busy: bool) -> None:
         """Блокировать форму на время сетевого запроса."""
         self._submit_btn.setEnabled(not busy)

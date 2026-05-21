@@ -200,6 +200,9 @@ class App(QMainWindow):
         self._conn.logout()
         self._video.stop()
         self._video.reset()
+        # Сбрасываем форму логина — иначе после logout оператор видит
+        # старый forgot-message, заполненный email и пр.
+        self.login_page.reset()
         self.stack.setCurrentWidget(self.login_page)
 
     # ── Drone list / selection ────────────────────────────────────────────────
