@@ -1,38 +1,110 @@
 """Генератор иконок Mavix для сборки дистрибутивов.
 
-Вызывается из ``scripts/build_windows.ps1`` и ``scripts/build_linux.sh`` для
-создания .ico (Windows) и .png (Linux) из ``mavix_logo_pixmap``. Без
-этого скрипта пришлось бы держать бинарные .ico/.png в репозитории.
+Вызывается из ``scripts/build_windows.ps1`` и ``scripts/build_linux.sh``
+для создания .ico (Windows) и .png (Linux). Без этого скрипта пришлось
+бы держать бинарные .ico/.png в репозитории.
+
+Реализация дублирует логику ``mavixdesktop.ui.screens.utils.mavix_logo_pixmap``
+(cyan-градиентный rounded square + центрированная буква «M»), но через
+Pillow + NumPy вместо PySide6 — потому что:
+
+* PySide6 на CI/headless-машинах требует libGL.so.1 (mesa) для импорта,
+  это лишняя системная зависимость на сборочной машине;
+* Pillow умеет писать multi-size .ico одной строкой (Qt-API делает
+  только single-size, иконка размывается на 16/32px иконке трея).
 
 Использование:
 
     python scripts/_make_icon.py --format png --output dist/icon.png --size 256
     python scripts/_make_icon.py --format ico --output dist/icon.ico
-
-Для .ico требуется Pillow (Qt напрямую умеет писать ICO, но только
-single-size; multi-size делается через PIL.Image.save(..., sizes=...)).
 """
 from __future__ import annotations
 
 import argparse
 import sys
-from io import BytesIO
 from pathlib import Path
 
-# Запускается как одиночный скрипт без установленного пакета —
-# добавляем src/ в path чтобы можно было импортировать
-# mavixdesktop.ui.screens.utils.mavix_logo_pixmap.
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_PROJECT_ROOT / 'src'))
-
-from PySide6.QtCore import QBuffer, QIODevice  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
-
-from mavixdesktop.ui.screens.utils import mavix_logo_pixmap  # noqa: E402
+try:
+    import numpy as np
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError as exc:
+    sys.exit(f'требуется numpy + pillow: pip install pillow numpy ({exc})')
 
 
+# Градиент: ACCENT (#22d3ee) → ACCENT_PRESS (#06b6d4), диагональ TL→BR.
+# Те же цвета, что и в mavix_logo_pixmap.
+_GRAD_START = (0x22, 0xd3, 0xee)
+_GRAD_END   = (0x06, 0xb6, 0xd4)
+# Цвет «M» — почти-чёрный с лёгким cyan-уклоном (#001017).
+_LETTER_COLOR = (0x00, 0x10, 0x17, 0xff)
+# Стандартный набор размеров для multi-size .ico (Windows ресолвит
+# нужный сам по контексту: tray vs alt-tab vs explorer).
 _ICO_SIZES = [(16, 16), (24, 24), (32, 32), (48, 48),
               (64, 64), (128, 128), (256, 256)]
+
+
+def _gradient_image(size: int) -> Image.Image:
+    """Cyan-градиент через NumPy: каждая точка линейно интерполируется
+    между _GRAD_START и _GRAD_END по диагонали."""
+    y, x = np.meshgrid(np.arange(size), np.arange(size), indexing='ij')
+    t = (x + y) / (2 * max(size - 1, 1))  # 0..1 по диагонали
+    r = (_GRAD_START[0] * (1 - t) + _GRAD_END[0] * t).astype(np.uint8)
+    g = (_GRAD_START[1] * (1 - t) + _GRAD_END[1] * t).astype(np.uint8)
+    b = (_GRAD_START[2] * (1 - t) + _GRAD_END[2] * t).astype(np.uint8)
+    a = np.full_like(r, 255)
+    arr = np.stack([r, g, b, a], axis=-1)
+    return Image.fromarray(arr, 'RGBA')
+
+
+def _load_letter_font(target_px: int) -> ImageFont.ImageFont:
+    """Шрифт для «M». Пытается найти жирный sans-serif. Fallback —
+    дефолтный PIL bitmap font (не масштабируется красиво, но иконка
+    хотя бы соберётся)."""
+    candidates = [
+        'Inter-Bold.ttf',  # из ресурсов, если кто-то положил рядом
+        # Системные жирные sans-шрифты по убыванию предпочтения:
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',  # Debian/Ubuntu
+        '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf',              # Arch
+        '/Library/Fonts/Arial Bold.ttf',                          # macOS
+        'C:/Windows/Fonts/arialbd.ttf',                           # Windows
+    ]
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, target_px)
+        except (OSError, IOError):
+            continue
+    # Last resort — bitmap font, выглядит хуже но работает.
+    return ImageFont.load_default()
+
+
+def mavix_logo_image(size: int) -> Image.Image:
+    """Cyan rounded square с центрированной буквой «M».
+
+    Эквивалент `mavix_logo_pixmap` из ui/screens/utils.py, но на Pillow.
+    """
+    # Маска — rounded rectangle. radius = 26% от размера, как в Qt-версии.
+    radius = int(size * 0.26)
+    mask = Image.new('L', (size, size), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        (0, 0, size - 1, size - 1), radius=radius, fill=255,
+    )
+
+    # Заливка: cyan-градиент под mask.
+    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    img.paste(_gradient_image(size), (0, 0), mask)
+
+    # Буква «M» — bold, ≈62% высоты иконки.
+    font = _load_letter_font(int(size * 0.62))
+    draw = ImageDraw.Draw(img)
+    bbox = draw.textbbox((0, 0), 'M', font=font)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+    # Корректировка под bbox (textbbox даёт offset из-за метрик шрифта).
+    x = (size - text_w) / 2 - bbox[0]
+    y = (size - text_h) / 2 - bbox[1]
+    draw.text((x, y), 'M', font=font, fill=_LETTER_COLOR)
+
+    return img
 
 
 def main() -> None:
@@ -44,37 +116,18 @@ def main() -> None:
     parser.add_argument('--size', type=int, default=256,
                         help='размер для PNG (по умолчанию 256). На ICO не влияет.')
     args = parser.parse_args()
-
-    # QPixmap требует QGuiApplication — создаём минимальное QApplication
-    # без exec()/show(). Hidden для CI/headless контекстов.
-    _app = QApplication.instance() or QApplication(sys.argv)
-
     args.output.parent.mkdir(parents=True, exist_ok=True)
 
     if args.format == 'png':
-        pixmap = mavix_logo_pixmap(args.size)
-        if not pixmap.save(str(args.output), 'PNG'):
-            sys.exit(f'не удалось сохранить PNG в {args.output}')
+        img = mavix_logo_image(args.size)
+        img.save(str(args.output), format='PNG')
         print(f'PNG записан: {args.output} ({args.size}x{args.size})')
         return
 
-    # ICO multi-size: рендерим базовую 256×256 в QBuffer, передаём в
-    # Pillow для финального ICO с набором стандартных размеров.
-    try:
-        from PIL import Image
-    except ImportError:
-        sys.exit('Для .ico требуется Pillow: pip install pillow')
-
-    base = mavix_logo_pixmap(256)
-    qbuf = QBuffer()
-    qbuf.open(QIODevice.OpenModeFlag.WriteOnly)
-    if not base.save(qbuf, 'PNG'):
-        sys.exit('не удалось сериализовать base PNG в QBuffer')
-    png_bytes = bytes(qbuf.data())
-    qbuf.close()
-
-    img = Image.open(BytesIO(png_bytes))
-    img.save(str(args.output), format='ICO', sizes=_ICO_SIZES)
+    # ICO multi-size: Pillow собирает мульти-фреймовый ICO из одной
+    # большой 256×256 иконки, downsampling делает сам.
+    base = mavix_logo_image(256)
+    base.save(str(args.output), format='ICO', sizes=_ICO_SIZES)
     print(f'ICO записан: {args.output} (sizes={len(_ICO_SIZES)})')
 
 
