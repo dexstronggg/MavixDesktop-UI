@@ -77,7 +77,10 @@ class App(QMainWindow):
         self._bridge.login_failed.connect(self._on_login_failed)
 
         # Build pages
-        self.login_page = LoginPage(on_login=self._handle_login)
+        self.login_page = LoginPage(
+            on_login=self._handle_login,
+            on_forgot_password=self._handle_forgot_password,
+        )
         self.drone_list_page = DroneListPage(
             on_select=self._handle_select_drone,
             on_refresh=self._handle_refresh,
@@ -183,6 +186,12 @@ class App(QMainWindow):
         self.login_page.set_error(reason or 'Не удалось войти')
         if self.stack.currentWidget() is not self.login_page:
             self.stack.setCurrentWidget(self.login_page)
+
+    def _handle_forgot_password(self, email: str) -> None:
+        """Запрос восстановления пароля со страницы логина. UI уже
+        показал confirmation-сообщение оператору, здесь просто шлём
+        fire-and-forget запрос на сервер (или no-op в демо)."""
+        self._conn.request_password_reset(email)
 
     def _handle_logout(self) -> None:
         self._ping_timer.stop()

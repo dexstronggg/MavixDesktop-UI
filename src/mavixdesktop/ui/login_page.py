@@ -11,7 +11,7 @@ import time
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt, QTimer, QPointF
-from PySide6.QtGui import QFont, QPainter, QRadialGradient, QColor
+from PySide6.QtGui import QFont, QPainter, QPen, QRadialGradient, QColor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QFrame, QGraphicsDropShadowEffect, QSizePolicy,
@@ -161,10 +161,66 @@ class _IconLineEdit(QFrame):
         return handler
 
 
+class _Spinner(QWidget):
+    """Маленький крутящийся индикатор загрузки — 270° дуги.
+
+    Используется внутри submit-кнопки на login-форме: при set_busy(True)
+    кнопка меняет текст на «Подождите…», и левее текста крутится этот
+    spinner, давая визуальный feedback. Раньше был только статичный
+    текст — пользователь не понимал, идёт ли запрос вообще.
+
+    Рисуется QPainter'ом, без QMovie/GIF — не зависит от ассетов.
+    Цвет передаётся в конструктор (для кнопки берём BG, контраст к
+    cyan-заливке primary-кнопки).
+    """
+
+    def __init__(self, size: int = 16, color: QColor | None = None, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(size, size)
+        self._size = size
+        self._color = color or QColor(theme.BG)
+        self._angle = 0
+        self._timer = QTimer(self)
+        self._timer.setInterval(16)  # ~60 FPS
+        self._timer.timeout.connect(self._tick)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.hide()
+
+    def start(self) -> None:
+        self._timer.start()
+        self.show()
+
+    def stop(self) -> None:
+        self._timer.stop()
+        self.hide()
+
+    def _tick(self) -> None:
+        self._angle = (self._angle + 8) % 360
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        pen = QPen(self._color, 2)
+        pen.setCapStyle(Qt.RoundCap)
+        p.setPen(pen)
+        # Inset 2px чтобы дуга не упиралась в края (учёт ширины pen'а).
+        rect = self.rect().adjusted(2, 2, -2, -2)
+        # Qt API: drawArc принимает startAngle и spanAngle в 1/16 градуса.
+        # Рисуем 270° (3/4 окружности), стартуя с текущего угла.
+        p.drawArc(rect, -self._angle * 16, 270 * 16)
+        p.end()
+
+
 class LoginPage(QWidget):
-    def __init__(self, on_login: Callable[[str, str], None]) -> None:
+    def __init__(
+        self,
+        on_login: Callable[[str, str], None],
+        on_forgot_password: Callable[[str], None] | None = None,
+    ) -> None:
         super().__init__()
         self._on_login = on_login
+        self._on_forgot_password = on_forgot_password
 
         # Фон страницы — без него родительское окно темнит, но без свечения.
         outer = QVBoxLayout(self)
@@ -292,7 +348,54 @@ class LoginPage(QWidget):
         self._submit_btn.clicked.connect(self._submit)
         layout.addWidget(self._submit_btn)
 
+        # Spinner внутри submit-кнопки слева от текста — child widget,
+        # позиционируется в showEvent кнопки. Стартует/останавливается
+        # из set_busy. Цвет — BG (тёмный) для контраста с cyan заливкой
+        # primary-кнопки.
+        self._busy_spinner = _Spinner(16, QColor(theme.BG), self._submit_btn)
+        # Позиционируем после layout-pass: minimumHeight=46, y центрируем.
+        self._submit_btn.installEventFilter(self)
+
+        # ── «Забыли пароль?» — clickable text ────────────────────────────────
+        forgot_row = QHBoxLayout()
+        forgot_row.setContentsMargins(0, 4, 0, 0)
+        forgot_row.addStretch()
+        self._forgot_link = QLabel('Забыли пароль?')
+        self._forgot_link.setCursor(Qt.PointingHandCursor)
+        self._forgot_link.setStyleSheet(
+            f'color: {theme.TEXT_MUTED}; background: transparent;'
+            f'font-size: {theme.FONT_SIZE_SM}px;'
+        )
+        # QLabel не клик-эмитит сигнал — ловим mousePressEvent через
+        # переопределение метода (см. _on_forgot_clicked внизу класса).
+        self._forgot_link.mousePressEvent = self._on_forgot_clicked
+        forgot_row.addWidget(self._forgot_link)
+        forgot_row.addStretch()
+        layout.addLayout(forgot_row)
+
+        # ── Сообщение после запроса восстановления (изначально скрыто) ───────
+        self._forgot_msg = QLabel('')
+        self._forgot_msg.setAlignment(Qt.AlignCenter)
+        self._forgot_msg.setWordWrap(True)
+        self._forgot_msg.setStyleSheet(
+            f'color: {theme.ACCENT}; background: transparent;'
+            f'font-size: {theme.FONT_SIZE_SM - 1}px; padding: 4px 0;'
+        )
+        self._forgot_msg.hide()
+        layout.addWidget(self._forgot_msg)
+
         return card
+
+    def eventFilter(self, obj, event):
+        # При первом show / каждом resize submit-кнопки позиционируем
+        # spinner. Левое padding кнопки QSS_BUTTON_PRIMARY ~22px,
+        # ставим spinner на 18px от левого края, по вертикали — центр.
+        if obj is self._submit_btn:
+            from PySide6.QtCore import QEvent as _QE
+            if event.type() in (_QE.Resize, _QE.Show):
+                btn_h = self._submit_btn.height()
+                self._busy_spinner.move(18, (btn_h - self._busy_spinner.height()) // 2)
+        return False
 
     def _icon_pixmap_as_icon(self, name: str, size: int):
         from PySide6.QtGui import QIcon
@@ -307,10 +410,54 @@ class LoginPage(QWidget):
     def set_busy(self, busy: bool) -> None:
         """Блокировать форму на время сетевого запроса."""
         self._submit_btn.setEnabled(not busy)
-        self._submit_btn.setText('Подождите…' if busy else 'Войти')
+        # Spinner — слева текста; смещаем подпись на ~22 px вправо
+        # дополнительным паддингом в виде пробелов, чтобы текст не лез
+        # под spinner. QSS-padding-left менять сложнее (теряется
+        # центрирование текста), пробелы — простой и предсказуемый
+        # способ.
+        if busy:
+            self._submit_btn.setText('     Подождите…')
+            self._busy_spinner.start()
+            self._busy_spinner.raise_()
+        else:
+            self._submit_btn.setText('Войти')
+            self._busy_spinner.stop()
         self.email.setEnabled(not busy)
         self.password.setEnabled(not busy)
         self._show_pw_btn.setEnabled(not busy)
+        self._forgot_link.setEnabled(not busy)
+
+    def _on_forgot_clicked(self, _event) -> None:
+        """Click handler «Забыли пароль?»: валидируем email и зовём
+        callback. Текст-ответ показывается inline в _forgot_msg —
+        неважно был email валидным или нет, сервер тоже отвечает
+        одинаково (anti-enumeration: «если зарегистрирован, письмо
+        отправлено»), мы повторяем эту семантику в UI.
+        """
+        if not self._submit_btn.isEnabled():
+            return
+        email = self.email.text().strip()
+        if not email or '@' not in email:
+            self._forgot_msg.setStyleSheet(
+                f'color: {theme.STATUS_ERROR}; background: transparent;'
+                f'font-size: {theme.FONT_SIZE_SM - 1}px; padding: 4px 0;'
+            )
+            self._forgot_msg.setText('Введите email в поле выше и нажмите ссылку ещё раз')
+            self._forgot_msg.show()
+            return
+        if self._on_forgot_password is not None:
+            self._on_forgot_password(email)
+        # Anti-enumeration: один и тот же текст и для зарегистрированного
+        # email, и для незнакомого — соответствует поведению API.
+        self._forgot_msg.setStyleSheet(
+            f'color: {theme.ACCENT}; background: transparent;'
+            f'font-size: {theme.FONT_SIZE_SM - 1}px; padding: 4px 0;'
+        )
+        self._forgot_msg.setText(
+            'Если такой email зарегистрирован, инструкции по восстановлению\n'
+            'отправлены на почту.'
+        )
+        self._forgot_msg.show()
 
     # ── Internal ──────────────────────────────────────────────────────────────
 

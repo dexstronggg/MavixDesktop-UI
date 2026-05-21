@@ -54,6 +54,23 @@ class ApiSession:
                 raise ApiError(data.get('detail', 'refresh failed'))
             return data
 
+    async def password_reset_request(self, email: str) -> dict:
+        """Запрос восстановления пароля. Сервер всегда возвращает 200
+        (anti-enumeration: не раскрывает, существует ли email в БД) —
+        UI показывает одинаковое сообщение независимо от ответа.
+        """
+        async with self._session.post(
+            f'{settings.http_url}/api/v1/auth/password-reset/request',
+            json={'email': email},
+        ) as r:
+            try:
+                data = await r.json()
+            except Exception:
+                data = {}
+            if r.status != 200:
+                raise ApiError(data.get('detail', 'password reset request failed'))
+            return data
+
     async def ice_servers(self) -> list[dict]:
         try:
             async with self._session.get(f'{settings.http_url}/api/v1/ice-servers') as r:

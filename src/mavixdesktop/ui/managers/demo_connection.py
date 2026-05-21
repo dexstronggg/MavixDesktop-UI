@@ -103,3 +103,8 @@ class DemoConnectionManager:
 
     def send_joystick_frame(self, frame: bytes) -> None:
         return None
+
+    def request_password_reset(self, email: str) -> None:
+        # В демо никуда не ходим — но логируем, чтобы UI-флоу был виден
+        # в консоли при ручном тестировании.
+        logger.info('[demo] password reset requested for %s (no-op)', email)

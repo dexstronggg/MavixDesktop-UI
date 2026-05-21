@@ -86,6 +86,36 @@ class ConnectionManager:
         if self._coord is not None:
             self._coord.send_joystick_packet(frame)
 
+    def request_password_reset(self, email: str) -> None:
+        """Запросить восстановление пароля — fire-and-forget POST в API.
+
+        Используется со страницы логина по клику «Забыли пароль?».
+        UI показывает confirmation message сразу, не дожидаясь ответа
+        (сервер всё равно отвечает одинаково в любом случае,
+        anti-enumeration). Если API session ещё не создан (юзер ни разу
+        не пытался войти) — создаём временный.
+        """
+        self._ensure_loop_started()
+        assert self._loop is not None
+        asyncio.run_coroutine_threadsafe(self._async_password_reset(email), self._loop)
+
+    async def _async_password_reset(self, email: str) -> None:
+        api = self._api
+        own_session = False
+        if api is None:
+            api = await ApiSession.create()
+            own_session = True
+        try:
+            await api.password_reset_request(email)
+            logger.info('[connection] password reset requested for %s', email)
+        except ApiError as exc:
+            logger.warning('[connection] password reset failed: %s', exc)
+        except Exception as exc:
+            logger.warning('[connection] password reset crashed: %s', exc)
+        finally:
+            if own_session:
+                await api.close()
+
     # ── internals ─────────────────────────────────────────────────────────────
 
     def _ensure_loop_started(self) -> None:
