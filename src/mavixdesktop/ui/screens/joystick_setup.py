@@ -77,20 +77,31 @@ class _StepProgress(QWidget):
 
     Раньше прогресс был только в тексте инструкции («Шаг 3/10: …»),
     оператор не видел сколько ещё осталось без чтения. Этот виджет —
-    10 точек одного размера в ряд: пройденные подсвечены ACCENT,
-    текущая — кольцо ACCENT, будущие — тонкий BORDER_HOVER.
+    10 точек одного размера в ряд, все три состояния визуально
+    различаются И каждое читается на тёмном фоне диалога (BG #07090E):
 
-    На step == _STEP_DONE (10) все 10 показываются заполненными.
+    * **past** — сплошная заливка ACCENT (cyan, явный «сделано»);
+    * **current** — сплошная ACCENT + полупрозрачное cyan-halo вокруг
+      («вы здесь», выделяется среди прошлых);
+    * **future** — outline-only TEXT_MUTED (#8893A4) толщиной 1.5px,
+      прозрачная заливка — видимый муто́н на тёмном, ясно «ещё не».
+
+    Прежняя реализация использовала BORDER_HOVER (#2A3340) для future —
+    почти неотличимо от BG, оператор не видел сколько шагов осталось.
+
+    Высота виджета учитывает halo вокруг current (+6px к диаметру dots).
     """
 
     _TOTAL = 10
     _DOT_SIZE = 8
-    _DOT_GAP = 10
+    _DOT_GAP = 12
+    _HALO_PAD = 4  # сколько px halo выступает за пределы dot со всех сторон
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._current = 0
-        self.setFixedHeight(self._DOT_SIZE + 4)
+        # Высота: dot + halo сверху + halo снизу + небольшой запас.
+        self.setFixedHeight(self._DOT_SIZE + 2 * self._HALO_PAD + 2)
 
     def set_current(self, step: int) -> None:
         if step == self._current:
@@ -102,32 +113,36 @@ class _StepProgress(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         accent = QColor(theme.ACCENT)
-        future = QColor(theme.BORDER_HOVER)
+        halo = QColor(accent)
+        halo.setAlpha(72)  # ~28% — заметно, но не перекрывает соседние
+        future = QColor(theme.TEXT_MUTED)
         d = self._DOT_SIZE
         gap = self._DOT_GAP
+        pad = self._HALO_PAD
         total_w = self._TOTAL * d + (self._TOTAL - 1) * gap
         x = (self.width() - total_w) // 2
         y = (self.height() - d) // 2
-        # DONE-state (step == 10): рисуем все 10 заполненными ACCENT.
         done = self._current >= self._TOTAL
         for i in range(self._TOTAL):
             if done or i < self._current:
-                # Пройденная точка — сплошная заливка ACCENT.
+                # past: сплошная ACCENT
                 p.setPen(Qt.NoPen)
                 p.setBrush(accent)
                 p.drawEllipse(x, y, d, d)
             elif i == self._current:
-                # Текущая — кольцо ACCENT (заливки нет).
+                # current: halo (бОльший прозрачный круг) + solid dot поверх
+                p.setPen(Qt.NoPen)
+                p.setBrush(halo)
+                p.drawEllipse(x - pad, y - pad, d + 2 * pad, d + 2 * pad)
+                p.setBrush(accent)
+                p.drawEllipse(x, y, d, d)
+            else:
+                # future: outline-only TEXT_MUTED, видимо на тёмном фоне
                 p.setBrush(Qt.NoBrush)
                 pen = p.pen()
                 pen.setWidthF(1.5)
-                pen.setColor(accent)
+                pen.setColor(future)
                 p.setPen(pen)
-                p.drawEllipse(x, y, d, d)
-            else:
-                # Будущая — тусклая точка BORDER_HOVER.
-                p.setPen(Qt.NoPen)
-                p.setBrush(future)
                 p.drawEllipse(x, y, d, d)
             x += d + gap
         p.end()
