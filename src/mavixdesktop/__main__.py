@@ -174,10 +174,11 @@ class _BoundedToolTipFilter:
 
 
 def _run_gui(demo: bool = False) -> int:
-    from PySide6.QtGui import QFont
+    from PySide6.QtGui import QFont, QIcon
     from PySide6.QtWidgets import QApplication
     from mavixdesktop.ui.app import App
     from mavixdesktop.ui.style import theme
+    from mavixdesktop.ui.screens.utils import mavix_logo_pixmap
 
     # Авто-фолбэк: если пользователь не указал --demo, но сервер не
     # отвечает на /health за 2 с — поднимаем демо-режим автоматически,
@@ -189,6 +190,14 @@ def _run_gui(demo: bool = False) -> int:
         demo = True
 
     app = QApplication(sys.argv)
+    # Иконка приложения для title-bar, Alt-Tab, taskbar. Генерируем M-логотип
+    # в нескольких размерах через mavix_logo_pixmap — Qt сам выбирает лучший
+    # для каждого контекста. Без этого Windows показывает дефолтный «pythonw»
+    # иконку (excel-подобную), что сразу выдаёт «это скрипт, а не продукт».
+    app_icon = QIcon()
+    for size in (16, 24, 32, 48, 64, 96, 128, 256):
+        app_icon.addPixmap(mavix_logo_pixmap(size))
+    app.setWindowIcon(app_icon)
     # Fusion — кроссплатформенный стиль Qt, который корректно отрисовывает
     # border-radius/padding из QSS на всех ОС (нативные стили Windows /
     # macOS их часто игнорируют, и кнопки оставались бы прямоугольными).
