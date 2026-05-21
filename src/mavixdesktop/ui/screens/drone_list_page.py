@@ -292,6 +292,66 @@ class _StatsBar(QWidget):
             self._items[label][0].setText(str(count))
 
 
+class _DocsHint(QWidget):
+    """Подсказка-«подвал» внизу drone-list: книжная иконка + текст
+    «Не видите свой дрон?» + строка про документацию.
+
+    Заполняет пустое пространство страницы когда дронов мало (3 карточки
+    в 1080p окне оставляли >700px пустоты под собой). Всегда виден,
+    при большом количестве дронов ScrollArea сверху занимает высоту,
+    hint остаётся на дне как нативный footer.
+    """
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName('docsHint')
+        self.setFixedHeight(72)
+        self.setStyleSheet(f"""
+            QWidget#docsHint {{
+                background: {theme.BG_SURFACE};
+                border-top: 1px solid {theme.BORDER};
+            }}
+            QWidget#docsHint QLabel {{
+                background: transparent;
+            }}
+        """)
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(28, 0, 28, 0)
+        lay.setSpacing(14)
+        lay.addStretch()
+
+        # Иконка дрона в muted-цвете — тот же визуальный язык что у
+        # карточек выше, но без акцента (это пассивная подсказка).
+        icon = QLabel()
+        icon.setFixedSize(24, 24)
+        icon.setPixmap(svg_pixmap('drone_list.svg', 24, color=theme.TEXT_MUTED))
+        lay.addWidget(icon)
+
+        title = QLabel('Не видите свой дрон?')
+        title.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; font-size: {theme.FONT_SIZE_SM}px;'
+            'font-weight: 600;'
+        )
+        lay.addWidget(title)
+
+        sep = QLabel('·')
+        sep.setStyleSheet(f'color: {theme.TEXT_DISABLED}; font-size: {theme.FONT_SIZE_BASE}px;')
+        lay.addWidget(sep)
+
+        # Текст-«ссылка»: визуально читается как hyperlink, но клика не
+        # ожидается (нет рабочего URL внутри приложения). При наличии в
+        # будущем web-URL в config — превратить в QPushButton/QLabel с
+        # openUrl. Сейчас просто информативная строка с цветом ACCENT.
+        link = QLabel('Как зарегистрировать дрон — см. документацию')
+        link.setStyleSheet(
+            f'color: {theme.ACCENT}; font-size: {theme.FONT_SIZE_SM}px;'
+        )
+        lay.addWidget(link)
+
+        lay.addStretch()
+
+
 class DroneListPage(QWidget):
     def __init__(self, on_select: Callable, on_refresh: Callable,
                  on_logout: Callable, on_joystick_cfg: Callable):
@@ -372,6 +432,7 @@ class DroneListPage(QWidget):
 
         self._stats = _StatsBar()
         self._grid = _DroneGrid()
+        self._hint = _DocsHint()
 
         self._refresh_timer = QTimer(self)
         self._refresh_timer.setInterval(5000)
@@ -394,6 +455,10 @@ class DroneListPage(QWidget):
         root.addWidget(self._stats)
         root.addWidget(scroll, 1)
         root.addWidget(self._empty, 1)
+        # Hint-блок снизу страницы — единый «подвал» с подсказкой как
+        # добавить дрон. Всегда виден; при заполненном гриде ScrollArea
+        # выше занимает основную высоту, hint остаётся на дне окна.
+        root.addWidget(self._hint)
 
     def showEvent(self, event):
         super().showEvent(event)
