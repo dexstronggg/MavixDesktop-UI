@@ -137,12 +137,14 @@ class _StepProgress(QWidget):
                 p.setBrush(accent)
                 p.drawEllipse(x, y, d, d)
             else:
-                # future: outline-only TEXT_MUTED, видимо на тёмном фоне
-                p.setBrush(Qt.NoBrush)
-                pen = p.pen()
-                pen.setWidthF(1.5)
-                pen.setColor(future)
-                p.setPen(pen)
+                # future: сплошная заливка TEXT_MUTED (#8893A4) — светлый
+                # муто́н на тёмном фоне BG (#07090E), явно читается. По
+                # цвету отличается от cyan past/current dot'ов, поэтому
+                # все три состояния остаются визуально различимы.
+                # Прежняя реализация (outline-only с 1.5px stroke) терялась
+                # на BG из-за тонкой линии и малого диаметра 8px.
+                p.setPen(Qt.NoPen)
+                p.setBrush(future)
                 p.drawEllipse(x, y, d, d)
             x += d + gap
         p.end()
