@@ -425,12 +425,10 @@ class DroneListPage(QWidget):
             }}
             QPushButton:hover {{
                 background-color: rgba(248, 113, 113, 0.12);
-                border-color: {theme.STATUS_ERROR};
                 color: {theme.STATUS_ERROR};
             }}
             QPushButton:pressed {{
                 background-color: rgba(248, 113, 113, 0.20);
-                border-color: {theme.STATUS_ERROR};
                 color: {theme.STATUS_ERROR};
             }}
         """)
