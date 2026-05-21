@@ -470,12 +470,10 @@ QPushButton {{
 }}
 QPushButton:hover {{
     background-color: {ACCENT_SUBTLE};
-    border-color: {ACCENT};
     color: {ACCENT};
 }}
 QPushButton:pressed {{
     background-color: {BG_INPUT};
-    border-color: {ACCENT_PRESS};
     color: {ACCENT};
 }}
 """
