@@ -1,12 +1,13 @@
 from typing import Callable
 
-from PySide6.QtCore import Qt, Signal, QTimer
-from PySide6.QtGui import QPixmap, QPainter, QIcon
+from PySide6.QtCore import Qt, Signal, QTimer, QUrl
+from PySide6.QtGui import QPixmap, QPainter, QIcon, QDesktopServices
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QFrame,
 )
 
+from mavixdesktop.core.config import settings
 from mavixdesktop.ui.style import theme
 from .utils import svg_pixmap, mavix_logo_pixmap, AnimatedCard, CardGrid
 
@@ -339,17 +340,25 @@ class _DocsHint(QWidget):
         sep.setStyleSheet(f'color: {theme.TEXT_DISABLED}; font-size: {theme.FONT_SIZE_BASE}px;')
         lay.addWidget(sep)
 
-        # Текст-«ссылка»: визуально читается как hyperlink, но клика не
-        # ожидается (нет рабочего URL внутри приложения). При наличии в
-        # будущем web-URL в config — превратить в QPushButton/QLabel с
-        # openUrl. Сейчас просто информативная строка с цветом ACCENT.
+        # Кликабельная ссылка на документацию ЛК. settings.http_url —
+        # базовый URL сервера из конфига MavixDesktop (по дефолту
+        # http://localhost:8000, на проде — публичный домен Mavix);
+        # роут /dashboard/docs/user живёт на MavixWeb, который обычно
+        # развёрнут на том же хосте за reverse-proxy.
         link = QLabel('Как зарегистрировать дрон — см. документацию')
+        link.setCursor(Qt.PointingHandCursor)
         link.setStyleSheet(
             f'color: {theme.ACCENT}; font-size: {theme.FONT_SIZE_SM}px;'
+            f'text-decoration: underline;'
         )
+        link.mousePressEvent = self._open_docs
         lay.addWidget(link)
 
         lay.addStretch()
+
+    def _open_docs(self, _event) -> None:
+        base = settings.http_url.rstrip('/')
+        QDesktopServices.openUrl(QUrl(f'{base}/dashboard/docs/user'))
 
 
 class DroneListPage(QWidget):
