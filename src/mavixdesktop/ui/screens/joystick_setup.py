@@ -5,10 +5,10 @@ from typing import Callable
 
 import pygame
 from PySide6.QtCore import Qt, QSize, QTimer, Signal, QPoint
-from PySide6.QtGui import QGuiApplication, QIcon
+from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QColor
 from PySide6.QtWidgets import (
     QWidget, QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QMessageBox, QFileDialog,
+    QLabel, QPushButton, QToolButton, QMessageBox, QFileDialog,
     QScrollArea, QFrame,
 )
 
@@ -71,12 +71,73 @@ _STEPS = [
     'Калибровка завершена!\n\nНажмите «Готово» для сохранения.',
 ]
 
+
+class _StepProgress(QWidget):
+    """Точечный progress-индикатор шагов калибровки.
+
+    Раньше прогресс был только в тексте инструкции («Шаг 3/10: …»),
+    оператор не видел сколько ещё осталось без чтения. Этот виджет —
+    10 точек одного размера в ряд: пройденные подсвечены ACCENT,
+    текущая — кольцо ACCENT, будущие — тонкий BORDER_HOVER.
+
+    На step == _STEP_DONE (10) все 10 показываются заполненными.
+    """
+
+    _TOTAL = 10
+    _DOT_SIZE = 8
+    _DOT_GAP = 10
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._current = 0
+        self.setFixedHeight(self._DOT_SIZE + 4)
+
+    def set_current(self, step: int) -> None:
+        if step == self._current:
+            return
+        self._current = step
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        accent = QColor(theme.ACCENT)
+        future = QColor(theme.BORDER_HOVER)
+        d = self._DOT_SIZE
+        gap = self._DOT_GAP
+        total_w = self._TOTAL * d + (self._TOTAL - 1) * gap
+        x = (self.width() - total_w) // 2
+        y = (self.height() - d) // 2
+        # DONE-state (step == 10): рисуем все 10 заполненными ACCENT.
+        done = self._current >= self._TOTAL
+        for i in range(self._TOTAL):
+            if done or i < self._current:
+                # Пройденная точка — сплошная заливка ACCENT.
+                p.setPen(Qt.NoPen)
+                p.setBrush(accent)
+                p.drawEllipse(x, y, d, d)
+            elif i == self._current:
+                # Текущая — кольцо ACCENT (заливки нет).
+                p.setBrush(Qt.NoBrush)
+                pen = p.pen()
+                pen.setWidthF(1.5)
+                pen.setColor(accent)
+                p.setPen(pen)
+                p.drawEllipse(x, y, d, d)
+            else:
+                # Будущая — тусклая точка BORDER_HOVER.
+                p.setPen(Qt.NoPen)
+                p.setBrush(future)
+                p.drawEllipse(x, y, d, d)
+            x += d + gap
+        p.end()
+
 _CARD_W  = 220
 # 14 (top margin) + 56 (icon) + 6 + 34 (имя — 2 строки) + 6 + 14 (статус)
-# + 6 + 36 (actions) + 6 (bottom margin) ≈ 178 → 184 с маленьким запасом.
+# + 6 + 52 (actions с иконкой + подписью) + 6 (bottom margin) ≈ 194.
 # Без addStretch внутри: actions упираются под статус, hover-полоса
 # AnimatedCard оказывается прямо под кнопками действий.
-_CARD_H  = 184
+_CARD_H  = 200
 _ICON_SZ = 56
 _GAP     = 20
 
@@ -221,25 +282,45 @@ class JoystickCard(AnimatedCard):
         ar.setContentsMargins(0, 0, 0, 0)
         ar.setSpacing(6)
 
-        self._action_buttons: list[QPushButton] = []
-        for ic, tip, sub in [
-            ('tune.svg',   'Калибровать',     'calibrate'),
-            ('upload.svg', 'Загрузить файл',  'file'),
-            ('save.svg',   'Сохранить файл',  'file_save'),
+        self._action_buttons: list[QToolButton] = []
+        for ic, label, sub in [
+            ('tune.svg',   'Калибровать', 'calibrate'),
+            ('upload.svg', 'Загрузить',   'file'),
+            ('save.svg',   'Сохранить',   'file_save'),
         ]:
-            b = QPushButton()
+            b = QToolButton()
             b.setIcon(QIcon(svg_pixmap(ic, 18, color=theme.TEXT_PRIMARY)))
             b.setIconSize(QSize(18, 18))
-            b.setFixedHeight(36)
+            b.setText(label)
+            # ToolButtonTextUnderIcon — иконка сверху, подпись снизу;
+            # подпись делает действия читаемыми без tooltip'а (раньше
+            # значки были «cryptic для первого раза»).
+            b.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+            b.setFixedHeight(52)
             b.setCursor(Qt.PointingHandCursor)
-            b.setToolTip(tip)
             b.setFocusPolicy(Qt.NoFocus)
-            # setFlat — Fusion-стиль перестаёт рисовать фрейм/тень кнопки
-            # независимо от QSS, иначе под прозрачным QSS-фоном остаётся
-            # видимое подложение от движка стиля.
-            b.setFlat(True)
-            b.setAutoFillBackground(False)
-            b.setStyleSheet(theme.QSS_BUTTON_ICON)
+            b.setAutoRaise(True)  # Без фона/рамки кроме :hover/:pressed
+            # Локальный QSS: text размером SM-2, hover/pressed как
+            # QSS_BUTTON_ICON. Берём ACCENT_SUBTLE на hover, единым
+            # языком с остальными ghost-кнопками панели.
+            b.setStyleSheet(f"""
+                QToolButton {{
+                    background: transparent;
+                    border: none;
+                    border-radius: {theme.RADIUS_MD}px;
+                    color: {theme.TEXT_MUTED};
+                    font-size: {theme.FONT_SIZE_SM - 2}px;
+                    padding: 4px 0;
+                }}
+                QToolButton:hover {{
+                    background: {theme.ACCENT_SUBTLE};
+                    color: {theme.ACCENT};
+                }}
+                QToolButton:pressed {{
+                    background: {theme.BG_INPUT};
+                    color: {theme.ACCENT};
+                }}
+            """)
             b.clicked.connect(lambda _checked=False, s=sub: self.action.emit(self._index, s))
             ar.addWidget(b, 1)
             self._action_buttons.append(b)
@@ -699,6 +780,11 @@ class JoystickCalibrationDialog(QDialog):
         sticks_row.addStretch()
         layout.addLayout(sticks_row)
 
+        # Точки-прогресс над инструкцией: 10 шагов в ряд, заполняются
+        # по мере прохождения. Без них оператор не видел сколько осталось.
+        self._progress = _StepProgress()
+        layout.addWidget(self._progress)
+
         self._instruction = QLabel()
         self._instruction.setWordWrap(True)
         self._instruction.setAlignment(Qt.AlignCenter)
@@ -833,6 +919,7 @@ class JoystickCalibrationDialog(QDialog):
 
     def _update_ui(self):
         self._instruction.setText(_STEPS[self._step])
+        self._progress.set_current(self._step)
         if self._step == _STEP_DONE:
             self._next_btn.setText('Готово')
 
