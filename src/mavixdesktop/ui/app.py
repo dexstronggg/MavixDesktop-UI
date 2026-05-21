@@ -13,11 +13,8 @@ from __future__ import annotations
 import platform
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
-from PySide6.QtWidgets import (
-    QMainWindow, QStackedWidget, QMessageBox, QFileDialog,
-    QGraphicsOpacityEffect,
-)
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox, QFileDialog
 
 from mavixdesktop.core.logger import logger
 from mavixdesktop.joystick.guard import JoystickGuard
@@ -32,42 +29,6 @@ from mavixdesktop.ui.screens.drone_view import DroneViewPage
 from mavixdesktop.ui.screens.flight_window import FlightWindow
 from mavixdesktop.ui.screens.joystick_setup import JoystickSetupPage, QGCLaunchingOverlay
 from mavixdesktop.ui.state import SessionState
-
-
-class _FadeStackedWidget(QStackedWidget):
-    """QStackedWidget с fade-in анимацией на новый виджет при
-    setCurrentWidget. Без неё переход login → drone-list (и др.)
-    выглядел как мгновенный teleport, теперь — 180ms opacity-анимация
-    OutCubic. На первом setCurrentWidget fade пропускаем — окно само
-    появляется при старте приложения, дополнительный fade создавал бы
-    мерцание.
-    """
-
-    FADE_DURATION = 180
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._first_show = True
-
-    def setCurrentWidget(self, widget):
-        if self.currentWidget() is widget:
-            return
-        super().setCurrentWidget(widget)
-        if self._first_show:
-            self._first_show = False
-            return
-        effect = QGraphicsOpacityEffect(widget)
-        widget.setGraphicsEffect(effect)
-        anim = QPropertyAnimation(effect, b'opacity', widget)
-        anim.setDuration(self.FADE_DURATION)
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        anim.setEasingCurve(QEasingCurve.OutCubic)
-        # Снимаем effect по завершении — иначе оставшийся opacity-effect
-        # на виджете с собственным paintEvent (login _AuthBackground,
-        # video panel и пр.) ломает render-path кэшированной отрисовки.
-        anim.finished.connect(lambda w=widget: w.setGraphicsEffect(None))
-        anim.start(QPropertyAnimation.DeleteWhenStopped)
 
 
 class App(QMainWindow):
@@ -141,7 +102,7 @@ class App(QMainWindow):
             demo=demo,
         )
 
-        self.stack = _FadeStackedWidget()
+        self.stack = QStackedWidget()
         self.stack.addWidget(self.login_page)
         self.stack.addWidget(self.drone_list_page)
         self.stack.addWidget(self.drone_view_page)
