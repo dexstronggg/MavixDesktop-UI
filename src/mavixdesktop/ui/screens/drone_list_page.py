@@ -217,6 +217,66 @@ class _DroneGrid(CardGrid):
     GAP    = 20
 
 
+class _SkeletonCard(QWidget):
+    """Placeholder-карточка для первой загрузки drone-list.
+
+    Раньше до прихода первого ответа от сервера сетка была пустой —
+    оператор видел чёрный экран и не понимал «список грузится» или
+    «дронов нет». Skeleton-карточки той же геометрии что и DroneCard
+    рисуют placeholder-формы (круг иконки, прямоугольники текста,
+    пилюля статуса) в тоне BORDER_HOVER — «загружается».
+
+    После первого вызова DroneListPage.update() skeleton'ы заменяются
+    реальными карточками и больше не показываются.
+    """
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setFixedSize(_CARD_W, _CARD_H)
+        self.setStyleSheet(f"""
+            QWidget {{
+                background: {theme.BG_INPUT};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_LG}px;
+            }}
+        """)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setPen(Qt.NoPen)
+        skeleton_color = QColor(theme.BORDER_HOVER)
+        p.setBrush(skeleton_color)
+
+        w = self.width()
+        # Иконка — круг 88×88 наверху, как у настоящей DroneCard.
+        icon_d = _ICON_SIZE
+        icon_x = (w - icon_d) // 2
+        icon_y = 18
+        p.drawEllipse(icon_x, icon_y, icon_d, icon_d)
+
+        # Имя — прямоугольник 90×12, 6 px от иконки вниз + 6 spacing.
+        name_w, name_h = 90, 12
+        name_x = (w - name_w) // 2
+        name_y = icon_y + icon_d + 12
+        p.drawRoundedRect(name_x, name_y, name_w, name_h, 4, 4)
+
+        # ID — чуть длиннее, 120×10.
+        id_w, id_h = 120, 10
+        id_x = (w - id_w) // 2
+        id_y = name_y + name_h + 8
+        p.drawRoundedRect(id_x, id_y, id_w, id_h, 4, 4)
+
+        # Status-пилюля — 70×22, скругление 11 как у настоящих chip'ов.
+        pill_w, pill_h = 70, 22
+        pill_x = (w - pill_w) // 2
+        pill_y = id_y + id_h + 14
+        p.drawRoundedRect(pill_x, pill_y, pill_w, pill_h, 11, 11)
+
+        p.end()
+
+
 class _StatsBar(QWidget):
     """Сводка по флоту: всего / готов / offline / подключение.
 
@@ -367,6 +427,12 @@ class DroneListPage(QWidget):
         super().__init__()
         self._on_select = on_select
         self._icon = svg_pixmap('drone_list.svg', _ICON_SIZE, color=theme.ACCENT)
+        # Skeleton-загрузка: до первого update() показываем
+        # placeholder-карточки. После первого ответа от сервера
+        # (даже с пустым списком) флаг становится False и больше
+        # не возвращается — на повторных входах на страницу скелетоны
+        # не нужны, у нас уже есть кэш реальных дронов.
+        self._first_load = True
 
         root = QVBoxLayout(self)
         root.setSpacing(0)
@@ -472,12 +538,22 @@ class DroneListPage(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self._refresh_timer.start()
+        # На первом показе страницы (между логином и приходом первого
+        # client_list_updated) рисуем skeleton-карточки — пустой грид
+        # читался как «дронов нет», что вводило в заблуждение.
+        if self._first_load:
+            self._empty.hide()
+            self._grid.show()
+            self._grid.set_cards([_SkeletonCard() for _ in range(3)])
 
     def hideEvent(self, event):
         super().hideEvent(event)
         self._refresh_timer.stop()
 
     def update(self, drones: list):
+        # Любой ответ от сервера (даже пустой) означает что фаза первой
+        # загрузки прошла — skeleton'ы больше не нужны.
+        self._first_load = False
         if not drones:
             self._stats.set_counts(0, 0, 0, 0)
             self._empty.show()
