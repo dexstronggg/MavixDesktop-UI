@@ -454,8 +454,7 @@ class LoginPage(QWidget):
             f'font-size: {theme.FONT_SIZE_SM - 1}px; padding: 4px 0;'
         )
         self._forgot_msg.setText(
-            'Если такой email зарегистрирован, инструкции по восстановлению\n'
-            'отправлены на почту.'
+            'Инструкции по восстановлению отправлены на вашу почту.'
         )
         self._forgot_msg.show()
 
