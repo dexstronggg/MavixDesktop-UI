@@ -301,9 +301,14 @@ class JoystickCard(AnimatedCard):
 
         self._action_buttons: list[QToolButton] = []
         for ic, label, sub in [
-            ('tune.svg',   'Калибровать', 'calibrate'),
-            ('upload.svg', 'Загрузить',   'file'),
-            ('save.svg',   'Сохранить',   'file_save'),
+            # «Калибровать» (11 ch) выходило за 60px ширины кнопки и
+            # ellipsis'илось до «Кали…вать». Существительное-форма
+            # «Калибровка» (10 ch) короче и хорошо сочетается с
+            # глагольными «Загрузить»/«Сохранить» — для оператора это
+            # читается как «действие/режим калибровки».
+            ('tune.svg',   'Калибровка', 'calibrate'),
+            ('upload.svg', 'Загрузить',  'file'),
+            ('save.svg',   'Сохранить',  'file_save'),
         ]:
             b = QToolButton()
             b.setIcon(QIcon(svg_pixmap(ic, 18, color=theme.TEXT_PRIMARY)))
@@ -326,7 +331,11 @@ class JoystickCard(AnimatedCard):
                     border: none;
                     border-radius: {theme.RADIUS_MD}px;
                     color: {theme.TEXT_MUTED};
-                    font-size: {theme.FONT_SIZE_SM - 2}px;
+                    /* 11px (SM-3) вместо 12px (SM-2): «Калибровка» 10ch
+                       при 12px ~65px не влезала в 60px ширины кнопки.
+                       На 11px все три подписи помещаются с запасом, без
+                       расширения карточки и без потери читаемости. */
+                    font-size: {theme.FONT_SIZE_SM - 3}px;
                     padding: 4px 0;
                 }}
                 QToolButton:hover {{
