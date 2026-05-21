@@ -294,7 +294,7 @@ class LoginPage(QWidget):
         )
         layout.addWidget(title)
 
-        subtitle = QLabel('Войдите своим аккаунтом Mavix')
+        subtitle = QLabel('Введите данные вашего аккаунта')
         subtitle.setAlignment(Qt.AlignCenter)
         subtitle.setStyleSheet(
             f'color: {theme.TEXT_MUTED}; background: transparent;'
