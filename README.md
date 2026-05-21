@@ -63,6 +63,23 @@ needs a programmatic caller (`coordinator.request_connect("drone-id")`).
 A PySide6 UI on top of this coordinator is the next planned step — see
 TODO below.
 
+## Сборка дистрибутивов
+
+Готовые `.exe` (Windows) и `.deb` (Linux) для раздачи через [MavixWeb](https://github.com/dexstronggg/MavixWeb)
+собираются скриптами в `scripts/`:
+
+```bash
+./scripts/build_linux.sh        # → dist/mavix-desktop-linux.deb
+.\scripts\build_windows.ps1     # → dist\mavix-desktop-windows.exe
+```
+
+Имена выходных файлов точно совпадают с whitelist-маршрутами MavixWeb
+(`/downloads/mavix-desktop-{windows.exe,linux.deb}`) — копирование в
+`MavixWeb/public/downloads/` работает 1-в-1.
+
+Подробности (требования, troubleshooting, что внутри `.deb`) — см.
+[`scripts/README.md`](scripts/README.md).
+
 ## Tests
 
 ```bash
