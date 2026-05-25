@@ -1,3 +1,15 @@
+"""App-wide settings.
+
+Precedence (highest wins):
+  1. OS env vars
+  2. ~/.config/mavixdesktop/config.json (Settings UI writes here)
+  3. .env at the project root (only meaningful when running from sources)
+  4. defaults below
+
+The JSON path is the one the user actually edits via the in-app
+Settings page. The .env at the project root is a dev convenience and
+does not exist inside the installed PyInstaller bundle.
+"""
 from __future__ import annotations
 
 from datetime import date
@@ -7,15 +19,16 @@ from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from mavixdesktop.core import user_config
+
 _PROJECT_ROOT = Path(__file__).parents[3]
 
-# When running as a PyInstaller single-file binary, _PROJECT_ROOT
-# resolves into the temp extraction dir — useless for user config.
-# Use the OS-standard user config path instead, with the project-root
-# .env as a dev-time fallback.
-_USER_CONFIG_ENV = Path.home() / '.config' / 'mavixdesktop' / '.env'
-load_dotenv(_USER_CONFIG_ENV, override=False)
-load_dotenv(_PROJECT_ROOT / '.env', override=True)
+# Project-root .env is for development only; in an installed bundle
+# this path resolves into _MEIPASS and finds nothing - harmless.
+load_dotenv(_PROJECT_ROOT / '.env', override=False)
+
+# User config JSON overrides .env / defaults but loses to OS env vars.
+user_config.apply_to_env()
 
 _USER_BASE = Path.home() / '.config' / 'mavixdesktop'
 
@@ -30,7 +43,14 @@ class Settings(BaseSettings):
 
     # --- Server ---
     signal_url: str = Field(default='http://localhost:8000', alias='SIGNAL_URL')
-    signal_ws_url: str = Field(default='', alias='SIGNAL_WS_URL')
+
+    # --- WebRTC ICE overrides ---
+    # If left empty, the desktop uses whatever the server returns from
+    # /api/v1/ice-servers. Set these to force a specific STUN/TURN.
+    stun_server: str = Field(default='', alias='STUN_SERVER')
+    turn_server: str = Field(default='', alias='TURN_SERVER')
+    turn_username: str = Field(default='', alias='TURN_USERNAME')
+    turn_password: str = Field(default='', alias='TURN_PASSWORD')
 
     # --- QGC / MAVLink relay ---
     qgc_host: str = Field(default='127.0.0.1', alias='QGC_HOST')
@@ -47,8 +67,6 @@ class Settings(BaseSettings):
 
     @property
     def ws_url(self) -> str:
-        if self.signal_ws_url:
-            return self.signal_ws_url
         base = self.signal_url
         if base.startswith('https://'):
             return 'wss://' + base[len('https://'):].rstrip('/') + '/ws/gcs'
@@ -62,3 +80,13 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def reload_from_user_config() -> None:
+    """Re-read the JSON config and update the global `settings` object
+    in place. Called by the Settings UI after a save so the rest of the
+    app sees the new values without a restart."""
+    user_config.apply_to_env()
+    fresh = Settings()
+    for field_name in fresh.model_fields:
+        setattr(settings, field_name, getattr(fresh, field_name))

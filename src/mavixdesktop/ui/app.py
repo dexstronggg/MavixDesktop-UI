@@ -28,6 +28,7 @@ from mavixdesktop.ui.screens.drone_list_page import DroneListPage
 from mavixdesktop.ui.screens.drone_view import DroneViewPage
 from mavixdesktop.ui.screens.flight_window import FlightWindow
 from mavixdesktop.ui.screens.joystick_setup import JoystickSetupPage, QGCLaunchingOverlay
+from mavixdesktop.ui.screens.settings_page import SettingsPage
 from mavixdesktop.ui.state import SessionState
 
 
@@ -80,12 +81,15 @@ class App(QMainWindow):
         self.login_page = LoginPage(
             on_login=self._handle_login,
             on_forgot_password=self._handle_forgot_password,
+            on_open_settings=self._open_settings,
         )
         self.drone_list_page = DroneListPage(
             on_select=self._handle_select_drone,
             on_refresh=self._handle_refresh,
             on_logout=self._handle_logout,
             on_joystick_cfg=self._open_joystick_setup,
+            on_open_settings=self._open_settings,
+            on_delete_drone=self._handle_delete_drone,
         )
         self.drone_view_page = DroneViewPage(
             on_back=self._handle_back_to_list,
@@ -101,13 +105,17 @@ class App(QMainWindow):
             on_takeoff=self._handle_joystick_selected,
             demo=demo,
         )
+        self.settings_page = SettingsPage(on_close=self._close_settings)
 
         self.stack = QStackedWidget()
         self.stack.addWidget(self.login_page)
         self.stack.addWidget(self.drone_list_page)
         self.stack.addWidget(self.drone_view_page)
         self.stack.addWidget(self.joystick_setup_page)
+        self.stack.addWidget(self.settings_page)
         self.setCentralWidget(self.stack)
+        # Куда возвращаться при закрытии Settings (открыта из login/list).
+        self._settings_return_to = self.login_page
 
         self._flight_window: FlightWindow | None = None
         self._qgc_overlay: QGCLaunchingOverlay | None = None
@@ -215,6 +223,26 @@ class App(QMainWindow):
 
     def _handle_refresh(self) -> None:
         self._conn.request_drone_list()
+
+    def _open_settings(self) -> None:
+        """Открыть страницу настроек. Запоминаем, откуда пришли, чтобы
+        закрытие вернуло на исходный экран."""
+        current = self.stack.currentWidget()
+        if current is not self.settings_page:
+            self._settings_return_to = current
+        self.stack.setCurrentWidget(self.settings_page)
+
+    def _close_settings(self) -> None:
+        target = self._settings_return_to or self.login_page
+        self.stack.setCurrentWidget(target)
+
+    def _handle_delete_drone(self, drone_id: str) -> None:
+        """Удалить дрон через REST API. Список обновится автоматически
+        через WS-list_drones внутри ConnectionManager."""
+        def on_done(error: str | None) -> None:
+            if error:
+                QMessageBox.warning(self, 'Ошибка', error)
+        self._conn.delete_drone(drone_id, on_done=on_done)
 
     def _handle_select_drone(self, drone_id: str) -> None:
         if not drone_id:

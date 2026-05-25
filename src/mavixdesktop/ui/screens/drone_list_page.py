@@ -1,8 +1,9 @@
 from typing import Callable
 
-from PySide6.QtCore import Qt, Signal, QTimer, QUrl
-from PySide6.QtGui import QPixmap, QPainter, QIcon, QDesktopServices
+from PySide6.QtCore import Qt, Signal, QTimer, QUrl, QSize
+from PySide6.QtGui import QPixmap, QPainter, QIcon, QDesktopServices, QAction
 from PySide6.QtWidgets import (
+    QMenu, QMessageBox,
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QScrollArea, QFrame,
 )
@@ -100,6 +101,7 @@ def _truncate_id(drone_id: str, max_chars: int = _ID_MAX_CHARS) -> str:
 
 class DroneCard(AnimatedCard):
     clicked = Signal(str)
+    delete_requested = Signal(str)
 
     def __init__(self, drone_id: str, status: str, index: int, icon_pixmap: QPixmap):
         super().__init__()
@@ -189,6 +191,52 @@ class DroneCard(AnimatedCard):
         layout.addWidget(name_lbl)
         layout.addWidget(id_lbl)
         layout.addWidget(status_wrap)
+
+        # Меню "..." в правом верхнем углу карточки — overlay, чтобы не
+        # вмешиваться в центрированный layout. Виден всегда; клик по нему
+        # не должен запускать обычное "выбрать дрон".
+        self._dots_btn = QPushButton(self)
+        self._dots_btn.setFixedSize(28, 28)
+        self._dots_btn.setCursor(Qt.PointingHandCursor)
+        self._dots_btn.setIcon(QIcon(svg_pixmap('three_dots.svg', 16, color=theme.TEXT_MUTED)))
+        self._dots_btn.setIconSize(QSize(16, 16))
+        self._dots_btn.setToolTip('Действия')
+        self._dots_btn.setStyleSheet(
+            f'QPushButton {{ background: transparent; border: none; border-radius: 14px; }}'
+            f' QPushButton:hover {{ background: {theme.BG_HOVER}; }}'
+        )
+        self._dots_btn.clicked.connect(self._show_menu)
+        self._dots_btn.move(_CARD_W - 28 - 8, 8)
+        self._dots_btn.raise_()
+
+    def _show_menu(self) -> None:
+        menu = QMenu(self)
+        delete_act = QAction('Удалить дрон', menu)
+        delete_act.triggered.connect(self._confirm_delete)
+        menu.addAction(delete_act)
+        # Показываем меню под кнопкой.
+        pos = self._dots_btn.mapToGlobal(self._dots_btn.rect().bottomRight())
+        menu.exec(pos)
+
+    def _confirm_delete(self) -> None:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle('Удалить дрон?')
+        box.setText(
+            'Дрон будет полностью удалён с сервера. Он исчезнет из вашего '
+            'списка и перестанет принимать команды.'
+        )
+        box.setInformativeText(
+            'Чтобы добавить его обратно, потребуется заново скачать '
+            'установщик MavixBoard со страницы «Программы» и переустановить '
+            'на Raspberry Pi — старый токен после удаления станет невалидным.'
+        )
+        delete_btn = box.addButton('Удалить', QMessageBox.DestructiveRole)
+        cancel_btn = box.addButton('Отмена', QMessageBox.RejectRole)
+        box.setDefaultButton(cancel_btn)
+        box.exec()
+        if box.clickedButton() is delete_btn:
+            self.delete_requested.emit(self._drone_id)
 
     @staticmethod
     def _hex_to_rgba(hex_color: str, alpha: float) -> str:
@@ -363,9 +411,12 @@ class _DocsHint(QWidget):
 
 class DroneListPage(QWidget):
     def __init__(self, on_select: Callable, on_refresh: Callable,
-                 on_logout: Callable, on_joystick_cfg: Callable):
+                 on_logout: Callable, on_joystick_cfg: Callable,
+                 on_open_settings: Callable | None = None,
+                 on_delete_drone: Callable[[str], None] | None = None):
         super().__init__()
         self._on_select = on_select
+        self._on_delete_drone = on_delete_drone
         self._icon = svg_pixmap('drone_list.svg', _ICON_SIZE, color=theme.ACCENT)
 
         root = QVBoxLayout(self)
@@ -408,6 +459,30 @@ class DroneListPage(QWidget):
         joy_btn = _icon_button('joystick.svg', 'Джойстик', top_bar)
         joy_btn.clicked.connect(on_joystick_cfg)
 
+        # Шестерёнка → открыть Settings. Стиль как у joy_btn (ghost),
+        # только без текста.
+        gear_btn = QPushButton(top_bar)
+        gear_btn.setFixedSize(40, 38)
+        gear_btn.setCursor(Qt.PointingHandCursor)
+        gear_btn.setIcon(QIcon(svg_pixmap('tune.svg', 18, color=theme.TEXT_MUTED)))
+        gear_btn.setIconSize(QSize(18, 18))
+        gear_btn.setToolTip('Настройки')
+        gear_btn.setStyleSheet(
+            f'QPushButton {{'
+            f' background-color: transparent;'
+            f' color: {theme.TEXT_MUTED};'
+            f' border: 1px solid {theme.BORDER};'
+            f' border-radius: {theme.RADIUS_MD}px;'
+            f' }}'
+            f' QPushButton:hover {{'
+            f' background-color: {theme.ACCENT_SUBTLE};'
+            f' color: {theme.ACCENT};'
+            f' border-color: {theme.ACCENT};'
+            f' }}'
+        )
+        if on_open_settings is not None:
+            gear_btn.clicked.connect(on_open_settings)
+
         # «Выйти» — без иконки: символ logout оптически мог читаться
         # как G→. Текста достаточно. Hover красный — действие
         # деструктивное (сброс сессии), а не нейтрально-навигационное
@@ -435,6 +510,7 @@ class DroneListPage(QWidget):
         logout_btn.clicked.connect(on_logout)
 
         tb.addWidget(joy_btn)
+        tb.addWidget(gear_btn)
         tb.addWidget(logout_btn)
 
         self._stats = _StatsBar()
@@ -500,6 +576,8 @@ class DroneListPage(QWidget):
                 counts[status] += 1
             card = DroneCard(drone_id, status, i, self._icon)
             card.clicked.connect(self._on_select)
+            if self._on_delete_drone is not None:
+                card.delete_requested.connect(self._on_delete_drone)
             cards.append(card)
 
         self._stats.set_counts(

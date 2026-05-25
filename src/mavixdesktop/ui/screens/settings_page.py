@@ -1,0 +1,262 @@
+"""Settings UI - edit ~/.config/mavixdesktop/config.json from inside the app.
+
+Accessible via the gear icon on the login page and the drone-list page.
+Saving writes the JSON file and refreshes the in-memory `settings`
+singleton (no app restart needed); changes to SIGNAL_URL take effect
+on the next reconnect or login.
+"""
+from __future__ import annotations
+
+from typing import Callable
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+    QScrollArea, QFrame, QSizePolicy, QMessageBox,
+)
+
+from mavixdesktop.core import config as config_module
+from mavixdesktop.core import user_config
+from mavixdesktop.core.config import settings
+from mavixdesktop.ui.style import theme
+from .utils import svg_pixmap
+
+
+# Default values shown when the user hits "Reset to defaults". These
+# mirror the dev .env-example so a "fresh" config matches what a
+# developer would get out of the box.
+_DEFAULTS = {
+    'signal_url': 'http://localhost:8000',
+    'stun_server': '',
+    'turn_server': '',
+    'turn_username': '',
+    'turn_password': '',
+    'qgc_host': '127.0.0.1',
+    'qgc_port': '14550',
+}
+
+
+class SettingsPage(QWidget):
+    """Single-page form. on_close called when the user clicks Close
+    (or Save successfully) - host is expected to swap back to whatever
+    screen was showing before."""
+
+    def __init__(self, on_close: Callable[[], None]):
+        super().__init__()
+        self._on_close = on_close
+        self._inputs: dict[str, QLineEdit] = {}
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(theme.SPACE_LG, theme.SPACE_LG, theme.SPACE_LG, theme.SPACE_LG)
+        outer.setSpacing(theme.SPACE_MD)
+
+        outer.addWidget(self._build_header())
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet(f'QScrollArea {{ background: transparent; border: none; }}')
+
+        body = QWidget()
+        body.setStyleSheet('background: transparent;')
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(theme.SPACE_LG)
+
+        body_layout.addWidget(self._build_card(
+            'Сервер',
+            'URL базового HTTP-эндпойнта MavixServer. WebSocket-адрес'
+            ' выводится из этого значения автоматически.',
+            [('signal_url', 'SIGNAL_URL', 'http://example.com:8000')],
+        ))
+
+        body_layout.addWidget(self._build_card(
+            'WebRTC (STUN/TURN)',
+            'Оставьте пустыми, чтобы использовать настройки сервера'
+            ' (получаются через /api/v1/ice-servers). Заполните, чтобы'
+            ' принудительно использовать свои.',
+            [
+                ('stun_server',   'STUN сервер',  'stun:host:3478'),
+                ('turn_server',   'TURN сервер',  'turn:host:3478'),
+                ('turn_username', 'TURN логин',   ''),
+                ('turn_password', 'TURN пароль',  ''),
+            ],
+        ))
+
+        body_layout.addWidget(self._build_card(
+            'QGroundControl / MAVLink relay',
+            'UDP-сокет, куда desktop форвардит MAVLink-пакеты от дрона'
+            ' для QGC. Меняйте только если QGC слушает не на 127.0.0.1:14550.',
+            [
+                ('qgc_host', 'QGC хост', '127.0.0.1'),
+                ('qgc_port', 'QGC порт', '14550'),
+            ],
+        ))
+
+        body_layout.addStretch()
+
+        scroll.setWidget(body)
+        outer.addWidget(scroll, 1)
+
+        outer.addLayout(self._build_actions())
+
+        self._load_values()
+
+    def _build_header(self) -> QWidget:
+        header = QWidget()
+        header.setStyleSheet('background: transparent;')
+        layout = QHBoxLayout(header)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(theme.SPACE_SM)
+
+        icon = QLabel()
+        icon.setPixmap(svg_pixmap('tune.svg', 32, color=theme.ACCENT))
+
+        title = QLabel('Настройки')
+        title.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; font-size: 24px; font-weight: 700;'
+        )
+
+        layout.addWidget(icon)
+        layout.addWidget(title)
+        layout.addStretch()
+        return header
+
+    def _build_card(self, title: str, subtitle: str, fields: list[tuple[str, str, str]]) -> QWidget:
+        card = QWidget()
+        card.setObjectName('settingsCard')
+        card.setStyleSheet(
+            f'QWidget#settingsCard {{'
+            f' background-color: {theme.BG_INPUT};'
+            f' border: 1px solid {theme.BORDER};'
+            f' border-radius: {theme.RADIUS_LG}px;'
+            f' }}'
+        )
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(theme.SPACE_LG, theme.SPACE_MD, theme.SPACE_LG, theme.SPACE_MD)
+        layout.setSpacing(theme.SPACE_SM)
+
+        h = QLabel(title)
+        h.setStyleSheet(f'color: {theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;')
+        layout.addWidget(h)
+
+        sub = QLabel(subtitle)
+        sub.setStyleSheet(f'color: {theme.TEXT_MUTED}; font-size: 13px;')
+        sub.setWordWrap(True)
+        layout.addWidget(sub)
+        layout.addSpacing(theme.SPACE_SM)
+
+        for key, label_text, placeholder in fields:
+            row = QVBoxLayout()
+            row.setSpacing(4)
+
+            lbl = QLabel(label_text)
+            lbl.setStyleSheet(f'color: {theme.TEXT_MUTED}; font-size: 12px; font-weight: 500;')
+            row.addWidget(lbl)
+
+            inp = QLineEdit()
+            inp.setStyleSheet(theme.QSS_INPUT)
+            inp.setPlaceholderText(placeholder)
+            inp.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            row.addWidget(inp)
+
+            self._inputs[key] = inp
+            layout.addLayout(row)
+
+        return card
+
+    def _build_actions(self) -> QHBoxLayout:
+        actions = QHBoxLayout()
+        actions.setSpacing(theme.SPACE_SM)
+
+        reset_btn = QPushButton('Сбросить к дефолтам')
+        reset_btn.setStyleSheet(theme.QSS_BUTTON_SECONDARY)
+        reset_btn.clicked.connect(self._on_reset)
+
+        close_btn = QPushButton('Закрыть')
+        close_btn.setStyleSheet(theme.QSS_BUTTON_SECONDARY)
+        close_btn.clicked.connect(self._on_close)
+
+        save_btn = QPushButton('Сохранить')
+        save_btn.setStyleSheet(theme.QSS_BUTTON_PRIMARY)
+        save_btn.clicked.connect(self._on_save)
+
+        actions.addWidget(reset_btn)
+        actions.addStretch()
+        actions.addWidget(close_btn)
+        actions.addWidget(save_btn)
+        return actions
+
+    # ---- data ----
+
+    def _load_values(self) -> None:
+        # Take values from the live settings object so the form reflects
+        # the effective config (including any OS env override).
+        current = {
+            'signal_url': settings.signal_url,
+            'stun_server': settings.stun_server,
+            'turn_server': settings.turn_server,
+            'turn_username': settings.turn_username,
+            'turn_password': settings.turn_password,
+            'qgc_host': settings.qgc_host,
+            'qgc_port': str(settings.qgc_port),
+        }
+        for key, inp in self._inputs.items():
+            inp.setText(current.get(key, ''))
+
+    def _collect(self) -> dict[str, str]:
+        return {key: inp.text().strip() for key, inp in self._inputs.items()}
+
+    def _on_reset(self) -> None:
+        confirm = QMessageBox(self)
+        confirm.setWindowTitle('Сбросить настройки?')
+        confirm.setText(
+            'Все поля будут заполнены значениями по умолчанию.\n'
+            'Нажмите «Сохранить», чтобы применить.'
+        )
+        confirm.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        confirm.setDefaultButton(QMessageBox.Cancel)
+        if confirm.exec() != QMessageBox.Ok:
+            return
+        for key, inp in self._inputs.items():
+            inp.setText(_DEFAULTS.get(key, ''))
+
+    def _on_save(self) -> None:
+        values = self._collect()
+
+        # Минимальная валидация: SIGNAL_URL обязателен и должен быть http(s).
+        signal_url = values.get('signal_url', '').rstrip('/')
+        if not signal_url:
+            self._show_error('Поле SIGNAL_URL не может быть пустым.')
+            return
+        if not (signal_url.startswith('http://') or signal_url.startswith('https://')):
+            self._show_error('SIGNAL_URL должен начинаться с http:// или https://')
+            return
+        values['signal_url'] = signal_url
+
+        # qgc_port должен быть числом.
+        port_str = values.get('qgc_port', '14550')
+        try:
+            port = int(port_str)
+            if not (1 <= port <= 65535):
+                raise ValueError
+        except ValueError:
+            self._show_error('QGC порт должен быть числом от 1 до 65535.')
+            return
+        values['qgc_port'] = port
+
+        # Сохраняем JSON, поверх уже существующих ключей (на случай, если
+        # там есть что-то, чего UI не знает).
+        existing = user_config.load()
+        existing.update(values)
+        try:
+            user_config.save(existing)
+        except OSError as exc:
+            self._show_error(f'Не удалось сохранить настройки: {exc}')
+            return
+
+        config_module.reload_from_user_config()
+        self._on_close()
+
+    def _show_error(self, message: str) -> None:
+        QMessageBox.warning(self, 'Ошибка', message)

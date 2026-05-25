@@ -82,3 +82,25 @@ class ApiSession:
         except aiohttp.ClientError as exc:
             logger.warning('ice-servers fetch error: %s', exc)
             return []
+
+    async def delete_drone(self, drone_id: str, access_token: str) -> None:
+        """Удалить дрон по REST API. Кидает ApiError на любую ошибку
+        кроме 204."""
+        url = f'{settings.http_url}/api/v1/drones/{drone_id}'
+        headers = {'Authorization': f'Bearer {access_token}'}
+        async with self._session.delete(url, headers=headers) as r:
+            if r.status == 204:
+                return
+            detail = ''
+            try:
+                data = await r.json()
+                detail = data.get('detail', '')
+            except (aiohttp.ContentTypeError, ValueError):
+                pass
+            if r.status == 401:
+                raise ApiError('Сессия истекла, войдите снова')
+            if r.status == 403:
+                raise ApiError('Дрон вам не принадлежит')
+            if r.status == 404:
+                raise ApiError('Дрон уже удалён или не найден')
+            raise ApiError(detail or f'Не удалось удалить дрон (HTTP {r.status})')

@@ -12,7 +12,10 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
+from typing import Optional
+
+from PySide6.QtCore import QTimer
 
 from mavixdesktop.core.config import settings
 from mavixdesktop.core.logger import logger
@@ -73,6 +76,44 @@ class ConnectionManager:
 
     def request_drone_list(self) -> None:
         self._submit(self._coord.request_drone_list() if self._coord else None)
+
+    def delete_drone(self, drone_id: str, on_done: 'Callable[[Optional[str]], None] | None' = None) -> None:
+        """Asynchronously DELETE drone via REST API. `on_done` is invoked
+        on the Qt main thread with None on success or an error message
+        string on failure (callable enqueued via QTimer.singleShot)."""
+        self._ensure_loop_started()
+        assert self._loop is not None
+        asyncio.run_coroutine_threadsafe(
+            self._async_delete_drone(drone_id, on_done),
+            self._loop,
+        )
+
+    async def _async_delete_drone(
+        self,
+        drone_id: str,
+        on_done: 'Callable[[Optional[str]], None] | None',
+    ) -> None:
+        try:
+            if self._api is None or self._signal is None:
+                raise ApiError('Нет активной сессии. Войдите в аккаунт.')
+            token = getattr(self._signal, '_access_token', '')
+            if not token:
+                raise ApiError('Нет access токена в активной сессии.')
+            await self._api.delete_drone(drone_id, token)
+            error: str | None = None
+        except ApiError as exc:
+            error = str(exc)
+        except Exception as exc:
+            logger.warning('[connection] delete drone failed: %s', exc)
+            error = 'Не удалось удалить дрон. Попробуйте позже.'
+        # Refresh the list either way so the UI catches up.
+        if self._coord is not None and error is None:
+            try:
+                await self._coord.request_drone_list()
+            except Exception as exc:
+                logger.warning('[connection] post-delete list refresh failed: %s', exc)
+        if on_done is not None:
+            QTimer.singleShot(0, lambda e=error: on_done(e))
 
     def select_drone(self, drone_id: str) -> None:
         if not drone_id:

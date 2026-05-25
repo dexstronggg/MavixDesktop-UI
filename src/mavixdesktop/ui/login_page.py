@@ -10,8 +10,8 @@ import math
 import time
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt, QTimer, QPointF
-from PySide6.QtGui import QFont, QPainter, QPen, QRadialGradient, QColor
+from PySide6.QtCore import Qt, QTimer, QPointF, QSize
+from PySide6.QtGui import QFont, QPainter, QPen, QRadialGradient, QColor, QIcon
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QFrame, QGraphicsDropShadowEffect, QSizePolicy,
@@ -217,10 +217,12 @@ class LoginPage(QWidget):
         self,
         on_login: Callable[[str, str], None],
         on_forgot_password: Callable[[str], None] | None = None,
+        on_open_settings: Callable[[], None] | None = None,
     ) -> None:
         super().__init__()
         self._on_login = on_login
         self._on_forgot_password = on_forgot_password
+        self._on_open_settings = on_open_settings
 
         # Фон страницы — без него родительское окно темнит, но без свечения.
         outer = QVBoxLayout(self)
@@ -229,9 +231,10 @@ class LoginPage(QWidget):
         bg = _AuthBackground(self)
         outer.addWidget(bg)
 
-        # Центрируем карточку по обоим осям.
+        # Шестерёнка в правом верхнем углу + центрированная карточка ниже.
         center_layout = QVBoxLayout(bg)
         center_layout.setContentsMargins(24, 24, 24, 24)
+        center_layout.addLayout(self._build_top_bar())
         center_layout.addStretch()
         row = QHBoxLayout()
         row.addStretch()
@@ -239,6 +242,32 @@ class LoginPage(QWidget):
         row.addStretch()
         center_layout.addLayout(row)
         center_layout.addStretch()
+
+    def _build_top_bar(self) -> QHBoxLayout:
+        bar = QHBoxLayout()
+        bar.setContentsMargins(0, 0, 0, 0)
+        bar.addStretch()
+        gear = QPushButton()
+        gear.setFixedSize(36, 36)
+        gear.setCursor(Qt.PointingHandCursor)
+        gear.setIcon(QIcon(svg_pixmap('tune.svg', 20, color=theme.TEXT_MUTED)))
+        gear.setIconSize(QSize(20, 20))
+        gear.setToolTip('Настройки')
+        gear.setStyleSheet(
+            f'QPushButton {{'
+            f' background-color: transparent;'
+            f' border: 1px solid {theme.BORDER};'
+            f' border-radius: 18px;'
+            f' }}'
+            f' QPushButton:hover {{'
+            f' background-color: {theme.ACCENT_SUBTLE};'
+            f' border-color: {theme.ACCENT};'
+            f' }}'
+        )
+        if self._on_open_settings is not None:
+            gear.clicked.connect(self._on_open_settings)
+        bar.addWidget(gear)
+        return bar
 
     # ── Card ──────────────────────────────────────────────────────────────────
 
