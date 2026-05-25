@@ -9,6 +9,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _PROJECT_ROOT = Path(__file__).parents[3]
 
+# When running as a PyInstaller single-file binary, _PROJECT_ROOT
+# resolves into the temp extraction dir — useless for user config.
+# Use the OS-standard user config path instead, with the project-root
+# .env as a dev-time fallback.
+_USER_CONFIG_ENV = Path.home() / '.config' / 'mavixdesktop' / '.env'
+load_dotenv(_USER_CONFIG_ENV, override=False)
 load_dotenv(_PROJECT_ROOT / '.env', override=True)
 
 _USER_BASE = Path.home() / '.config' / 'mavixdesktop'

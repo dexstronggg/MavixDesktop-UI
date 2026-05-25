@@ -16,3 +16,4 @@ src/_logs/
 build/
 dist/
 *.spec
+!mavixdesktop.spec
