@@ -12,8 +12,9 @@ __pycache__/
 # Logs
 src/_logs/
 
-# Build artifacts (PyInstaller + dpkg-deb)
+# Build artifacts (PyInstaller + dpkg-deb + AppImage)
 build/
 dist/
+.build-cache/
 *.spec
 !mavixdesktop.spec
