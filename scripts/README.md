@@ -8,7 +8,7 @@
 | `build_windows.ps1` | Windows | `dist\mavixdesktop.exe` |
 | `_make_icon.py` | — | генератор `.ico` / `.png` Mavix-логотипа на Pillow+NumPy (используется при необходимости перегенерации иконок) |
 
-Обе сборки используют общий `mavixdesktop.spec` в корне репозитория. Подробный workflow и куда класть готовые артефакты — см. `../../BUILD.md` (в корне `MavixProject/`).
+Обе сборки используют общий `mavixdesktop.spec` в корне репозитория. Подробный workflow и куда класть готовые артефакты — см. `BUILD.md` в репозитории MavixServer.
 
 ## Linux
 
