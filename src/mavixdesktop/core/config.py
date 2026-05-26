@@ -42,15 +42,16 @@ class Settings(BaseSettings):
     )
 
     # --- Server ---
-    signal_url: str = Field(default='http://localhost:8000', alias='SIGNAL_URL')
+    signal_url: str = Field(default='http://85.198.102.188:8000', alias='SIGNAL_URL')
 
     # --- WebRTC ICE overrides ---
     # If left empty, the desktop uses whatever the server returns from
-    # /api/v1/ice-servers. Set these to force a specific STUN/TURN.
-    stun_server: str = Field(default='', alias='STUN_SERVER')
-    turn_server: str = Field(default='', alias='TURN_SERVER')
-    turn_username: str = Field(default='', alias='TURN_USERNAME')
-    turn_password: str = Field(default='', alias='TURN_PASSWORD')
+    # /api/v1/ice-servers. Defaults below mirror the production STUN/TURN
+    # so a fresh install reaches the right relay even before logging in.
+    stun_server: str = Field(default='stun:85.198.102.188:3478', alias='STUN_SERVER')
+    turn_server: str = Field(default='turn:85.198.102.188:3478', alias='TURN_SERVER')
+    turn_username: str = Field(default='myuser', alias='TURN_USERNAME')
+    turn_password: str = Field(default='BxBF+DZ0JZU6lK1MiSyj8oG/+gwKJeIF', alias='TURN_PASSWORD')
 
     # --- QGC / MAVLink relay ---
     qgc_host: str = Field(default='127.0.0.1', alias='QGC_HOST')
