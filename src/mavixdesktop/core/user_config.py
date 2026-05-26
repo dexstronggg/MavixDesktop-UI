@@ -28,6 +28,7 @@ EDITABLE_KEYS = (
     'turn_password',
     'qgc_host',
     'qgc_port',
+    'force_relay',
 )
 
 
@@ -66,6 +67,7 @@ _MAPPING = {
     'turn_password': 'TURN_PASSWORD',
     'qgc_host':      'QGC_HOST',
     'qgc_port':      'QGC_PORT',
+    'force_relay':   'FORCE_RELAY',
 }
 
 # Env-keys that the JSON layer is currently responsible for, so on

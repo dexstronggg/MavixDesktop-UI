@@ -12,11 +12,13 @@ don't emit anything ourselves.
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription
 
+from mavixdesktop.core.config import settings
 from mavixdesktop.core.logger import logger
 
 if TYPE_CHECKING:
@@ -43,6 +45,53 @@ def _patch_dtls_setup_passive(sdp: str) -> str:
     return ''.join(out_lines)
 
 
+_CAND_RE = re.compile(r'^a=candidate:.* typ (\w+) ', re.MULTILINE)
+
+
+def _log_candidates(label: str, sdp: str) -> None:
+    """Log every ICE candidate line by type. Used to see what aiortc
+    actually gathered / what the drone offered."""
+    by_type: dict[str, list[str]] = {}
+    for line in sdp.splitlines():
+        if not line.startswith('a=candidate:'):
+            continue
+        m = _CAND_RE.match(line)
+        if not m:
+            continue
+        by_type.setdefault(m.group(1), []).append(line)
+    if not by_type:
+        logger.info('[ice/%s] no candidates in SDP', label)
+        return
+    for typ, lines in by_type.items():
+        logger.info('[ice/%s] %s x%d', label, typ, len(lines))
+        for cand in lines:
+            logger.info('[ice/%s]   %s', label, cand.strip())
+
+
+def _filter_to_relay_only(sdp: str, label: str) -> str:
+    """Drop every non-relay candidate from SDP. Used when settings.force_relay
+    is True to simulate a network where host/srflx paths are blocked
+    (e.g. corporate/university firewalls). Useful for reproducing failed
+    connections locally without travelling to that network.
+
+    Keep `a=end-of-candidates` and everything else verbatim."""
+    kept = 0
+    dropped = 0
+    out_lines: list[str] = []
+    for line in sdp.splitlines(keepends=True):
+        if line.startswith('a=candidate:'):
+            m = _CAND_RE.match(line)
+            if m and m.group(1) != 'relay':
+                dropped += 1
+                continue
+            kept += 1
+        out_lines.append(line)
+    if kept or dropped:
+        logger.info('[ice/%s] force_relay filter: kept %d relay, dropped %d non-relay',
+                    label, kept, dropped)
+    return ''.join(out_lines)
+
+
 def _build_configuration(ice_servers: list[dict]) -> RTCConfiguration:
     servers: list[RTCIceServer] = []
     for entry in ice_servers:
@@ -57,6 +106,7 @@ def _build_configuration(ice_servers: list[dict]) -> RTCConfiguration:
         if credential:
             kwargs['credential'] = credential
         servers.append(RTCIceServer(**kwargs))
+        logger.info('[ice/config] ICE server: urls=%s username=%s', urls, bool(username))
     return RTCConfiguration(iceServers=servers)
 
 
@@ -80,6 +130,9 @@ class PeerSession:
 
         self._pc.add_listener('track', self._handle_track)
         self._pc.add_listener('datachannel', self._handle_datachannel)
+        self._pc.add_listener('iceconnectionstatechange', self._handle_ice_state)
+        self._pc.add_listener('icegatheringstatechange', self._handle_gather_state)
+        self._pc.add_listener('connectionstatechange', self._handle_conn_state)
 
     @property
     def pc(self) -> RTCPeerConnection:
@@ -104,6 +157,16 @@ class PeerSession:
         """
         logger.info('[peer] offer m-lines: %s',
                     [l for l in sdp_text.splitlines() if l.startswith('m=')])
+
+        # 1. Log incoming candidates from the drone.
+        _log_candidates('offer/drone', sdp_text)
+
+        # 2. Optional: simulate corporate NAT — drop host/srflx from the
+        # drone's offer so only its relay candidates remain. Effectively
+        # forces relay-relay path.
+        if getattr(settings, 'force_relay', False):
+            sdp_text = _filter_to_relay_only(sdp_text, 'offer/drone')
+
         await self._pc.setRemoteDescription(
             RTCSessionDescription(sdp=sdp_text, type='offer')
         )
@@ -115,6 +178,14 @@ class PeerSession:
         await self._pc.setLocalDescription(patched_answer)
         assert self._pc.localDescription is not None
         final_sdp = _patch_dtls_setup_passive(self._pc.localDescription.sdp)
+
+        # 3. Log our own gathered candidates.
+        _log_candidates('answer/gcs', final_sdp)
+
+        # 4. Same filter on our side if force_relay enabled.
+        if getattr(settings, 'force_relay', False):
+            final_sdp = _filter_to_relay_only(final_sdp, 'answer/gcs')
+
         logger.info('[peer] answer m-lines: %s',
                     [l for l in final_sdp.splitlines() if l.startswith('m=')])
         return final_sdp
@@ -133,6 +204,13 @@ class PeerSession:
             if not isinstance(cand_str, str):
                 logger.warning('[peer] invalid ICE payload: %s', candidate)
                 return False
+            # При force-relay режиме отбрасываем не-relay кандидаты,
+            # пришедшие через trickle.
+            if getattr(settings, 'force_relay', False) and ' typ ' in cand_str:
+                typ = cand_str.split(' typ ', 1)[1].split(' ', 1)[0]
+                if typ != 'relay':
+                    logger.info('[ice/trickle] dropped non-relay candidate: %s', cand_str)
+                    return False
             ice = RTCIceCandidate(
                 component=1,
                 foundation='',
@@ -174,3 +252,17 @@ class PeerSession:
             self.on_datachannel(channel)
         except Exception as exc:
             logger.warning('[peer] on_datachannel handler error: %s', exc)
+
+    def _handle_ice_state(self) -> None:
+        state = self._pc.iceConnectionState
+        logger.info('[ice/state] iceConnectionState=%s', state)
+        if state == 'failed':
+            logger.warning('[ice/state] ICE failed — нет работающей кандидат-пары. '
+                           'Проверьте логи [ice/offer/drone] и [ice/answer/gcs] выше: '
+                           'обе стороны должны иметь хотя бы по одному relay-кандидату.')
+
+    def _handle_gather_state(self) -> None:
+        logger.info('[ice/state] iceGatheringState=%s', self._pc.iceGatheringState)
+
+    def _handle_conn_state(self) -> None:
+        logger.info('[ice/state] connectionState=%s', self._pc.connectionState)

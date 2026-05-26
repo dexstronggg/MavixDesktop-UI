@@ -12,7 +12,7 @@ from typing import Callable
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QScrollArea, QFrame, QSizePolicy, QMessageBox,
+    QScrollArea, QFrame, QSizePolicy, QMessageBox, QCheckBox,
 )
 
 from mavixdesktop.core import config as config_module
@@ -33,6 +33,7 @@ _DEFAULTS = {
     'turn_password': '',
     'qgc_host': '127.0.0.1',
     'qgc_port': '14550',
+    'force_relay': False,
 }
 
 
@@ -45,6 +46,7 @@ class SettingsPage(QWidget):
         super().__init__()
         self._on_close = on_close
         self._inputs: dict[str, QLineEdit] = {}
+        self._force_relay_cb: QCheckBox | None = None
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(theme.SPACE_LG, theme.SPACE_LG, theme.SPACE_LG, theme.SPACE_LG)
@@ -92,6 +94,8 @@ class SettingsPage(QWidget):
                 ('qgc_port', 'QGC порт', '14550'),
             ],
         ))
+
+        body_layout.addWidget(self._build_force_relay_card())
 
         body_layout.addStretch()
 
@@ -165,6 +169,41 @@ class SettingsPage(QWidget):
 
         return card
 
+    def _build_force_relay_card(self) -> QWidget:
+        card = QWidget()
+        card.setObjectName('settingsCard')
+        card.setStyleSheet(
+            f'QWidget#settingsCard {{'
+            f' background-color: {theme.BG_INPUT};'
+            f' border: 1px solid {theme.BORDER};'
+            f' border-radius: {theme.RADIUS_LG}px;'
+            f' }}'
+        )
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(theme.SPACE_LG, theme.SPACE_MD, theme.SPACE_LG, theme.SPACE_MD)
+        layout.setSpacing(theme.SPACE_SM)
+
+        h = QLabel('Debug: force-relay (TURN-only)')
+        h.setStyleSheet(f'color: {theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;')
+        layout.addWidget(h)
+
+        sub = QLabel(
+            'Имитирует корпоративный/университетский firewall: при включении '
+            'все candidate-кандидаты типа host и srflx отбрасываются, '
+            'остаются только relay через TURN-сервер. Полезно чтобы '
+            'воспроизвести «не подключается из универа» из домашней сети.'
+        )
+        sub.setStyleSheet(f'color: {theme.TEXT_MUTED}; font-size: 13px;')
+        sub.setWordWrap(True)
+        layout.addWidget(sub)
+
+        cb = QCheckBox('Включить force-relay режим')
+        cb.setStyleSheet(f'color: {theme.TEXT_PRIMARY}; font-size: 13px; padding-top: 4px;')
+        self._force_relay_cb = cb
+        layout.addWidget(cb)
+
+        return card
+
     def _build_actions(self) -> QHBoxLayout:
         actions = QHBoxLayout()
         actions.setSpacing(theme.SPACE_SM)
@@ -203,9 +242,14 @@ class SettingsPage(QWidget):
         }
         for key, inp in self._inputs.items():
             inp.setText(current.get(key, ''))
+        if self._force_relay_cb is not None:
+            self._force_relay_cb.setChecked(bool(getattr(settings, 'force_relay', False)))
 
-    def _collect(self) -> dict[str, str]:
-        return {key: inp.text().strip() for key, inp in self._inputs.items()}
+    def _collect(self) -> dict:
+        values: dict = {key: inp.text().strip() for key, inp in self._inputs.items()}
+        if self._force_relay_cb is not None:
+            values['force_relay'] = self._force_relay_cb.isChecked()
+        return values
 
     def _on_reset(self) -> None:
         confirm = QMessageBox(self)
@@ -220,6 +264,8 @@ class SettingsPage(QWidget):
             return
         for key, inp in self._inputs.items():
             inp.setText(_DEFAULTS.get(key, ''))
+        if self._force_relay_cb is not None:
+            self._force_relay_cb.setChecked(bool(_DEFAULTS.get('force_relay', False)))
 
     def _on_save(self) -> None:
         values = self._collect()

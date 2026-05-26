@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     qgc_port: int = Field(default=14550, alias='QGC_PORT')
     qgc_bind_port: int = Field(default=0, alias='QGC_BIND_PORT')
 
+    # --- Debug: force-relay ---
+    # Если True, в SDP отбрасываются все candidate-строки кроме relay.
+    # Имитирует корпоративный/университетский firewall, где host и srflx
+    # пары не работают. Удобно для проверки, что TURN-only путь живой,
+    # не выходя из домашней сети.
+    force_relay: bool = Field(default=False, alias='FORCE_RELAY')
+
     # --- Paths ---
     data_path: Path = _USER_BASE / 'data'
     log_path: Path = Field(default_factory=lambda: _USER_BASE / 'logs' / f'mavixdesktop_{date.today()}.log')
