@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     )
 
     # --- Server ---
-    signal_url: str = Field(default='http://85.198.102.188:8000', alias='SIGNAL_URL')
+    signal_url: str = Field(default='https://drone-mavix.ru', alias='SIGNAL_URL')
 
     # --- WebRTC ICE overrides ---
     # If left empty, the desktop uses whatever the server returns from
