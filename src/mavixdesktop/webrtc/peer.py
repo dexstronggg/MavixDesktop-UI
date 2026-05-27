@@ -107,6 +107,14 @@ def _build_configuration(ice_servers: list[dict]) -> RTCConfiguration:
             kwargs['credential'] = credential
         servers.append(RTCIceServer(**kwargs))
         logger.info('[ice/config] ICE server: urls=%s username=%s', urls, bool(username))
+    # Если включён force_relay, используем настоящую политику aiortc вместо
+    # фильтрации SDP — иначе aiortc всё равно собирает host/srflx локально и
+    # может выбрать нерабочую пару за симметричным NAT.
+    if getattr(settings, 'force_relay', False):
+        try:
+            return RTCConfiguration(iceServers=servers, iceTransportPolicy='relay')
+        except TypeError:
+            logger.warning('[ice/config] iceTransportPolicy not supported by aiortc version, falling back to SDP-filter')
     return RTCConfiguration(iceServers=servers)
 
 
@@ -211,14 +219,25 @@ class PeerSession:
                 if typ != 'relay':
                     logger.info('[ice/trickle] dropped non-relay candidate: %s', cand_str)
                     return False
+            # Парсим тип кандидата из строки — без этого все trickle-кандидаты
+            # помечались как 'host', что ломало приоритеты ICE и могло
+            # привести к выбору нерабочей пары за симметричным NAT.
+            cand_type = 'host'
+            cand_protocol = 'udp'
+            if ' typ ' in cand_str:
+                cand_type = cand_str.split(' typ ', 1)[1].split(' ', 1)[0]
+            parts = cand_str.split()
+            if len(parts) >= 7:
+                cand_protocol = parts[2].lower()
+            logger.info('[ice/trickle] add candidate type=%s proto=%s', cand_type, cand_protocol)
             ice = RTCIceCandidate(
                 component=1,
                 foundation='',
                 ip='',
                 port=0,
                 priority=0,
-                protocol='udp',
-                type='host',
+                protocol=cand_protocol,
+                type=cand_type,
                 sdpMid=sdp_mid,
                 sdpMLineIndex=sdp_mline_index,
             )
