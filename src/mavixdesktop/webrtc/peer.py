@@ -242,47 +242,40 @@ class PeerSession:
     async def add_remote_ice(self, candidate: dict) -> bool:
         """Apply a single ICE candidate received from the signal server.
 
-        aiortc embeds candidates in the SDP, so most real drones won't trickle.
-        This is provided for compatibility when the other side does trickle.
+        The drone (GStreamer/libnice) trickles its candidates, so we must
+        parse the whole candidate line. aiortc builds the underlying aioice
+        candidate from the PARSED fields (ip/port/foundation/priority/type),
+        NOT from the raw `.candidate` string — so we parse with
+        candidate_from_sdp. (The old code only filled .candidate and left
+        ip/port empty, so aioice rejected every trickled candidate as
+        "not a valid IPv4/IPv6 address" and the drone's relay candidate was
+        silently dropped — no remote candidate, no ICE.)
         """
         try:
-            from aiortc import RTCIceCandidate
+            from aiortc.sdp import candidate_from_sdp
             cand_str = candidate.get('candidate')
             sdp_mid = candidate.get('sdpMid')
             sdp_mline_index = candidate.get('sdpMLineIndex')
-            if not isinstance(cand_str, str):
-                logger.warning('[peer] invalid ICE payload: %s', candidate)
+            if not isinstance(cand_str, str) or not cand_str.strip():
+                # empty candidate = end-of-candidates marker, nothing to add
                 return False
-            # При force-relay режиме отбрасываем не-relay кандидаты,
-            # пришедшие через trickle.
-            if getattr(settings, 'force_relay', False) and ' typ ' in cand_str:
-                typ = cand_str.split(' typ ', 1)[1].split(' ', 1)[0]
+            # candidate_from_sdp wants the value without the "candidate:" prefix
+            sdp_str = cand_str[len('candidate:'):] if cand_str.startswith('candidate:') else cand_str
+            # force_relay: drop non-relay trickle candidates. Belt-and-suspenders —
+            # aioice is already relay-only via relay_patch; this just cuts noise.
+            if getattr(settings, 'force_relay', False) and ' typ ' in sdp_str:
+                typ = sdp_str.split(' typ ', 1)[1].split(' ', 1)[0]
                 if typ != 'relay':
                     logger.info('[ice/trickle] dropped non-relay candidate: %s', cand_str)
                     return False
-            # Парсим тип кандидата из строки — без этого все trickle-кандидаты
-            # помечались как 'host', что ломало приоритеты ICE и могло
-            # привести к выбору нерабочей пары за симметричным NAT.
-            cand_type = 'host'
-            cand_protocol = 'udp'
-            if ' typ ' in cand_str:
-                cand_type = cand_str.split(' typ ', 1)[1].split(' ', 1)[0]
-            parts = cand_str.split()
-            if len(parts) >= 7:
-                cand_protocol = parts[2].lower()
-            logger.info('[ice/trickle] add candidate type=%s proto=%s', cand_type, cand_protocol)
-            ice = RTCIceCandidate(
-                component=1,
-                foundation='',
-                ip='',
-                port=0,
-                priority=0,
-                protocol=cand_protocol,
-                type=cand_type,
-                sdpMid=sdp_mid,
-                sdpMLineIndex=sdp_mline_index,
-            )
-            ice.candidate = cand_str
+            try:
+                ice = candidate_from_sdp(sdp_str)
+            except (AssertionError, ValueError, IndexError):
+                logger.info('[ice/trickle] skip unparseable candidate: %r', cand_str)
+                return False
+            ice.sdpMid = sdp_mid
+            ice.sdpMLineIndex = sdp_mline_index
+            logger.info('[ice/trickle] add candidate type=%s %s:%s', ice.type, ice.ip, ice.port)
             await self._pc.addIceCandidate(ice)
             return True
         except Exception as exc:
