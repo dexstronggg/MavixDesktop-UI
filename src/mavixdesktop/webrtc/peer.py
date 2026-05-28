@@ -115,7 +115,7 @@ def _build_configuration(ice_servers: list[dict]) -> RTCConfiguration:
     предпочтёт прямую пару, а лишний TURN-сервер только удлиняет gathering."""
     use_relay = bool(getattr(settings, 'force_relay', False))
     mode = 'RELAY (TURN only)' if use_relay else 'DIRECT (STUN only)'
-    logger.info('[ice/config] mode=%s, force_relay=%s, received %d server(s) from API',
+    logger.info('[ice/config] mode=%s, force_relay=%s, received %d ICE server(s)',
                 mode, use_relay, len(ice_servers))
     servers: list[RTCIceServer] = []
     for entry in ice_servers:
@@ -143,8 +143,8 @@ def _build_configuration(ice_servers: list[dict]) -> RTCConfiguration:
                     scheme.upper(), urls, bool(username))
     if not servers:
         logger.warning('[ice/config] no ICE servers left after filtering — '
-                       'connection will likely fail. Check /api/v1/ice-servers '
-                       'response and force_relay setting (current: %s).', use_relay)
+                       'connection will likely fail. Check local STUN/TURN config '
+                       '(or /api/v1/ice-servers) and force_relay setting (current: %s).', use_relay)
     if use_relay:
         try:
             cfg = RTCConfiguration(iceServers=servers, iceTransportPolicy='relay')
