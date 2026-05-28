@@ -48,8 +48,8 @@ class Settings(BaseSettings):
     # If left empty, the desktop uses whatever the server returns from
     # /api/v1/ice-servers. Defaults below mirror the production STUN/TURN
     # so a fresh install reaches the right relay even before logging in.
-    stun_server: str = Field(default='stun:85.198.102.188:3478', alias='STUN_SERVER')
-    turn_server: str = Field(default='turn:85.198.102.188:3478', alias='TURN_SERVER')
+    stun_server: str = Field(default='stun:turn.drone-mavix.ru:3478', alias='STUN_SERVER')
+    turn_server: str = Field(default='turns:turn.drone-mavix.ru:443', alias='TURN_SERVER')
     turn_username: str = Field(default='myuser', alias='TURN_USERNAME')
     turn_password: str = Field(default='BxBF+DZ0JZU6lK1MiSyj8oG/+gwKJeIF', alias='TURN_PASSWORD')
 

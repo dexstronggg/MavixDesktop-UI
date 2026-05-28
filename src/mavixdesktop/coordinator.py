@@ -29,6 +29,28 @@ if TYPE_CHECKING:
     from aiortc import MediaStreamTrack
 
 
+def _local_ice_servers() -> list[dict]:
+    """Build the ICE-server list from local config (config.py / Settings UI).
+
+    Entries use the same shape as ApiSession.ice_servers(), so
+    _build_configuration treats both sources identically — STUN and TURN
+    are both included and the force_relay flag decides which is used.
+
+    Returns [] only when neither STUN nor TURN is configured; that empty
+    result is the caller's signal to fall back to /api/v1/ice-servers."""
+    servers: list[dict] = []
+    if settings.stun_server:
+        servers.append({'urls': settings.stun_server})
+    if settings.turn_server:
+        entry: dict = {'urls': settings.turn_server}
+        if settings.turn_username:
+            entry['username'] = settings.turn_username
+        if settings.turn_password:
+            entry['credential'] = settings.turn_password
+        servers.append(entry)
+    return servers
+
+
 class SessionCoordinator:
     def __init__(
         self,
@@ -115,7 +137,15 @@ class SessionCoordinator:
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
-        ice_servers = await self._api.ice_servers()
+        # Local config (config.py / Settings UI) wins outright: if any STUN
+        # or TURN is set there, we use exactly that and never call the API.
+        # Only when local config is completely empty do we ask the server.
+        ice_servers = _local_ice_servers()
+        if ice_servers:
+            logger.info('[coord] using %d ICE server(s) from local config', len(ice_servers))
+        else:
+            ice_servers = await self._api.ice_servers()
+            logger.info('[coord] local ICE config empty — using %d server(s) from API', len(ice_servers))
         self._manager = WebRTCManager(send=self._signal_client.send, ice_servers=ice_servers)
         self._manager.on_track = self.on_track
         # Fires per channel attached (packet/ping/config). Idempotent —
