@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from mavixdesktop.core.config import settings
 
@@ -14,6 +15,16 @@ def _build_logger() -> logging.Logger:
     stream = logging.StreamHandler()
     stream.setFormatter(formatter)
     log.addHandler(stream)
+
+    # ICE_DEBUG=1 turns on aioice/aiortc DEBUG logging — every candidate pair,
+    # connectivity check and TURN request. Used to diagnose why a relay pair
+    # fails to validate (no permission, no response, etc).
+    if os.getenv('ICE_DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on'):
+        for name in ('aioice', 'aiortc'):
+            dbg = logging.getLogger(name)
+            dbg.setLevel(logging.DEBUG)
+            dbg.addHandler(stream)
+        log.info('[ice] ICE_DEBUG on — aioice/aiortc at DEBUG')
     return log
 
 

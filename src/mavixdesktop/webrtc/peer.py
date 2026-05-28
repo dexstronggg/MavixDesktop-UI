@@ -145,14 +145,17 @@ def _build_configuration(ice_servers: list[dict]) -> RTCConfiguration:
         logger.warning('[ice/config] no ICE servers left after filtering — '
                        'connection will likely fail. Check local STUN/TURN config '
                        '(or /api/v1/ice-servers) and force_relay setting (current: %s).', use_relay)
-    if use_relay:
-        try:
-            cfg = RTCConfiguration(iceServers=servers, iceTransportPolicy='relay')
-            logger.info('[ice/config] iceTransportPolicy=relay')
-            return cfg
-        except TypeError:
-            logger.warning('[ice/config] iceTransportPolicy not supported by aiortc version, falling back to SDP-filter')
-    logger.info('[ice/config] iceTransportPolicy=all (default)')
+    # aiortc has no iceTransportPolicy on RTCConfiguration, so force relay
+    # natively at the aioice layer (see relay_patch). The hook self-gates on
+    # settings.force_relay + TURN presence per connection; installing it is
+    # cheap and idempotent.
+    from mavixdesktop.webrtc.relay_patch import enable_relay_only
+    enable_relay_only()
+    if use_relay and not servers:
+        logger.warning('[ice/config] force_relay requested but no TURN server — '
+                       'relay path cannot be used')
+    logger.info('[ice/config] transport policy=%s (native via aioice)',
+                'relay' if (use_relay and servers) else 'all')
     return RTCConfiguration(iceServers=servers)
 
 
