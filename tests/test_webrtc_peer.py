@@ -23,23 +23,43 @@ def test_build_configuration_no_servers():
     assert cfg.iceServers == []
 
 
-def test_build_configuration_with_stun():
-    cfg = _build_configuration([{'urls': 'stun:stun.example:3478'}])
+def test_build_configuration_keeps_stun_when_relay_off(monkeypatch):
+    from mavixdesktop.core.config import settings as s
+    monkeypatch.setattr(s, 'force_relay', False, raising=False)
+    cfg = _build_configuration([
+        {'urls': 'stun:stun.example:3478'},
+        {'urls': 'turn:turn.example:3478', 'username': 'a', 'credential': 'b'},
+    ])
     assert len(cfg.iceServers) == 1
     assert cfg.iceServers[0].urls == 'stun:stun.example:3478'
 
 
-def test_build_configuration_with_turn_creds():
-    cfg = _build_configuration([{
-        'urls': 'turn:turn.example:3478',
-        'username': 'alice',
-        'credential': 'secret',
-    }])
+def test_build_configuration_keeps_turn_when_relay_on(monkeypatch):
+    from mavixdesktop.core.config import settings as s
+    monkeypatch.setattr(s, 'force_relay', True, raising=False)
+    cfg = _build_configuration([
+        {'urls': 'stun:stun.example:3478'},
+        {'urls': 'turn:turn.example:3478', 'username': 'alice', 'credential': 'secret'},
+    ])
+    assert len(cfg.iceServers) == 1
     assert cfg.iceServers[0].username == 'alice'
     assert cfg.iceServers[0].credential == 'secret'
 
 
-def test_build_configuration_ignores_entries_without_urls():
+def test_build_configuration_keeps_turns_when_relay_on(monkeypatch):
+    from mavixdesktop.core.config import settings as s
+    monkeypatch.setattr(s, 'force_relay', True, raising=False)
+    cfg = _build_configuration([
+        {'urls': 'stun:stun.example:3478'},
+        {'urls': 'turns:turn.example:443', 'username': 'a', 'credential': 'b'},
+    ])
+    assert len(cfg.iceServers) == 1
+    assert 'turns:' in (cfg.iceServers[0].urls if isinstance(cfg.iceServers[0].urls, str) else cfg.iceServers[0].urls[0])
+
+
+def test_build_configuration_ignores_entries_without_urls(monkeypatch):
+    from mavixdesktop.core.config import settings as s
+    monkeypatch.setattr(s, 'force_relay', False, raising=False)
     cfg = _build_configuration([{'username': 'x'}, {'urls': 'stun:y:3478'}])
     assert len(cfg.iceServers) == 1
 

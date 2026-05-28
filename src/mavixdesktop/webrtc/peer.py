@@ -92,11 +92,41 @@ def _filter_to_relay_only(sdp: str, label: str) -> str:
     return ''.join(out_lines)
 
 
+def _entry_scheme(entry: dict) -> str:
+    """Возвращает scheme первого URL в записи RTCIceServer (stun/stuns/turn/turns/'')."""
+    urls = entry.get('urls') if isinstance(entry, dict) else None
+    if not urls:
+        return ''
+    url = urls if isinstance(urls, str) else (urls[0] if urls else '')
+    if not isinstance(url, str) or ':' not in url:
+        return ''
+    return url.split(':', 1)[0].strip().lower()
+
+
 def _build_configuration(ice_servers: list[dict]) -> RTCConfiguration:
+    """Фильтрует ICE-серверы под текущий режим force_relay и собирает RTCConfiguration.
+
+    Почему фильтр в принципе нужен: aiortc держит ровно один STUN и ровно
+    один TURN сервер (rtcicetransport.py: второй URL c тем же scheme молча
+    отбрасывается). При force_relay нам нужен ТОЛЬКО TURN — STUN-запись
+    может «занять слот» и заодно сбивает iceTransportPolicy='relay',
+    добавляя на сторону переговоров лишние srflx-кандидаты. При выключенном
+    force_relay, наоборот, TURN-запись не нужна: всё равно политика 'all'
+    предпочтёт прямую пару, а лишний TURN-сервер только удлиняет gathering."""
+    use_relay = bool(getattr(settings, 'force_relay', False))
     servers: list[RTCIceServer] = []
     for entry in ice_servers:
         urls = entry.get('urls') if isinstance(entry, dict) else None
         if not urls:
+            continue
+        scheme = _entry_scheme(entry)
+        is_turn = scheme in ('turn', 'turns')
+        is_stun = scheme in ('stun', 'stuns')
+        if use_relay and not is_turn:
+            logger.info('[ice/config] skip non-TURN (%s) — force_relay is on', urls)
+            continue
+        if not use_relay and not is_stun:
+            logger.info('[ice/config] skip non-STUN (%s) — force_relay is off', urls)
             continue
         username = entry.get('username')
         credential = entry.get('credential')
@@ -107,10 +137,7 @@ def _build_configuration(ice_servers: list[dict]) -> RTCConfiguration:
             kwargs['credential'] = credential
         servers.append(RTCIceServer(**kwargs))
         logger.info('[ice/config] ICE server: urls=%s username=%s', urls, bool(username))
-    # Если включён force_relay, используем настоящую политику aiortc вместо
-    # фильтрации SDP — иначе aiortc всё равно собирает host/srflx локально и
-    # может выбрать нерабочую пару за симметричным NAT.
-    if getattr(settings, 'force_relay', False):
+    if use_relay:
         try:
             return RTCConfiguration(iceServers=servers, iceTransportPolicy='relay')
         except TypeError:
