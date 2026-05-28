@@ -114,6 +114,9 @@ def _build_configuration(ice_servers: list[dict]) -> RTCConfiguration:
     force_relay, наоборот, TURN-запись не нужна: всё равно политика 'all'
     предпочтёт прямую пару, а лишний TURN-сервер только удлиняет gathering."""
     use_relay = bool(getattr(settings, 'force_relay', False))
+    mode = 'RELAY (TURN only)' if use_relay else 'DIRECT (STUN only)'
+    logger.info('[ice/config] mode=%s, force_relay=%s, received %d server(s) from API',
+                mode, use_relay, len(ice_servers))
     servers: list[RTCIceServer] = []
     for entry in ice_servers:
         urls = entry.get('urls') if isinstance(entry, dict) else None
@@ -136,12 +139,20 @@ def _build_configuration(ice_servers: list[dict]) -> RTCConfiguration:
         if credential:
             kwargs['credential'] = credential
         servers.append(RTCIceServer(**kwargs))
-        logger.info('[ice/config] ICE server: urls=%s username=%s', urls, bool(username))
+        logger.info('[ice/config] USING %s: urls=%s username=%s',
+                    scheme.upper(), urls, bool(username))
+    if not servers:
+        logger.warning('[ice/config] no ICE servers left after filtering — '
+                       'connection will likely fail. Check /api/v1/ice-servers '
+                       'response and force_relay setting (current: %s).', use_relay)
     if use_relay:
         try:
-            return RTCConfiguration(iceServers=servers, iceTransportPolicy='relay')
+            cfg = RTCConfiguration(iceServers=servers, iceTransportPolicy='relay')
+            logger.info('[ice/config] iceTransportPolicy=relay')
+            return cfg
         except TypeError:
             logger.warning('[ice/config] iceTransportPolicy not supported by aiortc version, falling back to SDP-filter')
+    logger.info('[ice/config] iceTransportPolicy=all (default)')
     return RTCConfiguration(iceServers=servers)
 
 
