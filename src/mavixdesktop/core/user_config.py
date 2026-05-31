@@ -1,25 +1,24 @@
-"""User config persisted at ~/.config/mavixdesktop/config.json.
+"""Пользовательский конфиг, сохраняемый в ~/.config/mavixdesktop/config.json.
 
-This is what the Settings UI reads from and writes to. The file is
-loaded at startup (in core.config) and overrides the defaults baked
-into the binary. OS env vars still win over the file - that's by
-design so a developer can override anything from the shell.
+Именно отсюда читает и сюда пишет Settings UI. Файл загружается при старте
+(в core.config) и перекрывает дефолты, вшитые в бинарник. Переменные
+окружения ОС всё равно главнее файла — так задумано, чтобы разработчик мог
+переопределить что угодно из шелла.
 """
 from __future__ import annotations
 
 import json
-import logging
 import os
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from mavixdesktop.core.logger import logger
 
 USER_CONFIG_PATH = Path.home() / '.config' / 'mavixdesktop' / 'config.json'
 
-# Which keys the Settings UI exposes. The Settings page renders fields
-# in this order and saves only these keys to disk - unknown keys in
-# the file are preserved on save but ignored by the UI.
+# Какие ключи показывает Settings UI. Страница Settings рисует поля в этом
+# порядке и сохраняет на диск только эти ключи — неизвестные ключи в файле
+# сохраняются при записи, но игнорируются UI.
 EDITABLE_KEYS = (
     'signal_url',
     'stun_server',
@@ -33,24 +32,24 @@ EDITABLE_KEYS = (
 
 
 def load() -> dict[str, Any]:
-    """Read the JSON config. Returns an empty dict if the file doesn't
-    exist or is unreadable - callers fall back to their defaults."""
+    """Читает JSON-конфиг. Возвращает пустой dict, если файла нет или он
+    нечитаем — вызывающие откатываются на свои дефолты."""
     if not USER_CONFIG_PATH.is_file():
         return {}
     try:
         with USER_CONFIG_PATH.open('r', encoding='utf-8') as f:
             data = json.load(f)
         if not isinstance(data, dict):
-            logger.warning('user config %s is not a JSON object, ignoring', USER_CONFIG_PATH)
+            logger.warning('[user-config] %s не является JSON-объектом, игнорируем', USER_CONFIG_PATH)
             return {}
         return data
     except (OSError, json.JSONDecodeError) as exc:
-        logger.warning('failed to read user config %s: %s', USER_CONFIG_PATH, exc)
+        logger.warning('[user-config] не удалось прочитать %s: %s', USER_CONFIG_PATH, exc)
         return {}
 
 
 def save(values: dict[str, Any]) -> None:
-    """Write the JSON config atomically. Creates the directory if needed."""
+    """Атомарно записывает JSON-конфиг. Создаёт каталог при необходимости."""
     USER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = USER_CONFIG_PATH.with_suffix('.json.tmp')
     with tmp.open('w', encoding='utf-8') as f:
@@ -70,20 +69,20 @@ _MAPPING = {
     'force_relay':   'FORCE_RELAY',
 }
 
-# Env-keys that the JSON layer is currently responsible for, so on
-# reload we can safely clear them before re-applying the fresh JSON.
-# A key that came from a real OS env var (set before this module was
-# ever imported) is NOT in this set and will be left alone.
+# Env-ключи, за которые сейчас отвечает JSON-слой, чтобы при reload их можно
+# было безопасно очистить перед повторным применением свежего JSON. Ключ,
+# пришедший из реальной env-переменной ОС (выставленной до первого импорта
+# этого модуля), в это множество НЕ попадает и остаётся нетронутым.
 _MANAGED_KEYS: set[str] = set()
 
 
 def apply_to_env() -> None:
-    """Project the JSON config into os.environ so pydantic-settings picks
-    it up. Real OS env vars set before the first call always take
-    precedence. Subsequent calls reset previously-managed keys so that
-    clearing a field in Settings UI actually unsets it."""
-    # Remove anything we set on a previous pass so an empty JSON value
-    # really empties the env, not just keeps the stale one.
+    """Проецирует JSON-конфиг в os.environ, чтобы pydantic-settings его
+    подхватил. Реальные env-переменные ОС, выставленные до первого вызова,
+    всегда имеют приоритет. Последующие вызовы сбрасывают ранее управляемые
+    ключи, чтобы очистка поля в Settings UI реально снимала значение."""
+    # Удаляем всё, что выставили на прошлом проходе, чтобы пустое JSON-значение
+    # реально опустошало env, а не оставляло устаревшее.
     for env_key in list(_MANAGED_KEYS):
         os.environ.pop(env_key, None)
     _MANAGED_KEYS.clear()
@@ -93,7 +92,7 @@ def apply_to_env() -> None:
         return
     for json_key, env_key in _MAPPING.items():
         if env_key in os.environ:
-            # Real OS env var set externally - leave it alone.
+            # Реальная env-переменная ОС выставлена снаружи — не трогаем.
             continue
         value = data.get(json_key)
         if value is None or value == '':

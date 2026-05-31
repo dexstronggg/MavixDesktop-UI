@@ -22,7 +22,6 @@ from PySide6.QtCore import QTimer
 
 from mavixdesktop.core.logger import logger
 
-
 _MOCK_DRONES = [
     {'drone_id': 'demo-online-0001', 'online': True},
     {'drone_id': 'demo-offline-0002', 'online': False},
@@ -59,7 +58,7 @@ class DemoConnectionManager:
 
     def __init__(self, bridge) -> None:
         self._bridge = bridge
-        logger.info('[demo] connection manager activated; no real server calls')
+        logger.info('[demo] connection manager активирован; реальных вызовов сервера нет')
 
     @property
     def coordinator(self):
@@ -70,7 +69,7 @@ class DemoConnectionManager:
         return None
 
     def login(self, email: str, password: str) -> None:
-        logger.info('[demo] accepting login email=%s (any password ok)', email)
+        logger.info('[demo] принимаю вход email=%s (любой пароль подходит)', email)
         # Небольшая задержка, чтобы login_page успел показать spinner и
         # переход выглядел как настоящий.
         QTimer.singleShot(150, self._bridge.login_succeeded.emit)
@@ -94,7 +93,7 @@ class DemoConnectionManager:
         # FC. Это нужно для визуальной проверки дизайна drone-view экрана
         # (раньше тут эмитился connect_failed, и пользователя сразу
         # выкидывало обратно к списку с баннером «Камеры не найдены»).
-        logger.info('[demo] select_drone(%s) — эмитирую mock cameras+FC', drone_id)
+        logger.info('[demo] select_drone(%s) — эмитирую mock-камеры и FC', drone_id)
         QTimer.singleShot(120, lambda: self._bridge.config_received.emit(list(_MOCK_CAMERAS)))
         QTimer.singleShot(140, lambda: self._bridge.fc_info_received.emit(*_MOCK_FC))
 
@@ -107,4 +106,4 @@ class DemoConnectionManager:
     def request_password_reset(self, email: str) -> None:
         # В демо никуда не ходим — но логируем, чтобы UI-флоу был виден
         # в консоли при ручном тестировании.
-        logger.info('[demo] password reset requested for %s (no-op)', email)
+        logger.info('[demo] запрошено восстановление пароля для %s (no-op)', email)

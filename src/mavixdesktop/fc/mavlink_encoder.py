@@ -1,32 +1,31 @@
-"""MAVLink v2 packet builders for the Mavix → PX4 joystick path.
+"""Построители MAVLink v2 пакетов для пути joystick Mavix → PX4.
 
-Mavix replaces QGroundControl as the manual-control GCS: stick positions
-from the gamepad get encoded as `MANUAL_CONTROL` and shipped to the FC at
-~50 Hz via the WebRTC packet data-channel. Board-side `MavlinkController`
-forwards raw bytes to the FC's UART without inspecting them.
+Mavix заменяет QGroundControl в роли GCS ручного управления: позиции стиков
+с геймпада кодируются как `MANUAL_CONTROL` и отправляются на FC с частотой
+~50 Hz по WebRTC packet data-channel. На стороне платы `MavlinkController`
+пересылает сырые байты в UART FC, не разбирая их.
 
-For PX4 to accept these:
-  * `COM_RC_IN_MODE=1` (joystick only) — already in the operator's setup
-    notes (настройка_px4.md).
-  * A heartbeat from this GCS (sysid=255, compid=190) at ≥1 Hz, otherwise
-    PX4 triggers RC-loss failsafe.
-  * The flight mode must be set explicitly: PX4 has no «default mode at
-    boot» param, so without an explicit `SET_MODE` it stays in Hold.
+Чтобы PX4 их принимал:
+  * `COM_RC_IN_MODE=1` (только joystick) — уже в заметках по настройке
+    оператора (настройка_px4.md).
+  * Heartbeat от этого GCS (sysid=255, compid=190) с частотой ≥1 Hz, иначе
+    PX4 срабатывает RC-loss failsafe.
+  * Режим полёта надо задавать явно: у PX4 нет параметра «режим по
+    умолчанию при загрузке», поэтому без явного `SET_MODE` он остаётся в Hold.
 
-This module is stateful only as far as MAVLink2 sequence numbers go —
-pymavlink's `MAVLink` instance increments them on `pack()`. One instance
-per peer (target FC) is fine; we reuse it for every packet of this run.
+Модуль хранит состояние только в части sequence-номеров MAVLink2 — экземпляр
+`MAVLink` из pymavlink инкрементирует их на `pack()`. Один экземпляр на пир
+(целевой FC) — нормально; переиспользуем его для каждого пакета этого запуска.
 """
 from __future__ import annotations
 
 from pymavlink.dialects.v20 import common as mavlink
 
-
-# Source identity of this GCS. 255/190 is the convention QGC also uses.
+# Идентичность источника этого GCS. 255/190 — конвенция, которую использует и QGC.
 SRC_SYSTEM = 255
 SRC_COMPONENT = 190
 
-# Default FC peer. PX4 starts at sysid=1, compid=1 (autopilot).
+# FC-пир по умолчанию. PX4 стартует с sysid=1, compid=1 (autopilot).
 TARGET_SYSTEM_DEFAULT = 1
 TARGET_COMPONENT_DEFAULT = 1
 
@@ -41,19 +40,20 @@ PX4_MAIN_MODES = {
 PX4_MAIN_MODE_AUTO = 4
 PX4_AUTO_SUB_RTL = 5
 
-ARM_FORCE_MAGIC = 21196  # MAV_CMD_COMPONENT_ARM_DISARM param2 for force-arm
+ARM_FORCE_MAGIC = 21196  # MAV_CMD_COMPONENT_ARM_DISARM param2 для force-arm
 
 
 class MavlinkEncoder:
-    """Builds raw MAVLink2 byte frames for outbound packets."""
+    """Строит сырые MAVLink2 байтовые кадры для исходящих пакетов."""
 
     def __init__(
         self,
         target_system: int = TARGET_SYSTEM_DEFAULT,
         target_component: int = TARGET_COMPONENT_DEFAULT,
     ) -> None:
-        # pymavlink wants a file argument; we never call send() so it can
-        # be a stub. msg.pack(mav) returns the wire bytes directly.
+        # pymavlink требует аргумент file; мы никогда не вызываем send(),
+        # поэтому он может быть заглушкой. msg.pack(mav) сразу возвращает
+        # байты для провода.
         self._mav = mavlink.MAVLink(
             file=None, srcSystem=SRC_SYSTEM, srcComponent=SRC_COMPONENT,
         )
@@ -61,8 +61,8 @@ class MavlinkEncoder:
         self.target_component = target_component
 
     def heartbeat(self) -> bytes:
-        """GCS heartbeat — PX4 uses this to detect that the operator is
-        still alive. Required at ≥1 Hz."""
+        """Heartbeat GCS — PX4 по нему понимает, что оператор ещё жив.
+        Требуется с частотой ≥1 Hz."""
         msg = self._mav.heartbeat_encode(
             mavlink.MAV_TYPE_GCS,
             mavlink.MAV_AUTOPILOT_INVALID,
@@ -80,14 +80,14 @@ class MavlinkEncoder:
         roll: float,
         buttons: int = 0,
     ) -> bytes:
-        """All sticks in -1.0 … 1.0 (throttle: -1=down, +1=up).
+        """Все стики в -1.0 … 1.0 (throttle: -1=вниз, +1=вверх).
 
-        MANUAL_CONTROL semantics for PX4:
-          x = pitch  (-1000…1000, +1000 nose-up)
-          y = roll   (-1000…1000, +1000 right roll)
-          z = throttle (in PX4 manual mode: 0…1000, where 0 = idle/no thrust,
-                        1000 = full thrust; we map -1..1 → 0..1000)
-          r = yaw    (-1000…1000, +1000 yaw right)
+        Семантика MANUAL_CONTROL для PX4:
+          x = pitch  (-1000…1000, +1000 нос вверх)
+          y = roll   (-1000…1000, +1000 крен вправо)
+          z = throttle (в manual-режиме PX4: 0…1000, где 0 = idle/нет тяги,
+                        1000 = полная тяга; мы маппим -1..1 → 0..1000)
+          r = yaw    (-1000…1000, +1000 рыскание вправо)
         """
         msg = self._mav.manual_control_encode(
             target=self.target_system,
@@ -146,9 +146,9 @@ class MavlinkEncoder:
         return self._pack(msg)
 
     def arm_disarm(self, arm: bool, force: bool = False) -> bytes:
-        """COMMAND_LONG MAV_CMD_COMPONENT_ARM_DISARM. `force=True` sets
-        the 21196 magic in param2 which bypasses the commander's remaining
-        pre-arm checks — useful for bench tests but unsafe in flight."""
+        """COMMAND_LONG MAV_CMD_COMPONENT_ARM_DISARM. `force=True` ставит
+        magic 21196 в param2, что обходит оставшиеся pre-arm проверки
+        commander'а — удобно для стендовых тестов, но небезопасно в полёте."""
         msg = self._mav.command_long_encode(
             target_system=self.target_system,
             target_component=self.target_component,
@@ -164,12 +164,12 @@ class MavlinkEncoder:
         )
         return self._pack(msg)
 
-    def _pack(self, msg) -> bytes:
+    def _pack(self, msg: object) -> bytes:
         return msg.pack(self._mav)
 
 
 def _to_axis(value: float) -> int:
-    """Clamp and scale a -1..1 stick value to MAVLink's -1000..1000."""
+    """Зажимает и масштабирует значение стика -1..1 в MAVLink-диапазон -1000..1000."""
     if value < -1.0:
         value = -1.0
     elif value > 1.0:
@@ -178,9 +178,9 @@ def _to_axis(value: float) -> int:
 
 
 def _to_throttle(value: float) -> int:
-    """Map a -1..1 throttle stick to PX4's 0..1000 thrust range.
+    """Маппит throttle-стик -1..1 в PX4-диапазон тяги 0..1000.
 
-    -1 (stick fully down) → 0 (no thrust), +1 (fully up) → 1000.
+    -1 (стик в самый низ) → 0 (нет тяги), +1 (в самый верх) → 1000.
     """
     if value < -1.0:
         value = -1.0

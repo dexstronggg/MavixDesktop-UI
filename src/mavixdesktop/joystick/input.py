@@ -1,19 +1,15 @@
-"""Read calibrated stick positions and ARM state from a pygame Joystick."""
+"""Чтение калиброванных позиций стиков и состояния ARM из pygame Joystick."""
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import pygame
 
 
 class JoystickInput:
-    """Wraps a pygame Joystick with a calibration dict.
+    """Оборачивает pygame Joystick словарём калибровки.
 
-    The dict is the same shape produced by calibration.save():
-      axis_thr / axis_yaw / axis_pitch / axis_roll → which axis index reads each stick
-      <name>_min / _max / _center → normalisation bounds
+    Словарь той же формы, что выдаёт calibration.save():
+      axis_thr / axis_yaw / axis_pitch / axis_roll → индекс оси для каждого стика
+      <name>_min / _max / _center → границы нормализации
       arm_type ('axis' | 'button'), arm_axis_index / arm_button_index
     """
 
@@ -29,48 +25,26 @@ class JoystickInput:
         self._pump_events = pump_events
         self._arm = False
         self._arm_btn_prev = 0
-        # Track the instance_id so we can match the device-removed event
-        # against this specific joystick (in case the user has more than
-        # one connected). Falls back to True if pygame can't tell us yet.
+        # Запоминаем instance_id, чтобы сопоставлять событие device-removed
+        # именно с этим joystick (если у пользователя подключено больше
+        # одного). Падает в None, если pygame пока не может сообщить.
         try:
             self._instance_id = self._js.get_instance_id()
         except Exception:
             self._instance_id = None
         self._connected = True
 
-    def is_connected(self) -> bool:
-        """Return False once pygame thinks the device is gone. Used by
-        FlightWindow to trip an emergency-disarm if the gamepad is yanked
-        mid-flight.
-
-        We avoid pygame.event.get(typeFilter) here — its signature changed
-        across pygame versions and 2.6 on Linux raises `SystemError` when
-        called from the wrong subsystem state. Instead we just pump
-        events and probe the joystick API directly: if the device is
-        gone, get_numaxes/get_init starts throwing pygame.error."""
-        if not self._connected:
-            return False
-        import pygame
-        try:
-            pygame.event.pump()
-            # Direct liveness probe — pygame raises pygame.error after
-            # detach on every platform we care about.
-            self._js.get_numaxes()
-            if not self._js.get_init():
-                self._connected = False
-                return False
-        except (pygame.error, SystemError):
-            self._connected = False
-            return False
-        return True
-
     @property
     def name(self) -> str:
         return self._js.get_name()
 
     def is_connected(self) -> bool:
-        """True пока pygame ещё видит этот джойстик. Pump-им очередь, чтобы
-        JOYDEVICEREMOVED успел обновить состояние."""
+        """True, пока pygame ещё видит этот joystick. Прокачиваем очередь
+        событий, чтобы JOYDEVICEREMOVED успел обновить состояние.
+
+        Используется FlightWindow для аварийного disarm, если геймпад
+        выдернули в полёте.
+        """
         import pygame
         if self._pump_events:
             pygame.event.pump()
@@ -85,7 +59,7 @@ class JoystickInput:
             return False
 
     def get_stick_positions(self) -> tuple[float, float, float, float]:
-        """Returns (throttle, yaw, pitch, roll) in [-1, 1]."""
+        """Возвращает (throttle, yaw, pitch, roll) в диапазоне [-1, 1]."""
         if self._pump_events:
             import pygame
             pygame.event.pump()
@@ -97,7 +71,7 @@ class JoystickInput:
         )
 
     def is_armed(self) -> bool:
-        """Returns the current ARM state, polling button transitions if needed."""
+        """Возвращает текущее состояние ARM, при необходимости опрашивая переходы кнопки."""
         arm_type = self._cal.get('arm_type', 'button')
         if arm_type == 'axis':
             idx = self._cal.get('arm_axis_index', 0)

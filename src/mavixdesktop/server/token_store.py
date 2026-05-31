@@ -1,7 +1,7 @@
-"""Token storage backed by the OS keyring, with a plain-file fallback.
+"""Хранилище токенов поверх OS keyring с фолбэком на обычный файл.
 
-Access tokens are short-lived (~15 min) and never persisted; only the
-refresh token survives across launches.
+Access-токены короткоживущие (~15 мин) и не сохраняются; между запусками
+переживает только refresh-токен.
 """
 from __future__ import annotations
 
@@ -33,20 +33,20 @@ def _read_file() -> dict:
 def _write_file(data: dict) -> None:
     p = _file_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    # Refresh token is a long-lived credential; the file fallback is used
-    # when the OS keyring is unavailable. Restrict to owner-only r/w so
-    # other local accounts cannot read it. O_CREAT|mode only applies if
-    # the file is being created; chmod after handles pre-existing files
-    # that may have looser permissions.
+    # Refresh-токен — долгоживущий credential; файловый фолбэк используется,
+    # когда OS keyring недоступен. Ограничиваем доступ только владельцу (r/w),
+    # чтобы другие локальные учётки не могли его прочитать. O_CREAT|mode
+    # применяется только при создании файла; chmod после обрабатывает уже
+    # существующие файлы с возможно более слабыми правами.
     fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, 'w') as f:
         f.write(json.dumps(data))
     os.chmod(p, 0o600)
 
 
-def _keyring():
-    """Lazy import — tests that don't want to touch the OS keyring just
-    skip importing this module's load/save functions or monkeypatch."""
+def _keyring() -> object | None:
+    """Ленивый импорт — тесты, не желающие трогать OS keyring, просто не
+    импортируют load/save этого модуля или подменяют через monkeypatch."""
     try:
         import keyring  # type: ignore
         return keyring
@@ -62,12 +62,12 @@ def save(email: str, refresh_token: str) -> None:
             kr.set_password(settings.keyring_service, _EMAIL_KEY, email)
             return
         except Exception as exc:
-            logger.warning('[token] keyring write failed (%s), falling back to file', exc)
+            logger.warning('[token] запись в keyring не удалась (%s), откат на файл', exc)
     _write_file({_REFRESH_KEY: refresh_token, _EMAIL_KEY: email})
 
 
 def load() -> tuple[str | None, str | None]:
-    """Returns (email, refresh_token); either or both may be None."""
+    """Возвращает (email, refresh_token); любое или оба значения могут быть None."""
     kr = _keyring()
     if kr is not None:
         try:
@@ -76,7 +76,7 @@ def load() -> tuple[str | None, str | None]:
             if token is not None:
                 return email, token
         except Exception as exc:
-            logger.debug('[token] keyring read failed (%s), trying file', exc)
+            logger.debug('[token] чтение keyring не удалось (%s), пробуем файл', exc)
     data = _read_file()
     return data.get(_EMAIL_KEY), data.get(_REFRESH_KEY)
 
@@ -94,4 +94,4 @@ def clear() -> None:
         try:
             p.unlink()
         except OSError as exc:
-            logger.debug('[token] file unlink error: %s', exc)
+            logger.debug('[token] ошибка удаления файла: %s', exc)

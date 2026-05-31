@@ -11,13 +11,13 @@ class ApiError(Exception):
 
 
 class ApiSession:
-    """HTTP client for MavixServer REST API: login, refresh, ice-servers, list-drones."""
+    """HTTP-клиент REST API MavixServer: login, refresh, ice-servers, list-drones."""
 
     def __init__(self, session: aiohttp.ClientSession) -> None:
         self._session = session
 
     @classmethod
-    async def create(cls) -> 'ApiSession':
+    async def create(cls) -> ApiSession:
         return cls(aiohttp.ClientSession())
 
     async def close(self) -> None:
@@ -31,7 +31,7 @@ class ApiSession:
                 data = await r.json()
                 return data.get('status') == 'ok'
         except aiohttp.ClientError as exc:
-            logger.debug('health check error: %s', exc)
+            logger.debug('[api] ошибка проверки health: %s', exc)
             return False
 
     async def login(self, email: str, password: str) -> dict:
@@ -41,7 +41,7 @@ class ApiSession:
         ) as r:
             data = await r.json()
             if r.status != 200:
-                raise ApiError(data.get('detail', 'login failed'))
+                raise ApiError(data.get('detail', 'вход не удался'))
             return data
 
     async def refresh(self, refresh_token: str) -> dict:
@@ -51,7 +51,7 @@ class ApiSession:
         ) as r:
             data = await r.json()
             if r.status != 200:
-                raise ApiError(data.get('detail', 'refresh failed'))
+                raise ApiError(data.get('detail', 'обновление токена не удалось'))
             return data
 
     async def password_reset_request(self, email: str) -> dict:
@@ -68,7 +68,7 @@ class ApiSession:
             except Exception:
                 data = {}
             if r.status != 200:
-                raise ApiError(data.get('detail', 'password reset request failed'))
+                raise ApiError(data.get('detail', 'запрос восстановления пароля не удался'))
             return data
 
     async def ice_servers(self) -> list[dict]:
@@ -80,11 +80,11 @@ class ApiSession:
                 servers = data.get('ice_servers', [])
                 return servers if isinstance(servers, list) else []
         except aiohttp.ClientError as exc:
-            logger.warning('ice-servers fetch error: %s', exc)
+            logger.warning('[api] ошибка получения ice-servers: %s', exc)
             return []
 
     async def delete_drone(self, drone_id: str, access_token: str) -> None:
-        """Удалить дрон по REST API. Кидает ApiError на любую ошибку
+        """Удаляет дрон по REST API. Кидает ApiError на любую ошибку
         кроме 204."""
         url = f'{settings.http_url}/api/v1/drones/{drone_id}'
         headers = {'Authorization': f'Bearer {access_token}'}

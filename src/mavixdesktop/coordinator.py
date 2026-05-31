@@ -1,12 +1,12 @@
-"""Top-level session coordinator for the desktop side.
+"""Координатор сессии верхнего уровня для desktop-стороны.
 
-Wires together:
-  - SignalClient   — WebSocket transport to /ws/gcs
-  - ApiSession     — REST for login / refresh / ice-servers
-  - WebRTCManager  — one PeerSession + DataChannelHub at a time
-  - MavlinkRelay   — UDP bridge to QGC (started when an FC of type=mavlink
-                     becomes known on the config-channel)
-  - encoder.build_rc_frame — joystick → CRSF, when FC is type=crsf
+Связывает вместе:
+  - SignalClient   — WebSocket-транспорт к /ws/gcs
+  - ApiSession     — REST для login / refresh / ice-servers
+  - WebRTCManager  — один PeerSession + DataChannelHub за раз
+  - MavlinkRelay   — UDP-мост к QGC (запускается, когда на config-канале
+                     становится известен FC типа mavlink)
+  - encoder.build_rc_frame — joystick → CRSF, когда FC типа crsf
 """
 from __future__ import annotations
 
@@ -30,14 +30,15 @@ if TYPE_CHECKING:
 
 
 def _local_ice_servers() -> list[dict]:
-    """Build the ICE-server list from local config (config.py / Settings UI).
+    """Собирает список ICE-серверов из локального конфига (config.py / Settings UI).
 
-    Entries use the same shape as ApiSession.ice_servers(), so
-    _build_configuration treats both sources identically — STUN and TURN
-    are both included and the force_relay flag decides which is used.
+    Записи имеют ту же форму, что и ApiSession.ice_servers(), поэтому
+    _build_configuration обрабатывает оба источника одинаково — STUN и TURN
+    включаются оба, а флаг force_relay решает, какой используется.
 
-    Returns [] only when neither STUN nor TURN is configured; that empty
-    result is the caller's signal to fall back to /api/v1/ice-servers."""
+    Возвращает [] только когда не настроены ни STUN, ни TURN; этот пустой
+    результат — сигнал вызывающему откатиться на /api/v1/ice-servers.
+    """
     servers: list[dict] = []
     if settings.stun_server:
         servers.append({'urls': settings.stun_server})
@@ -58,7 +59,7 @@ class SessionCoordinator:
         api_session: ApiSession,
         refresh_token: str,
         backoff: ExponentialBackoff | None = None,
-        on_track: Callable[['MediaStreamTrack'], None] | None = None,
+        on_track: Callable[[MediaStreamTrack], None] | None = None,
     ) -> None:
         self._signal_client = signal_client
         self._api = api_session
@@ -100,7 +101,7 @@ class SessionCoordinator:
         return list(self._latest_cameras)
 
     async def send_bitrate_update(self, updates: list[dict]) -> None:
-        """Send {type:bitrate, updates:[{device_index, bitrate_kbs}, ...]} via config channel."""
+        """Отправляет {type:bitrate, updates:[{device_index, bitrate_kbs}, ...]} по config-каналу."""
         if self._manager is None or self._manager.channels is None:
             return
         config_ch = self._manager.channels.config
@@ -109,12 +110,11 @@ class SessionCoordinator:
         config_ch.send_json({'type': 'bitrate', 'updates': updates})
 
     async def send_params_update(self, updates: list[dict]) -> None:
-        """Send {type:params, updates:[{device_index, param_index}, ...]} via config channel.
+        """Отправляет {type:params, updates:[{device_index, param_index}, ...]} по config-каналу.
 
-        Changing resolution/FPS requires rebuilding the GStreamer pipeline,
-        so the board tears down the current session after persisting; the
-        GCS will auto-reconnect and the new pipeline is built with the new
-        param_index.
+        Смена разрешения/FPS требует пересборки GStreamer-пайплайна, поэтому
+        плата после сохранения разрывает текущую сессию; GCS авто-переподключается,
+        и новый пайплайн собирается уже с новым param_index.
         """
         if self._manager is None or self._manager.channels is None:
             return
@@ -124,9 +124,9 @@ class SessionCoordinator:
         config_ch.send_json({'type': 'params', 'updates': updates})
 
     async def send_calibrate(self) -> None:
-        """Send {type:calibrate} via config channel. Board drops saved
-        calibrations and tears down the session; auto-reconnect rebuilds
-        the pipeline with a fresh full calibration of every camera."""
+        """Отправляет {type:calibrate} по config-каналу. Плата сбрасывает
+        сохранённые калибровки и разрывает сессию; авто-переподключение
+        пересобирает пайплайн со свежей полной калибровкой всех камер."""
         if self._manager is None or self._manager.channels is None:
             return
         config_ch = self._manager.channels.config
@@ -137,37 +137,37 @@ class SessionCoordinator:
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
-        # Local config (config.py / Settings UI) wins outright: if any STUN
-        # or TURN is set there, we use exactly that and never call the API.
-        # Only when local config is completely empty do we ask the server.
+        # Локальный конфиг (config.py / Settings UI) имеет безусловный приоритет:
+        # если там задан хотя бы один STUN или TURN, используем ровно его и не
+        # обращаемся к API. К серверу идём, только когда локальный конфиг пуст.
         ice_servers = _local_ice_servers()
         if ice_servers:
-            logger.info('[coord] using %d ICE server(s) from local config', len(ice_servers))
+            logger.info('[coord] используем %d ICE-сервер(ов) из локального конфига', len(ice_servers))
         else:
             ice_servers = await self._api.ice_servers()
-            logger.info('[coord] local ICE config empty — using %d server(s) from API', len(ice_servers))
+            logger.info('[coord] локальный ICE-конфиг пуст — используем %d сервер(ов) из API', len(ice_servers))
         self._manager = WebRTCManager(send=self._signal_client.send, ice_servers=ice_servers)
         self._manager.on_track = self.on_track
-        # Fires per channel attached (packet/ping/config). Idempotent —
-        # see _wire_channels_to_fc. Must NOT fire from _handle_sdp because
-        # at that point DTLS+SCTP haven't completed and the hub is empty.
+        # Срабатывает на каждый прикреплённый канал (packet/ping/config).
+        # Идемпотентно — см. _wire_channels_to_fc. НЕ должно вызываться из
+        # _handle_sdp: на тот момент DTLS+SCTP ещё не завершены, а hub пуст.
         self._manager.on_channel_attached = lambda _label: self._wire_channels_to_fc()
 
         while not self._stop_event.is_set():
             connected = await self._signal_client.connect()
             if not connected:
                 delay = self._backoff.next_delay()
-                logger.info('[coord] signal connect failed, retry in %.1fs', delay)
+                logger.info('[coord] не удалось подключиться к сигналингу, повтор через %.1fs', delay)
                 await asyncio.sleep(delay)
                 continue
-            logger.info('[coord] connected to signal server')
+            logger.info('[coord] подключились к сигнальному серверу')
             self._backoff.reset()
             try:
                 await self._signal_client.listen(self._on_message)
             except websockets.exceptions.ConnectionClosed as exc:
-                logger.warning('[coord] signal closed: %s', exc)
+                logger.warning('[coord] сигналинг закрыт: %s', exc)
             except Exception as exc:
-                logger.error('[coord] listen error: %s', exc)
+                logger.error('[coord] ошибка listen: %s', exc)
             finally:
                 await self._teardown_session()
                 await self._signal_client.disconnect()
@@ -178,7 +178,7 @@ class SessionCoordinator:
             self._stop_event.set()
 
     async def request_connect(self, drone_id: str) -> None:
-        """UI calls this when the user clicks a drone to start streaming."""
+        """Вызывается из UI, когда пользователь кликает по дрону для старта стрима."""
         self._target_drone_id = drone_id
         self._connect_request_at = time.monotonic()
         if self._manager is not None:
@@ -197,7 +197,7 @@ class SessionCoordinator:
         await self._signal_client.send({'type': 'list_drones'})
 
     def send_joystick_packet(self, frame: bytes) -> None:
-        """Bridge: every tick of the UI joystick loop sends one CRSF frame."""
+        """Мост: каждый тик joystick-цикла UI отправляет один CRSF-кадр."""
         if self._manager is None or self._manager.channels is None:
             return
         packet = self._manager.channels.packet
@@ -216,15 +216,14 @@ class SessionCoordinator:
                 await self._handle_ice(msg)
             case 'drone_disconnected':
                 drone_id = msg.get('drone_id')
-                # Distinguish "session never came up" (board dropped the peer
-                # before SDP — e.g. no cameras / pipeline broken) from a
-                # mid-flight teardown (board renegotiating after params/
-                # camera-hotplug). If the disconnect arrives within 10s of
-                # our request_connect for this same drone, the GCS hasn't
-                # ever seen video → treat as a hard connect-failure: surface
-                # to the UI and DO NOT auto-reconnect (otherwise we'd loop
-                # while the board keeps rejecting connect because cameras
-                # are still missing).
+                # Отличаем «сессия так и не поднялась» (плата сбросила пир до
+                # SDP — например, нет камер / сломан пайплайн) от teardown в
+                # процессе (плата перепереговаривается после params/
+                # camera-hotplug). Если disconnect приходит в пределах 10s от
+                # нашего request_connect по этому же дрону, GCS вообще не видел
+                # видео → трактуем как жёсткий connect-failure: показываем в UI
+                # и НЕ авто-переподключаемся (иначе зациклимся, пока плата
+                # отвергает connect из-за всё ещё отсутствующих камер).
                 is_connect_failure = (
                     isinstance(drone_id, str)
                     and self._target_drone_id == drone_id
@@ -233,15 +232,15 @@ class SessionCoordinator:
                 )
                 self._connect_request_at = None
                 if is_connect_failure:
-                    logger.info('[coord] drone %s disconnected during connect; not retrying', drone_id)
+                    logger.info('[coord] дрон %s отключился во время connect; без повтора', drone_id)
                     await self._teardown_session()
                     if self.on_connect_failed is not None:
                         try:
                             self.on_connect_failed(drone_id)
                         except Exception as exc:
-                            logger.warning('[coord] on_connect_failed error: %s', exc)
+                            logger.warning('[coord] ошибка on_connect_failed: %s', exc)
                     return
-                logger.info('[coord] drone disconnected: %s; will auto-reconnect when it returns', drone_id)
+                logger.info('[coord] дрон отключился: %s; авто-переподключение при возврате', drone_id)
                 if isinstance(drone_id, str) and self._target_drone_id == drone_id:
                     self._reconnect_drone_id = drone_id
                 await self._teardown_session()
@@ -249,7 +248,7 @@ class SessionCoordinator:
                     try:
                         self.on_drone_disconnected(drone_id)
                     except Exception as exc:
-                        logger.warning('[coord] on_drone_disconnected error: %s', exc)
+                        logger.warning('[coord] ошибка on_drone_disconnected: %s', exc)
                 if self._reconnect_drone_id is not None:
                     await self.request_drone_list()
             case 'auth_warning':
@@ -257,7 +256,7 @@ class SessionCoordinator:
             case 'auth_refreshed':
                 await self._handle_auth_refreshed(msg)
             case 'shutdown':
-                logger.info('[coord] server shutdown notice')
+                logger.info('[coord] уведомление о завершении работы сервера')
                 await self._teardown_session()
             case 'ping':
                 await self._signal_client.send({'type': 'pong'})
@@ -265,16 +264,16 @@ class SessionCoordinator:
                 pass
             case 'error':
                 err = msg.get('message')
-                logger.warning('[coord] server error: %s', err)
+                logger.warning('[coord] ошибка сервера: %s', err)
                 if self.on_error is not None and isinstance(err, str):
                     try:
                         self.on_error(err)
                     except Exception as exc:
-                        logger.warning('[coord] on_error callback error: %s', exc)
+                        logger.warning('[coord] ошибка колбэка on_error: %s', exc)
             case _:
-                logger.debug('[coord] unknown message type: %s', kind)
+                logger.debug('[coord] неизвестный тип сообщения: %s', kind)
 
-    async def _handle_drones(self, drones) -> None:
+    async def _handle_drones(self, drones: object) -> None:
         if not isinstance(drones, list):
             return
         self._latest_drones = drones
@@ -282,11 +281,11 @@ class SessionCoordinator:
             try:
                 self.on_drones_changed(self._latest_drones)
             except Exception as exc:
-                logger.warning('[coord] on_drones_changed error: %s', exc)
-        # Auto-reconnect: if we lost a drone and it has now come back online, re-connect.
-        # Check active_drone_id rather than `_manager is None` — the manager
-        # itself is kept alive across teardowns (it's reusable); a torn-down
-        # session is signalled by `_peer is None`, i.e. active_drone_id is None.
+                logger.warning('[coord] ошибка on_drones_changed: %s', exc)
+        # Авто-переподключение: если потеряли дрон и он снова в сети — переподключаемся.
+        # Проверяем active_drone_id, а не `_manager is None` — сам менеджер
+        # переживает teardown'ы (он переиспользуем); разорванная сессия
+        # сигнализируется через `_peer is None`, то есть active_drone_id is None.
         manager_idle = self._manager is None or self._manager.active_drone_id is None
         if self._reconnect_drone_id is not None and manager_idle:
             entry = next(
@@ -296,21 +295,21 @@ class SessionCoordinator:
             if entry is not None:
                 target = self._reconnect_drone_id
                 self._reconnect_drone_id = None
-                logger.info('[coord] auto-reconnecting to drone %s', target)
+                logger.info('[coord] авто-переподключение к дрону %s', target)
                 await self.request_connect(target)
             else:
-                # Drone isn't in the refreshed list as online: this isn't a
-                # renegotiation blip — the board's WS is genuinely gone (crash,
-                # network, power). Stop waiting for it to come back and let
-                # the UI navigate the user out of drone-view.
+                # Дрона нет в обновлённом списке как online: это не моргание
+                # перепереговоров — WS платы реально пропал (краш, сеть,
+                # питание). Перестаём ждать его возврата и даём UI увести
+                # пользователя из drone-view.
                 offline_id = self._reconnect_drone_id
                 self._reconnect_drone_id = None
-                logger.info('[coord] drone %s confirmed offline; giving up reconnect', offline_id)
+                logger.info('[coord] дрон %s подтверждённо offline; прекращаем переподключение', offline_id)
                 if self.on_drone_offline is not None:
                     try:
                         self.on_drone_offline(offline_id)
                     except Exception as exc:
-                        logger.warning('[coord] on_drone_offline error: %s', exc)
+                        logger.warning('[coord] ошибка on_drone_offline: %s', exc)
 
     async def _handle_sdp(self, msg: dict) -> None:
         if self._manager is None:
@@ -319,15 +318,15 @@ class SessionCoordinator:
         sdp = msg.get('sdp')
         if not isinstance(drone_id, str) or not isinstance(sdp, dict):
             return
-        # First SDP from the drone in a session arrives as the offer; manager
-        # handles only that direction (the answer was already sent by us).
-        # FC wiring used to be done eagerly here, but at this point DTLS+SCTP
-        # haven't completed yet — hub.packet / hub.config are still None.
-        # The manager now invokes _wire_channels_to_fc via on_channel_attached
-        # when each data channel actually shows up on the aiortc PC.
+        # Первый SDP от дрона в сессии приходит как offer; менеджер
+        # обрабатывает только это направление (answer мы уже отправили).
+        # Раньше FC-привязка делалась здесь сразу, но на этот момент DTLS+SCTP
+        # ещё не завершены — hub.packet / hub.config всё ещё None.
+        # Теперь менеджер вызывает _wire_channels_to_fc через on_channel_attached,
+        # когда каждый data-канал реально появляется на aiortc PC.
         if sdp.get('type') == 'offer':
-            # SDP arrived — connect is in progress; clear the connect-failure
-            # window so a later disconnect is treated as a normal teardown.
+            # SDP пришёл — connect в процессе; сбрасываем окно connect-failure,
+            # чтобы более поздний disconnect трактовался как обычный teardown.
             self._connect_request_at = None
             await self._manager.handle_offer(drone_id, sdp)
 
@@ -340,37 +339,37 @@ class SessionCoordinator:
             await self._manager.handle_ice(drone_id, cand)
 
     async def _handle_auth_refreshed(self, msg: dict) -> None:
-        """Server confirms a refresh — its new access token replaces ours.
-        Also accept the server-emitted access token directly (in case our REST
-        refresh returned an older one).
+        """Сервер подтверждает refresh — его новый access-токен заменяет наш.
+        Также принимаем access-токен прямо от сервера (на случай, если наш
+        REST-refresh вернул более старый).
 
-        If the server also rotated the refresh token (msg['refresh_token']),
-        update the in-memory copy AND the persisted token_store, otherwise
-        the next REST /auth/refresh will fail with a 401 on the stale token.
+        Если сервер ещё и ротировал refresh-токен (msg['refresh_token']),
+        обновляем in-memory копию И сохранённый token_store, иначе следующий
+        REST /auth/refresh упадёт с 401 на устаревшем токене.
         """
         new_access = msg.get('access_token')
         if isinstance(new_access, str) and new_access:
             self._signal_client.update_access_token(new_access)
-            logger.info('[coord] access token updated from server-side refresh')
+            logger.info('[coord] access-токен обновлён из server-side refresh')
         new_refresh = msg.get('refresh_token')
         if isinstance(new_refresh, str) and new_refresh and new_refresh != self._refresh_token:
             self._refresh_token = new_refresh
-            # Persist for next launch — failures are non-fatal (we still
-            # have the in-memory copy for the rest of this session).
+            # Сохраняем для следующего запуска — сбои некритичны (in-memory
+            # копия остаётся доступной до конца этой сессии).
             try:
                 from mavixdesktop.server import token_store
                 email, _ = token_store.load()
                 if email:
                     token_store.save(email, new_refresh)
             except Exception as exc:
-                logger.warning('[coord] refresh-token persist failed: %s', exc)
+                logger.warning('[coord] не удалось сохранить refresh-токен: %s', exc)
 
     async def _handle_auth_warning(self, msg: dict) -> None:
-        logger.info('[coord] auth expiring in %ss, refreshing', msg.get('seconds_left'))
+        logger.info('[coord] срок авторизации истекает через %ss, обновляем', msg.get('seconds_left'))
         try:
             new_access = await self._refresh_now()
         except ApiError as exc:
-            logger.error('[coord] refresh failed: %s', exc)
+            logger.error('[coord] refresh не удался: %s', exc)
             return
         try:
             await self._signal_client.send({
@@ -378,20 +377,20 @@ class SessionCoordinator:
                 'refresh_token': self._refresh_token,
             })
         except Exception as exc:
-            logger.warning('[coord] refresh_auth send error: %s', exc)
+            logger.warning('[coord] ошибка отправки refresh_auth: %s', exc)
         if new_access:
             self._signal_client.update_access_token(new_access)
 
     async def _refresh_now(self) -> str:
-        """Hit /api/v1/auth/refresh. Returns the new access token."""
+        """Обращается к /api/v1/auth/refresh. Возвращает новый access-токен."""
         result = await self._api.refresh(self._refresh_token)
         new_access = result.get('access_token', '')
         if isinstance(new_access, str) and new_access:
             return new_access
-        raise ApiError('refresh returned no access token')
+        raise ApiError('refresh не вернул access-токен')
 
     def _wire_channels_to_fc(self) -> None:
-        """Once data channels exist, plumb the packet channel to the FC."""
+        """Как только data-каналы появились, подключает packet-канал к FC."""
         if self._manager is None or self._manager.channels is None:
             return
         hub = self._manager.channels
@@ -419,7 +418,7 @@ class SessionCoordinator:
             cm = int(payload.get('custom_mode', 0))
             logger.info('[coord] FC armed=%s custom_mode=0x%08x', armed, cm)
         else:
-            logger.debug('[coord] unknown config-channel type: %s', kind)
+            logger.debug('[coord] неизвестный тип config-канала: %s', kind)
 
     def _handle_battery_message(self, payload: dict) -> None:
         try:
@@ -431,13 +430,13 @@ class SessionCoordinator:
             try:
                 self.on_battery_changed(percent, voltage)
             except Exception as exc:
-                logger.warning('[coord] on_battery_changed error: %s', exc)
+                logger.warning('[coord] ошибка on_battery_changed: %s', exc)
 
     def _handle_command_ack_message(self, payload: dict) -> None:
-        """Loud log line for every MAVLink COMMAND_ACK the FC sends back.
-        Result `ACCEPTED` means our SET_MODE / ARM went through; anything
-        else (DENIED / TEMPORARILY_REJECTED / FAILED / UNSUPPORTED) is
-        the FC explaining why the command was refused."""
+        """Громкая лог-строка на каждый MAVLink COMMAND_ACK, который шлёт FC.
+        Result `ACCEPTED` означает, что наш SET_MODE / ARM прошёл; всё остальное
+        (DENIED / TEMPORARILY_REJECTED / FAILED / UNSUPPORTED) — объяснение FC,
+        почему команда была отклонена."""
         cmd = payload.get('command', '?')
         result = payload.get('result', '?')
         if result == 'ACCEPTED':
@@ -456,7 +455,7 @@ class SessionCoordinator:
             try:
                 self.on_fc_changed(kind, name if isinstance(name, str) else '')
             except Exception as exc:
-                logger.warning('[coord] on_fc_changed error: %s', exc)
+                logger.warning('[coord] ошибка on_fc_changed: %s', exc)
 
     def _handle_cameras_message(self, payload: dict) -> None:
         cameras = payload.get('cameras')
@@ -467,7 +466,7 @@ class SessionCoordinator:
             try:
                 self.on_cameras_received(cameras)
             except Exception as exc:
-                logger.warning('[coord] on_cameras_received error: %s', exc)
+                logger.warning('[coord] ошибка on_cameras_received: %s', exc)
 
     def _handle_cameras_changed_message(self, payload: dict) -> None:
         indices = payload.get('device_indices')
@@ -477,10 +476,10 @@ class SessionCoordinator:
             try:
                 self.on_cameras_changed(indices)
             except Exception as exc:
-                logger.warning('[coord] on_cameras_changed error: %s', exc)
+                logger.warning('[coord] ошибка on_cameras_changed: %s', exc)
 
     def _on_config_message(self, payload: dict | list) -> None:
-        # ConfigChannel calls this synchronously; schedule async handler.
+        # ConfigChannel вызывает это синхронно; планируем async-обработчик.
         if self._loop is None:
             return
         self._loop.create_task(self._on_config_message_async(payload))
@@ -501,14 +500,14 @@ class SessionCoordinator:
                 self._mavlink = None
 
     def _on_packet_from_drone(self, data: bytes) -> None:
-        """Drone → packet-channel → here. For MAVLink, forward to QGC."""
+        """Дрон → packet-канал → сюда. Для MAVLink пересылаем в QGC."""
         if self._fc_kind == 'mavlink' and self._mavlink is not None:
             self._mavlink.send_to_qgc(data)
-        # For CRSF, telemetry packets currently have no UI consumer; the UI
-        # may subscribe via the bridge layer to parse them itself.
+        # Для CRSF телеметрийные пакеты пока не имеют потребителя в UI; UI
+        # может подписаться через bridge-слой и парсить их сам.
 
     def _on_qgc_packet(self, data: bytes) -> None:
-        """QGC → UDP socket → here. Forward to drone via packet-channel."""
+        """QGC → UDP-сокет → сюда. Пересылаем дрону через packet-канал."""
         if self._manager is None or self._manager.channels is None:
             return
         packet = self._manager.channels.packet
@@ -517,21 +516,21 @@ class SessionCoordinator:
         packet.send_bytes(data)
 
     async def _teardown_session(self) -> None:
-        # All callers run on the coordinator's own event loop, so we can
-        # just await — no need for run_coroutine_threadsafe (which would
-        # deadlock when scheduled onto the loop currently executing us).
-        # NOTE: keep self._manager alive across teardowns. WebRTCManager's
-        # close_async/end_session leave it in a clean state, and request_connect
-        # only calls start_session when manager is not None — nulling it
-        # here breaks auto-reconnect (e.g. after a params-driven session drop)
-        # and the in-and-out-of-drone-view re-entry path.
+        # Все вызывающие работают на собственном event loop координатора,
+        # поэтому можно просто await — без run_coroutine_threadsafe (который
+        # вызвал бы deadlock при планировании на loop, исполняющий нас сейчас).
+        # ВАЖНО: сохраняем self._manager живым между teardown'ами. close_async/
+        # end_session оставляют WebRTCManager в чистом состоянии, а
+        # request_connect вызывает start_session только когда manager не None —
+        # обнуление здесь ломает авто-переподключение (например, после
+        # params-driven сброса сессии) и путь повторного входа в drone-view.
         if self._manager is not None:
             await self._manager.close_async()
         if self._mavlink is not None:
             try:
                 await self._mavlink.stop()
             except Exception as exc:
-                logger.debug('[coord] mavlink stop error: %s', exc)
+                logger.debug('[coord] ошибка остановки mavlink: %s', exc)
             self._mavlink = None
         self._target_drone_id = None
         self._fc_kind = 'none'
@@ -539,4 +538,4 @@ class SessionCoordinator:
             try:
                 self.on_session_ended()
             except Exception as exc:
-                logger.warning('[coord] on_session_ended error: %s', exc)
+                logger.warning('[coord] ошибка on_session_ended: %s', exc)

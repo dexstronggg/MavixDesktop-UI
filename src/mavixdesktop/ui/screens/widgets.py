@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QWidget
 
 from mavixdesktop.ui.style import theme
 
 
 class StickWidget(QWidget):
-    def __init__(self, label: str = '', parent=None, bg_alpha: int = 255, label_font_px: int = 9):
+    """Виджет-стик: рисует квадрат с точкой текущего положения стика."""
+
+    def __init__(self, label: str = '', parent: QWidget | None = None,
+                 bg_alpha: int = 255, label_font_px: int = 9) -> None:
         super().__init__(parent)
         self.setFixedSize(120, 120)
         self._x = 0.0
@@ -15,12 +20,12 @@ class StickWidget(QWidget):
         self._bg_alpha = bg_alpha
         self._label_font_px = label_font_px
 
-    def set_position(self, x: float, y: float):
+    def set_position(self, x: float, y: float) -> None:
         self._x = max(-1.0, min(1.0, x))
         self._y = max(-1.0, min(1.0, y))
         self.update()
 
-    def paintEvent(self, event):
+    def paintEvent(self, event: QPaintEvent) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height()

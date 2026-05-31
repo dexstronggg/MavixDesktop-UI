@@ -1,24 +1,32 @@
-"""Email + password login screen, used when no refresh token is stored.
+"""Экран входа по email и паролю, используется при отсутствии refresh-токена.
 
 Визуальный язык — Aviation Dark (см. Mavix Web): тёмный фон с лёгким cyan
 свечением, карточка по центру, логотип сверху, поля с иконками,
 full-width primary-кнопка.
 """
+
 from __future__ import annotations
 
 import math
 import time
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt, QTimer, QPointF, QSize
-from PySide6.QtGui import QFont, QPainter, QPen, QRadialGradient, QColor, QIcon
+from PySide6.QtCore import QPointF, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QFrame, QGraphicsDropShadowEffect, QSizePolicy,
+    QFrame,
+    QGraphicsDropShadowEffect,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
 
+from mavixdesktop.ui.screens.utils import mavix_logo_pixmap, svg_pixmap
 from mavixdesktop.ui.style import theme
-from mavixdesktop.ui.screens.utils import svg_pixmap, mavix_logo_pixmap
 
 
 class _AuthBackground(QWidget):
@@ -35,7 +43,7 @@ class _AuthBackground(QWidget):
         (60, 30,  16, 18, 44.0, 2.1,  50, (29, 78,  216, 28)),   # blue
     ]
 
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName('authBg')
         # Свой paintEvent — отключаем фоновую заливку Qt-stylesheet,
@@ -50,7 +58,7 @@ class _AuthBackground(QWidget):
         self._timer.timeout.connect(self.update)
         self._timer.start()
 
-    def paintEvent(self, event):
+    def paintEvent(self, event) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
 
@@ -82,7 +90,7 @@ class _IconLineEdit(QFrame):
     """Поле ввода с SVG-иконкой слева, скруглённое, focus-cyan."""
 
     def __init__(self, icon_name: str, placeholder: str, echo: bool = False,
-                 parent: QWidget | None = None):
+                 parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName('iconInput')
         self.setMinimumHeight(44)
@@ -145,7 +153,7 @@ class _IconLineEdit(QFrame):
         self.input.focusOutEvent = self._wrap_focus_out(self.input.focusOutEvent)
 
     def _wrap_focus_in(self, orig):
-        def handler(event):
+        def handler(event) -> None:
             self.setProperty('focused', True)
             self.style().unpolish(self)
             self.style().polish(self)
@@ -153,7 +161,7 @@ class _IconLineEdit(QFrame):
         return handler
 
     def _wrap_focus_out(self, orig):
-        def handler(event):
+        def handler(event) -> None:
             self.setProperty('focused', False)
             self.style().unpolish(self)
             self.style().polish(self)
@@ -174,7 +182,7 @@ class _Spinner(QWidget):
     cyan-заливке primary-кнопки).
     """
 
-    def __init__(self, size: int = 16, color: QColor | None = None, parent=None):
+    def __init__(self, size: int = 16, color: QColor | None = None, parent=None) -> None:
         super().__init__(parent)
         self.setFixedSize(size, size)
         self._size = size
@@ -198,7 +206,7 @@ class _Spinner(QWidget):
         self._angle = (self._angle + 8) % 360
         self.update()
 
-    def paintEvent(self, event):
+    def paintEvent(self, event) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         pen = QPen(self._color, 2)
@@ -269,7 +277,7 @@ class LoginPage(QWidget):
         bar.addWidget(gear)
         return bar
 
-    # ── Card ──────────────────────────────────────────────────────────────────
+    # --- Карточка ---
 
     def _build_card(self) -> QWidget:
         card = QFrame()
@@ -292,7 +300,7 @@ class LoginPage(QWidget):
         layout.setContentsMargins(32, 32, 32, 32)
         layout.setSpacing(18)
 
-        # ── Бренд: лого + название + сабтайтл ────────────────────────────────
+        # --- Бренд: лого, название, сабтайтл ---
         brand_row = QHBoxLayout()
         brand_row.setSpacing(10)
         brand_row.setContentsMargins(0, 0, 0, 0)
@@ -333,7 +341,7 @@ class LoginPage(QWidget):
 
         layout.addSpacing(10)
 
-        # ── Поля ввода ────────────────────────────────────────────────────────
+        # --- Поля ввода ---
         self._email_wrap = _IconLineEdit('email.svg', 'Email', echo=False)
         self.email = self._email_wrap.input
         self.email.returnPressed.connect(self._submit)
@@ -356,7 +364,7 @@ class LoginPage(QWidget):
         self._password_wrap.layout().addWidget(self._show_pw_btn)
         layout.addWidget(self._password_wrap)
 
-        # ── Ошибка (видна, только когда есть текст) ───────────────────────────
+        # --- Ошибка (видна, только когда есть текст) ---
         self.error = QLabel('')
         self.error.setWordWrap(True)
         self.error.setStyleSheet(
@@ -369,7 +377,7 @@ class LoginPage(QWidget):
         self.error.hide()
         layout.addWidget(self.error)
 
-        # ── Submit-кнопка на всю ширину ───────────────────────────────────────
+        # --- Submit-кнопка на всю ширину ---
         self._submit_btn = QPushButton('Войти')
         self._submit_btn.setCursor(Qt.PointingHandCursor)
         self._submit_btn.setMinimumHeight(46)
@@ -385,7 +393,7 @@ class LoginPage(QWidget):
         # Позиционируем после layout-pass: minimumHeight=46, y центрируем.
         self._submit_btn.installEventFilter(self)
 
-        # ── «Забыли пароль?» — clickable text ────────────────────────────────
+        # --- «Забыли пароль?» — кликабельный текст ---
         forgot_row = QHBoxLayout()
         forgot_row.setContentsMargins(0, 4, 0, 0)
         forgot_row.addStretch()
@@ -402,7 +410,7 @@ class LoginPage(QWidget):
         forgot_row.addStretch()
         layout.addLayout(forgot_row)
 
-        # ── Сообщение после запроса восстановления (изначально скрыто) ───────
+        # --- Сообщение после запроса восстановления (изначально скрыто) ---
         self._forgot_msg = QLabel('')
         self._forgot_msg.setAlignment(Qt.AlignCenter)
         self._forgot_msg.setWordWrap(True)
@@ -415,9 +423,9 @@ class LoginPage(QWidget):
 
         return card
 
-    def eventFilter(self, obj, event):
+    def eventFilter(self, obj, event) -> bool:
         # При первом show / каждом resize submit-кнопки позиционируем
-        # spinner. Левое padding кнопки QSS_BUTTON_PRIMARY ~22px,
+        # spinner. Левый padding кнопки QSS_BUTTON_PRIMARY ~22px,
         # ставим spinner на 18px от левого края, по вертикали — центр.
         if obj is self._submit_btn:
             from PySide6.QtCore import QEvent as _QE
@@ -426,11 +434,10 @@ class LoginPage(QWidget):
                 self._busy_spinner.move(18, (btn_h - self._busy_spinner.height()) // 2)
         return False
 
-    def _icon_pixmap_as_icon(self, name: str, size: int):
-        from PySide6.QtGui import QIcon
+    def _icon_pixmap_as_icon(self, name: str, size: int) -> QIcon:
         return QIcon(svg_pixmap(name, size, color=theme.TEXT_MUTED))
 
-    # ── Public API ────────────────────────────────────────────────────────────
+    # --- Публичный API ---
 
     def set_error(self, message: str) -> None:
         self.error.setText(message)
@@ -505,7 +512,7 @@ class LoginPage(QWidget):
         )
         self._forgot_msg.show()
 
-    # ── Internal ──────────────────────────────────────────────────────────────
+    # --- Внутреннее ---
 
     def _toggle_password_visibility(self, visible: bool) -> None:
         self.password.setEchoMode(

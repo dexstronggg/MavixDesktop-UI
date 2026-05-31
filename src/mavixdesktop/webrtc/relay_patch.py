@@ -1,45 +1,44 @@
-"""Native relay-only (iceTransportPolicy=relay) for aiortc.
+"""Нативный relay-only (iceTransportPolicy=relay) для aiortc.
 
-aiortc 1.14 does not expose `iceTransportPolicy` on RTCConfiguration, so the
-only previous way to force relay was stripping non-relay lines from the SDP.
-That is cosmetic: aiortc's ICE agent still runs with transport_policy=ALL,
-gathers host/srflx candidates and sends connectivity checks *from* them. When
-the remote peer is a strict relay-only endpoint (GStreamer/libnice on the
-drone), those checks arrive at the TURN relay from the desktop's public IP,
-for which the drone's allocation has no permission, so coturn drops them and
-ICE fails — even though the relay itself works fine.
+aiortc 1.14 не выставляет `iceTransportPolicy` на RTCConfiguration, поэтому
+раньше единственным способом форсировать relay было вырезание non-relay
+строк из SDP. Это косметика: ICE-агент aiortc всё равно работает с
+transport_policy=ALL, собирает host/srflx кандидатов и шлёт connectivity-
+проверки *из* них. Когда удалённый пир — строго relay-only endpoint
+(GStreamer/libnice на дроне), эти проверки приходят на TURN-relay с
+публичного IP десктопа, для которого у allocation дрона нет permission,
+поэтому coturn их отбрасывает и ICE падает — хотя сам relay работает.
 
-The fix lives one layer down: aioice.Connection *does* support
-`transport_policy=TransportPolicy.RELAY` natively (it then skips host/srflx
-candidates and only ever uses the TURN relay). aiortc builds that Connection
-in RTCIceGatherer via the module-level `Connection` symbol, so we swap that
-symbol for a subclass. Subclassing (not a bare function) keeps
-`isinstance(x, aioice.Connection)` valid.
+Фикс лежит уровнем ниже: aioice.Connection *поддерживает*
+`transport_policy=TransportPolicy.RELAY` нативно (тогда он пропускает
+host/srflx кандидатов и использует только TURN-relay). aiortc создаёт этот
+Connection в RTCIceGatherer через модульный символ `Connection`, поэтому мы
+подменяем этот символ подклассом. Подкласс (а не голая функция) сохраняет
+валидность `isinstance(x, aioice.Connection)`.
 
-The subclass decides per-connection, reading the live `settings.force_relay`
-flag, so toggling force_relay in the Settings UI takes effect on the next
-session and we never get stuck in RELAY. It only forces RELAY when a TURN
-server is actually configured — aioice raises if RELAY is set without one.
+Подкласс решает per-connection, читая живой флаг `settings.force_relay`,
+поэтому переключение force_relay в Settings UI вступает в силу на следующей
+сессии и мы никогда не застреваем в RELAY. RELAY форсируется только когда
+TURN-сервер реально настроен — aioice падает, если RELAY задан без него.
 """
 from __future__ import annotations
 
-import logging
-
-logger = logging.getLogger(__name__)
+from mavixdesktop.core.logger import logger
 
 _applied = False
 
 
 def enable_relay_only() -> None:
-    """Install a one-time hook so aiortc's ICE Connection switches to
-    transport_policy=RELAY whenever settings.force_relay is on and a TURN
-    server is present. Idempotent — safe to call on every session."""
+    """Устанавливает одноразовый хук, чтобы ICE Connection aiortc переключался
+    на transport_policy=RELAY, когда settings.force_relay включён и присутствует
+    TURN-сервер. Идемпотентно — безопасно вызывать на каждой сессии."""
     global _applied
     if _applied:
         return
 
+    from aioice.ice import Connection as _AioiceConnection
+    from aioice.ice import TransportPolicy
     from aiortc import rtcicetransport
-    from aioice.ice import Connection as _AioiceConnection, TransportPolicy
 
     def _relay_wanted(kwargs: dict) -> bool:
         from mavixdesktop.core.config import settings
@@ -49,9 +48,9 @@ def enable_relay_only() -> None:
         def __init__(self, *args, **kwargs):
             if 'transport_policy' not in kwargs and _relay_wanted(kwargs):
                 kwargs['transport_policy'] = TransportPolicy.RELAY
-                logger.info('[ice] ICE Connection forced to transport_policy=RELAY (native relay-only)')
+                logger.info('[ice] ICE Connection форсирован в transport_policy=RELAY (нативный relay-only)')
             super().__init__(*args, **kwargs)
 
     rtcicetransport.Connection = _RelayConnection
     _applied = True
-    logger.info('[ice] aiortc relay hook installed')
+    logger.info('[ice] relay-хук aiortc установлен')

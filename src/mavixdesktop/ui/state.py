@@ -3,6 +3,9 @@
 Собирает в одном месте все данные, которые меняются во время работы:
 какие камеры есть, какая активна, тип FC, ID выбранного дрона.
 """
+
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 
@@ -16,10 +19,10 @@ class SessionState:
     cam_index: int = 0                             # индекс активной камеры
     fc_type: str = 'none'                          # 'crsf' | 'mavlink' | 'none'
     fc_name: str = ''                              # имя FC-устройства
-    selected_drone_id: str | None = None           # ID дрона к которому подключены
+    selected_drone_id: str | None = None           # ID дрона, к которому подключены
 
-    def reset(self):
-        """Сбросить состояние при отключении от дрона."""
+    def reset(self) -> None:
+        """Сбрасывает состояние при отключении от дрона."""
         self.cameras = []
         self.cam_index = 0
         self.fc_type = 'none'

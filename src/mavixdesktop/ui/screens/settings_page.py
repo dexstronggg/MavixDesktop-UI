@@ -1,30 +1,37 @@
-"""Settings UI - edit ~/.config/mavixdesktop/config.json from inside the app.
+"""UI настроек — редактирование ~/.config/mavixdesktop/config.json из приложения.
 
-Accessible via the gear icon on the login page and the drone-list page.
-Saving writes the JSON file and refreshes the in-memory `settings`
-singleton (no app restart needed); changes to SIGNAL_URL take effect
-on the next reconnect or login.
+Доступно через иконку-шестерёнку на странице логина и на странице списка
+дронов. Сохранение пишет JSON-файл и обновляет in-memory singleton
+settings (без перезапуска приложения); изменения SIGNAL_URL вступают в
+силу при следующем reconnect или логине.
 """
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QScrollArea, QFrame, QSizePolicy, QMessageBox, QCheckBox,
+    QCheckBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
 
 from mavixdesktop.core import config as config_module
 from mavixdesktop.core import user_config
 from mavixdesktop.core.config import settings
+from mavixdesktop.ui.screens.utils import svg_pixmap
 from mavixdesktop.ui.style import theme
-from .utils import svg_pixmap
 
-
-# Default values shown when the user hits "Reset to defaults". These
-# mirror the dev .env-example so a "fresh" config matches what a
-# developer would get out of the box.
+# Значения по умолчанию, подставляемые при «Сбросить к дефолтам». Они
+# повторяют dev .env-example, чтобы «чистый» конфиг совпадал с тем, что
+# разработчик получает из коробки.
 _DEFAULTS = {
     'signal_url': 'http://localhost:8000',
     'stun_server': '',
@@ -38,11 +45,14 @@ _DEFAULTS = {
 
 
 class SettingsPage(QWidget):
-    """Single-page form. on_close called when the user clicks Close
-    (or Save successfully) - host is expected to swap back to whatever
-    screen was showing before."""
+    """Одностраничная форма.
 
-    def __init__(self, on_close: Callable[[], None]):
+    on_close вызывается, когда пользователь нажимает «Закрыть» (или
+    успешно сохраняет) — host должен вернуть тот экран, что был показан
+    до этого.
+    """
+
+    def __init__(self, on_close: Callable[[], None]) -> None:
         super().__init__()
         self._on_close = on_close
         self._inputs: dict[str, QLineEdit] = {}
@@ -57,7 +67,7 @@ class SettingsPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setStyleSheet(f'QScrollArea {{ background: transparent; border: none; }}')
+        scroll.setStyleSheet('QScrollArea { background: transparent; border: none; }')
 
         body = QWidget()
         body.setStyleSheet('background: transparent;')
@@ -226,11 +236,11 @@ class SettingsPage(QWidget):
         actions.addWidget(save_btn)
         return actions
 
-    # ---- data ----
+    # --- Данные ---
 
     def _load_values(self) -> None:
-        # Take values from the live settings object so the form reflects
-        # the effective config (including any OS env override).
+        # Берём значения из живого объекта settings, чтобы форма отражала
+        # эффективный конфиг (включая возможный override из OS env).
         current = {
             'signal_url': settings.signal_url,
             'stun_server': settings.stun_server,

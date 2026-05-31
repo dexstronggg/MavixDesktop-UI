@@ -1,7 +1,7 @@
-"""Owns one PeerSession + its DataChannelHub at a time.
+"""Владеет одним PeerSession + его DataChannelHub за раз.
 
-Mirrors MavixBoard's WebRTCManager but inverted: we accept offer / send
-answer, and we *receive* data channels rather than creating them.
+Зеркалит WebRTCManager из MavixBoard, но инвертированно: мы принимаем offer /
+отправляем answer и *получаем* data-каналы, а не создаём их.
 """
 from __future__ import annotations
 
@@ -28,12 +28,12 @@ class WebRTCManager:
         self._channels: DataChannelHub | None = None
         self.on_session_ended: Callable[[], None] | None = None
         self.on_track: TrackHandler | None = None
-        # Fires every time a data channel from the drone has been attached
-        # to the hub (label argument). The drone creates packet/ping/config
-        # channels, so this can fire up to 3 times per session; callers
-        # should be idempotent. Used by the coordinator to wire FC handlers
-        # only AFTER the channels actually exist on the hub — which only
-        # happens once DTLS+SCTP is up, not immediately after offer/answer.
+        # Срабатывает каждый раз, когда data-канал от дрона прикреплён к hub
+        # (аргумент label). Дрон создаёт packet/ping/config каналы, поэтому
+        # может сработать до 3 раз за сессию; вызывающие должны быть
+        # идемпотентны. Координатор использует это, чтобы подключать FC-
+        # обработчики только ПОСЛЕ того, как каналы реально появились на hub —
+        # а это происходит только когда DTLS+SCTP поднят, не сразу после offer/answer.
         self.on_channel_attached: Callable[[str], None] | None = None
 
     @property
@@ -49,9 +49,9 @@ class WebRTCManager:
 
     def start_session(self, drone_id: str) -> None:
         if self._peer is not None:
-            logger.warning('[manager] session already active (drone=%s), ending', self._peer.drone_id)
+            logger.warning('[manager] сессия уже активна (drone=%s), завершаем', self._peer.drone_id)
             self.end_session()
-        logger.info('[manager] starting session with drone=%s', drone_id)
+        logger.info('[manager] запускаем сессию с drone=%s', drone_id)
         self._peer = PeerSession(drone_id, ice_servers=self._ice_servers)
         self._channels = DataChannelHub()
         self._peer.on_track = self._handle_track
@@ -60,7 +60,7 @@ class WebRTCManager:
     def end_session(self) -> None:
         if self._peer is None:
             return
-        logger.info('[manager] ending session with drone=%s', self._peer.drone_id)
+        logger.info('[manager] завершаем сессию с drone=%s', self._peer.drone_id)
         if self._channels is not None:
             self._channels.close()
             self._channels = None
@@ -73,7 +73,7 @@ class WebRTCManager:
             return
         sdp_text = sdp.get('sdp') if isinstance(sdp, dict) else None
         if not isinstance(sdp_text, str):
-            logger.warning('[manager] offer without sdp text')
+            logger.warning('[manager] offer без текста sdp')
             return
         assert self._peer is not None
         answer_sdp = await self._peer.apply_offer(sdp_text)
@@ -96,19 +96,19 @@ class WebRTCManager:
 
     def _guard(self, drone_id: str) -> bool:
         if self._peer is None:
-            logger.warning('[manager] message for drone=%s but no active session', drone_id)
+            logger.warning('[manager] сообщение для drone=%s, но активной сессии нет', drone_id)
             return False
         if self._peer.drone_id != drone_id:
-            logger.warning('[manager] message for drone=%s but active is drone=%s',
+            logger.warning('[manager] сообщение для drone=%s, но активен drone=%s',
                            drone_id, self._peer.drone_id)
             return False
         return True
 
-    def _handle_track(self, track: 'MediaStreamTrack') -> None:
+    def _handle_track(self, track: MediaStreamTrack) -> None:
         if self.on_track is not None:
             self.on_track(track)
 
-    def _handle_datachannel(self, channel: 'RTCDataChannel') -> None:
+    def _handle_datachannel(self, channel: RTCDataChannel) -> None:
         if self._channels is None:
             return
         attached = self._channels.attach(channel)
@@ -116,4 +116,4 @@ class WebRTCManager:
             try:
                 self.on_channel_attached(channel.label)
             except Exception as exc:
-                logger.warning('[manager] on_channel_attached error: %s', exc)
+                logger.warning('[manager] ошибка on_channel_attached: %s', exc)

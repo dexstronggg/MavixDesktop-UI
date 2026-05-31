@@ -1,20 +1,29 @@
-from typing import Callable
+from __future__ import annotations
 
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QColor
+from collections.abc import Callable
+
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt
+from PySide6.QtGui import QColor, QFocusEvent
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QLineEdit, QPushButton, QSizePolicy,
     QGraphicsDropShadowEffect,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
 
+from mavixdesktop.ui.screens.utils import svg_pixmap
 from mavixdesktop.ui.style import theme
-from .utils import svg_pixmap
 
 
 class TokenPage(QWidget):
-    def __init__(self, on_connect: Callable, cur_token: str,
-                 cur_signal_url: str = '', cur_stun: str = '', cur_turn: str = ''):
+    """Стартовая страница: ввод токена подключения и параметров WebRTC."""
+
+    def __init__(self, on_connect: Callable[[str], None], cur_token: str,
+                 cur_signal_url: str = '', cur_stun: str = '', cur_turn: str = '') -> None:
         super().__init__()
         self._cur_signal_url = cur_signal_url
         self._cur_stun = cur_stun
@@ -34,7 +43,7 @@ class TokenPage(QWidget):
         outer.addLayout(h_layout)
         outer.addStretch()
 
-    def __build_card(self, on_connect: Callable, cur_token: str) -> QWidget:
+    def __build_card(self, on_connect: Callable[[str], None], cur_token: str) -> QWidget:
         card = QWidget()
         card.setObjectName('tokenCard')
         card.setStyleSheet(theme.QSS_TOKEN_CARD)
@@ -59,8 +68,8 @@ class TokenPage(QWidget):
         title_label.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY};'
             f'font-size: {theme.FONT_SIZE_TITLE}px;'
-            f'font-weight: 700;'
-            f'letter-spacing: 1px;'
+            'font-weight: 700;'
+            'letter-spacing: 1px;'
         )
 
         sub_label = QLabel('Введите токен подключения')
@@ -114,7 +123,7 @@ class TokenPage(QWidget):
 
         return card
 
-    def __setup_focus_animation(self):
+    def __setup_focus_animation(self) -> None:
         glow = QGraphicsDropShadowEffect()
         glow.setBlurRadius(0)
         glow.setColor(QColor(theme.BORDER_FOCUS))
@@ -125,22 +134,22 @@ class TokenPage(QWidget):
         self._glow_anim.setDuration(theme.ANIM_MED)
         self._glow_anim.setEasingCurve(QEasingCurve.OutCubic)
 
-        _orig_focus_in  = self.input.focusInEvent
+        _orig_focus_in = self.input.focusInEvent
         _orig_focus_out = self.input.focusOutEvent
 
-        def _focus_in(event):
+        def _focus_in(event: QFocusEvent) -> None:
             self._glow_anim.stop()
             self._glow_anim.setStartValue(glow.blurRadius())
             self._glow_anim.setEndValue(20)
             self._glow_anim.start()
             _orig_focus_in(event)
 
-        def _focus_out(event):
+        def _focus_out(event: QFocusEvent) -> None:
             self._glow_anim.stop()
             self._glow_anim.setStartValue(glow.blurRadius())
             self._glow_anim.setEndValue(0)
             self._glow_anim.start()
             _orig_focus_out(event)
 
-        self.input.focusInEvent  = _focus_in
+        self.input.focusInEvent = _focus_in
         self.input.focusOutEvent = _focus_out

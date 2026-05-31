@@ -8,6 +8,9 @@
 
 Ничего не знает о UI-страницах — только вызывает колбэки.
 """
+
+from __future__ import annotations
+
 import asyncio
 import queue
 
@@ -21,13 +24,11 @@ from mavixdesktop.core.logger import logger
 class VideoManager:
     """Управляет видеотреками и доставкой кадров в UI.
 
-    Параметры
-    ---------
-    on_frame      : Callable[[ndarray], None]  — вызывается каждые ~33 мс с кадром
-    on_cam_changed: Callable[[int], None]       — вызывается при смене активной камеры
+    on_frame вызывается каждые ~33 мс с очередным кадром, on_cam_changed —
+    при смене активной камеры.
     """
 
-    def __init__(self, on_frame, on_cam_changed=None):
+    def __init__(self, on_frame, on_cam_changed=None) -> None:
         self._on_frame = on_frame
         self._on_cam_changed = on_cam_changed
 
@@ -39,19 +40,19 @@ class VideoManager:
         self._timer = QTimer(interval=33)
         self._timer.timeout.connect(self._tick)
 
-    # ── Управление треками ────────────────────────────────────────────────────
+    # --- Управление треками ---
 
-    def on_track(self, track: VideoStreamTrack):
-        """Зарегистрировать новый видеотрек от WebRTC."""
+    def on_track(self, track: VideoStreamTrack) -> None:
+        """Регистрирует новый видеотрек от WebRTC."""
         if track.kind != 'video':
             return
         self.track_queues[track.id] = queue.Queue(maxsize=1)
         self._track_ids.append(track.id)
-        logger.info(f'Track received: id={track.id}')
+        logger.info('[video] трек получен: id=%s', track.id)
         self._receive_tasks.append(asyncio.create_task(self._receive(track)))
 
-    async def _receive(self, track: VideoStreamTrack):
-        """Асинхронно читать кадры из трека и класть в очередь."""
+    async def _receive(self, track: VideoStreamTrack) -> None:
+        """Асинхронно читает кадры из трека и кладёт в очередь."""
         q = self.track_queues[track.id]
         loop = asyncio.get_event_loop()
         try:
@@ -63,44 +64,46 @@ class VideoManager:
                 except queue.Full:
                     q.get_nowait()
                     q.put_nowait(img)
-        except (asyncio.CancelledError, MediaStreamError, RuntimeError):
+        except asyncio.CancelledError:
+            return
+        except (MediaStreamError, RuntimeError):
             pass
 
     def _cancel_receive_tasks(self) -> None:
-        """Cancel any in-flight _receive coroutines and drop their refs.
+        """Отменяет все активные корутины _receive и сбрасывает ссылки на них.
 
-        Without this, every new session creates fresh _receive tasks that
-        never get cancelled when the old track set is dropped — they keep
-        awaiting track.recv() until aiortc closes the track on its own,
-        which manifests at shutdown as «Task was destroyed but it is
-        pending» warnings (and a slow leak of file descriptors / memory)."""
+        Без этого каждая новая сессия создаёт свежие задачи _receive,
+        которые не отменяются при сбросе старого набора треков — они
+        продолжают ждать track.recv(), пока aiortc сам не закроет трек, что
+        на завершении проявляется предупреждениями «Task was destroyed but
+        it is pending» (и медленной утечкой файловых дескрипторов / памяти)."""
         for task in self._receive_tasks:
             if not task.done():
                 task.cancel()
         self._receive_tasks.clear()
 
-    def reset(self):
-        """Сбросить всё при выходе из дрон-вью (треки + выбор камеры)."""
+    def reset(self) -> None:
+        """Сбрасывает всё при выходе из drone-view (треки и выбор камеры)."""
         self._cancel_receive_tasks()
         self.track_queues.clear()
         self._track_ids.clear()
         self._cam_index = 0
 
-    def clear_tracks(self):
-        """Сбросить только треки, сохранив _cam_index.
+    def clear_tracks(self) -> None:
+        """Сбрасывает только треки, сохраняя _cam_index.
 
         Используется при renegotiation сессии (смена разрешения, hot-plug):
         треки старой сессии становятся невалидными и надо очистить очереди,
-        но юзер всё ещё «смотрит» на ту же камеру с тем же индексом — после
-        прихода новых треков _tick покажет тот же индекс."""
+        но пользователь всё ещё «смотрит» на ту же камеру с тем же индексом —
+        после прихода новых треков _tick покажет тот же индекс."""
         self._cancel_receive_tasks()
         self.track_queues.clear()
         self._track_ids.clear()
 
-    # ── Управление камерой ────────────────────────────────────────────────────
+    # --- Управление камерой ---
 
     def shift_cam(self, delta: int) -> int:
-        """Переключить активную камеру на delta позиций. Вернуть новый индекс."""
+        """Переключает активную камеру на delta позиций. Возвращает новый индекс."""
         if not self._track_ids:
             return self._cam_index
         self._cam_index = (self._cam_index + delta) % len(self._track_ids)
@@ -109,7 +112,7 @@ class VideoManager:
         return self._cam_index
 
     def get_frame(self, cam_idx: int):
-        """Получить последний кадр для заданного индекса камеры (или None)."""
+        """Возвращает последний кадр для заданного индекса камеры (или None)."""
         if not self._track_ids:
             return None
         idx = min(cam_idx, len(self._track_ids) - 1)
@@ -132,18 +135,18 @@ class VideoManager:
     def cam_count(self) -> int:
         return len(self._track_ids)
 
-    # ── Таймер ────────────────────────────────────────────────────────────────
+    # --- Таймер ---
 
-    def start(self):
-        """Запустить таймер отрисовки видео."""
+    def start(self) -> None:
+        """Запускает таймер отрисовки видео."""
         self._timer.start()
 
-    def stop(self):
-        """Остановить таймер."""
+    def stop(self) -> None:
+        """Останавливает таймер."""
         self._timer.stop()
 
-    def _tick(self):
-        """Callback таймера: взять кадр из очереди и передать в on_frame."""
+    def _tick(self) -> None:
+        """Колбэк таймера: берёт кадр из очереди и передаёт в on_frame."""
         if not self._track_ids:
             return
         self._cam_index = min(self._cam_index, len(self._track_ids) - 1)

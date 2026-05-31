@@ -1,25 +1,43 @@
-"""Shared UI utilities for screens package."""
-from PySide6.QtCore import Qt, QSize, QEvent, QPropertyAnimation, QEasingCurve, Property
-from PySide6.QtGui import QPixmap, QPainter, QColor, QIcon, QFont, QLinearGradient
-from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import QWidget, QPushButton, QGridLayout
+"""Общие UI-утилиты пакета screens."""
+from __future__ import annotations
 
 from pathlib import Path
+
+from PySide6.QtCore import (
+    Property,
+    QEasingCurve,
+    QEvent,
+    QPropertyAnimation,
+    QSize,
+    Qt,
+)
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QIcon,
+    QLinearGradient,
+    QPainter,
+    QPaintEvent,
+    QPixmap,
+    QResizeEvent,
+)
+from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtWidgets import QGridLayout, QPushButton, QWidget
 
 from mavixdesktop.ui.style import theme
 
 _ICONS_DIR = Path(__file__).parent.parent / 'icons'
 
 
-# ── SVG helpers ───────────────────────────────────────────────────────────────
+# --- SVG-хелперы ---
 
 def svg_pixmap(name: str, size: int, color: str | None = None) -> QPixmap:
-    """Загрузить SVG из ui/icons/<name> и вернуть QPixmap.
+    """Загружает SVG из ui/icons/<name> и возвращает QPixmap.
 
-    Если передан ``color`` (hex или CSS-имя), результат перекрашивается:
-    сохраняется альфа-маска отрисованных фигур, цвет RGB заменяется на
+    Если передан color (hex или CSS-имя), результат перекрашивается:
+    сохраняется alpha-маска отрисованных фигур, цвет RGB заменяется на
     указанный. Это обходит ограничение QSvgRenderer, у которого нет
-    `currentColor` из CSS — без перекраски иконки рендерятся чёрным
+    currentColor из CSS — без перекраски иконки рендерятся чёрным
     stroke-ом и не видны на тёмном фоне.
 
     Тинтование делается через CompositionMode_SourceIn: сначала рисуем
@@ -44,7 +62,7 @@ def svg_pixmap(name: str, size: int, color: str | None = None) -> QPixmap:
 
 def mavix_logo_pixmap(size: int) -> QPixmap:
     """Логотип Mavix — cyan-градиентный квадрат со скруглёнными углами и
-    точно центрированной белой буквой ``M``. Рисуется QPainter-ом, без
+    точно центрированной белой буквой 'M'. Рисуется QPainter-ом, без
     QSvgRenderer — так Qt не теряет ни центрирование, ни шрифт.
     """
     px = QPixmap(QSize(size, size))
@@ -53,7 +71,7 @@ def mavix_logo_pixmap(size: int) -> QPixmap:
     p.setRenderHint(QPainter.Antialiasing, True)
     p.setRenderHint(QPainter.TextAntialiasing, True)
 
-    # Background: cyan linear gradient
+    # Фон: cyan linear gradient
     grad = QLinearGradient(0, 0, size, size)
     grad.setColorAt(0.0, QColor('#22d3ee'))
     grad.setColorAt(1.0, QColor('#06b6d4'))
@@ -62,7 +80,7 @@ def mavix_logo_pixmap(size: int) -> QPixmap:
     radius = size * 0.26
     p.drawRoundedRect(0, 0, size, size, radius, radius)
 
-    # Centered M
+    # Центрированная буква M
     font = QFont('Inter')
     font.setPixelSize(int(size * 0.62))
     font.setWeight(QFont.Weight.Bold)
@@ -73,9 +91,9 @@ def mavix_logo_pixmap(size: int) -> QPixmap:
     return px
 
 
-# ── Overlay button factories ───────────────────────────────────────────────────
+# --- Фабрики overlay-кнопок ---
 
-def overlay_btn(text: str, parent: QWidget, size: int = None) -> QPushButton:
+def overlay_btn(text: str, parent: QWidget, size: int | None = None) -> QPushButton:
     """Прозрачная круглая кнопка с текстовым символом (стрелки и т.п.).
 
     Поверх видеопотока на flight-окне должна читаться только сама иконка/
@@ -115,13 +133,13 @@ def overlay_btn(text: str, parent: QWidget, size: int = None) -> QPushButton:
 
 
 def overlay_icon_btn(svg_name: str, parent: QWidget,
-                     size: int = None, icon_size: int = None) -> QPushButton:
+                     size: int | None = None, icon_size: int | None = None) -> QPushButton:
     """Прозрачная круглая кнопка с SVG-иконкой.
 
-    Тот же подход, что у :func:`overlay_btn`: нормально — полностью
-    прозрачно, hover — едва заметный белый тинт. Раньше под иконкой
-    рендерился полупрозрачный чёрный круг, на полётном экране это
-    читалось как тёмный квадрат и засоряло видео.
+    Тот же подход, что у overlay_btn: нормально — полностью прозрачно,
+    hover — едва заметный белый тинт. Раньше под иконкой рендерился
+    полупрозрачный чёрный круг, на полётном экране это читалось как
+    тёмный квадрат и засоряло видео.
     """
     if size is None:
         size = theme.OVERLAY_BTN_CORNER
@@ -156,22 +174,23 @@ def overlay_icon_btn(svg_name: str, parent: QWidget,
     return btn
 
 
-# ── AnimatedCard ───────────────────────────────────────────────────────────────
+# --- AnimatedCard ---
 
 class AnimatedCard(QWidget):
-    """Base for cards with a hover-animated accent bar at the bottom.
+    """База для карточек с анимируемой по hover акцентной полосой внизу.
 
-    Subclasses can override:
-        _ANIM_DURATION  — ms
-        _BAR_RADIUS     — px
-        _BAR_HEIGHT     — px
-        _on_hover(bool) — called on HoverEnter/Leave; default animates bar only
+    Подклассы могут переопределить:
+        _ANIM_DURATION  — длительность анимации в мс
+        _BAR_RADIUS     — радиус скругления полосы в px
+        _BAR_HEIGHT     — высота полосы в px
+        _on_hover(bool) — вызывается на HoverEnter/Leave; по умолчанию
+                          анимирует только полосу
     """
     _ANIM_DURATION = 500
     _BAR_RADIUS    = theme.RADIUS_LG
     _BAR_HEIGHT    = 3
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
         self._bar_progress = 0
         # Цвет hover-полосы можно переопределить у инстанса (DroneCard
@@ -183,31 +202,31 @@ class AnimatedCard(QWidget):
         self.setAttribute(Qt.WA_Hover, True)
 
     @Property(int)
-    def bar_progress(self):
+    def bar_progress(self) -> int:
         return self._bar_progress
 
     @bar_progress.setter
-    def bar_progress(self, value: int):
+    def bar_progress(self, value: int) -> None:
         self._bar_progress = value
         self.update()
 
-    def event(self, e):
+    def event(self, e: QEvent) -> bool:
         if e.type() == QEvent.HoverEnter:
             self._on_hover(True)
         elif e.type() == QEvent.HoverLeave:
             self._on_hover(False)
         return super().event(e)
 
-    def _on_hover(self, hovered: bool):
+    def _on_hover(self, hovered: bool) -> None:
         self._animate_bar(1000 if hovered else 0)
 
-    def _animate_bar(self, target: int):
+    def _animate_bar(self, target: int) -> None:
         self._bar_anim.stop()
         self._bar_anim.setStartValue(self._bar_progress)
         self._bar_anim.setEndValue(target)
         self._bar_anim.start()
 
-    def paintEvent(self, event):
+    def paintEvent(self, event: QPaintEvent) -> None:
         super().paintEvent(event)
         if self._bar_progress <= 0:
             return
@@ -222,18 +241,18 @@ class AnimatedCard(QWidget):
         painter.end()
 
 
-# ── CardGrid ───────────────────────────────────────────────────────────────────
+# --- CardGrid ---
 
 class CardGrid(QWidget):
-    """Responsive grid that reflows columns on resize.
+    """Адаптивный grid, перераскладывающий колонки при ресайзе.
 
-    Subclasses must set CARD_W, CARD_H, GAP as class attributes.
+    Подклассы обязаны задать CARD_W, CARD_H, GAP как атрибуты класса.
     """
     CARD_W: int = 0
     CARD_H: int = 0
     GAP:    int = 0
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self._cards: list = []
         self._layout = QGridLayout(self)
@@ -241,22 +260,22 @@ class CardGrid(QWidget):
         self._layout.setContentsMargins(self.GAP, self.GAP, self.GAP, self.GAP)
         self._last_cols = 0
 
-    def set_cards(self, cards: list):
+    def set_cards(self, cards: list) -> None:
         self.__clear_layout()
         self._cards = cards
         self.__reflow(self.width() or 900)
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, event: QResizeEvent) -> None:
         self.__reflow(event.size().width())
         super().resizeEvent(event)
 
-    def __clear_layout(self):
+    def __clear_layout(self) -> None:
         while self._layout.count():
             item = self._layout.takeAt(0)
             if item.widget():
                 item.widget().setParent(None)
 
-    def __reflow(self, available_w: int):
+    def __reflow(self, available_w: int) -> None:
         cols = max(1, available_w // (self.CARD_W + self.GAP))
         if cols == self._last_cols and self._layout.count() == len(self._cards):
             return

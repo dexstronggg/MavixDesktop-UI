@@ -1,16 +1,18 @@
+from __future__ import annotations
+
 import asyncio
-from typing import Callable
+from collections.abc import Callable
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QCloseEvent, QImage, QPixmap, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import QComboBox, QLabel, QMessageBox, QPushButton, QWidget
 
 from mavixdesktop.core.logger import logger
 from mavixdesktop.fc.encoder import build_rc_frame
 from mavixdesktop.fc.mavlink_encoder import PX4_MAIN_MODES, MavlinkEncoder
+from mavixdesktop.ui.screens.utils import overlay_btn, overlay_icon_btn
+from mavixdesktop.ui.screens.widgets import StickWidget
 from mavixdesktop.ui.style import theme
-from .utils import overlay_btn, overlay_icon_btn
-from .widgets import StickWidget
 
 _TAKEOFF_HELP = (
     'Перед взлётом:\n\n'
@@ -30,10 +32,10 @@ _DISARM_STYLE = f'font-weight: bold; font-size: 13px; color: {theme.STATUS_DISAR
 
 class FlightWindow(QWidget):
     def __init__(self, joystick_input, signalling,
-                 get_frame: Callable, cam_count: Callable,
-                 loop: asyncio.AbstractEventLoop, on_close: Callable,
+                 get_frame: Callable[[int], object], cam_count: Callable[[], int],
+                 loop: asyncio.AbstractEventLoop, on_close: Callable[[], None],
                  fc_kind: str = 'crsf',
-                 passive: bool = False):
+                 passive: bool = False) -> None:
         super().__init__()
         self.setWindowTitle('Flight')
         self._js = joystick_input
@@ -51,9 +53,10 @@ class FlightWindow(QWidget):
         # отдельным фоновым таймером и шлёт ARM/DISARM через packet-channel.
         self._passive = bool(passive)
 
-        # Per-protocol stream state. MAVLink needs an encoder + heartbeat
-        # timer + arm-edge tracking; CRSF re-encodes the whole frame each
-        # tick from raw stick values so no state is needed beyond armed.
+        # Состояние потока на протокол. MAVLink требует encoder + heartbeat-
+        # таймер + отслеживание фронта arm; CRSF перекодирует весь кадр на
+        # каждом тике из сырых значений стиков, так что состояния, кроме
+        # armed, не нужно.
         self._fc_kind = (fc_kind or 'crsf').lower()
         self._mavlink_enc: MavlinkEncoder | None = None
         self._last_armed: bool | None = None
@@ -64,17 +67,17 @@ class FlightWindow(QWidget):
         self._mode_combo: QComboBox | None = None
         self._mode_set_sent = False
         self._heartbeat_timer: QTimer | None = None
-        # Set when the joystick is physically disconnected mid-flight.
-        # Stops normal 50Hz stream and replaces it with a 5Hz «neutral
-        # sticks + DISARM» burst so the FC reliably receives the kill
-        # command even if the first packet is dropped.
+        # Ставится, когда джойстик физически отключён в полёте. Останавливает
+        # обычный 50 Hz поток и заменяет его 5 Hz пачкой «нейтральные стики +
+        # DISARM», чтобы FC надёжно получил kill-команду, даже если первый
+        # пакет потеряется.
         self._js_lost = False
         self._rtl_sent = False
         if self._fc_kind == 'mavlink' and not self._passive:
             self._mavlink_enc = MavlinkEncoder()
-            # PX4 triggers an RC-loss failsafe if it doesn't see a GCS
-            # heartbeat for ~1 s. Send one before the 50 Hz manual_control
-            # pump even starts, and keep them flowing in the background.
+            # PX4 запускает RC-loss failsafe, если не видит heartbeat от GCS
+            # ~1 с. Шлём один до старта 50 Hz manual_control-насоса и держим
+            # их идущими в фоне.
             self._send_packet(self._mavlink_enc.heartbeat())
             self._heartbeat_timer = QTimer(self, interval=1000)
             self._heartbeat_timer.timeout.connect(self.__send_heartbeat)
@@ -85,16 +88,16 @@ class FlightWindow(QWidget):
         self._timer.timeout.connect(self.__tick)
         self._timer.start()
 
-    def showEvent(self, event):
+    def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
         if not self._help_shown and not self._passive:
             self._help_shown = True
             QTimer.singleShot(100, self.__show_takeoff_help)
 
-    def __show_takeoff_help(self):
+    def __show_takeoff_help(self) -> None:
         QMessageBox.information(self, 'Перед взлётом', _TAKEOFF_HELP)
 
-    def __build_ui(self):
+    def __build_ui(self) -> None:
         self._video_label = QLabel(self)
         self._video_label.setStyleSheet(f'background: {theme.BG_VIDEO};')
         self._video_label.setAlignment(Qt.AlignCenter)
@@ -123,9 +126,10 @@ class FlightWindow(QWidget):
             'background: transparent;'
         )
 
-        # Big red banner that appears the moment we detect joystick loss.
-        # Текст подменяется в __handle_joystick_lost: для MAVLink сообщаем
-        # о AUTO_RTL, для CRSF — о DISARM (тут нет настоящего failsafe).
+        # Большой красный баннер, появляется в момент обнаружения потери
+        # джойстика. Текст подменяется в __handle_joystick_lost: для MAVLink
+        # сообщаем об AUTO_RTL, для CRSF — о DISARM (тут нет настоящего
+        # failsafe).
         self._lost_lbl = QLabel('⚠  ДЖОЙСТИК ОТКЛЮЧЁН', self)
         self._lost_lbl.setAlignment(Qt.AlignCenter)
         self._lost_lbl.setStyleSheet(f"""
@@ -213,11 +217,11 @@ class FlightWindow(QWidget):
         else:
             self._reboot_btn: QPushButton | None = None
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, event: QResizeEvent) -> None:
         self.__reposition()
         super().resizeEvent(event)
 
-    def __reposition(self):
+    def __reposition(self) -> None:
         w, h = self.width(), self.height()
         if w == 0 or h == 0:
             return
@@ -261,22 +265,22 @@ class FlightWindow(QWidget):
         self._lost_lbl.adjustSize()
         self._lost_lbl.move((w - self._lost_lbl.width()) // 2, (h - self._lost_lbl.height()) // 2)
 
-    def __prev_cam(self):
+    def __prev_cam(self) -> None:
         n = self._cam_count()
         if n > 0:
             self._cam_index = (self._cam_index - 1) % n
 
-    def __next_cam(self):
+    def __next_cam(self) -> None:
         n = self._cam_count()
         if n > 0:
             self._cam_index = (self._cam_index + 1) % n
 
-    def __tick(self):
+    def __tick(self) -> None:
         self.__update_joystick()
         self.__update_video_frame()
         self.__update_ping()
 
-    def __update_ping(self):
+    def __update_ping(self) -> None:
         rtt = -1.0
         if self._signalling is not None:
             try:
@@ -286,20 +290,22 @@ class FlightWindow(QWidget):
         self._ping_lbl.setText('— мс' if rtt < 0 else f'{rtt:.0f} мс')
 
     def update_battery(self, percent: int, voltage: float) -> None:
-        """Pushed by App when battery telemetry comes in (CRSF or MAVLink).
-        Shows just the voltage — `percent` is accepted for signature
-        symmetry with the bridge signal but isn't rendered."""
+        """Вызывается App при поступлении телеметрии батареи (CRSF или MAVLink).
+
+        Показывает только вольтаж — percent принимается для симметрии
+        сигнатуры с bridge-сигналом, но не рендерится.
+        """
         if voltage <= 0:
             return
         self._battery_lbl.setText(f'{voltage:.1f} V')
         if not self._battery_lbl.isVisible():
             self._battery_lbl.show()
 
-    def __update_joystick(self):
-        # Re-arm-while-lost is not allowed: once we've sent the emergency
-        # disarm we keep spamming it (slower) until the operator closes
-        # the window. Coming back from a yanked joystick mid-flight isn't
-        # something we want to surprise the pilot with.
+    def __update_joystick(self) -> None:
+        # Повторный arm при потере джойстика запрещён: отправив аварийный
+        # disarm, продолжаем спамить им (реже), пока оператор не закроет
+        # окно. Возврат после выдернутого в полёте джойстика — не то, чем
+        # стоит удивлять пилота.
         if self._js_lost:
             self.__tick_emergency_failsafe()
             return
@@ -312,9 +318,9 @@ class FlightWindow(QWidget):
             thr, yaw, pitch, roll = self._js.get_stick_positions()
             armed = self._js.is_armed()
         except Exception as exc:
-            # Treat a read failure as a disconnect: pygame's «device gone»
-            # error often surfaces here before JOYDEVICEREMOVED arrives.
-            logger.warning('[FlightWindow] joystick read failed, treating as disconnect: %s', exc)
+            # Сбой чтения трактуем как отключение: ошибка pygame «device
+            # gone» часто всплывает здесь до прихода JOYDEVICEREMOVED.
+            logger.warning('[FlightWindow] сбой чтения джойстика, трактуем как отключение: %s', exc)
             self.__handle_joystick_lost()
             return
 
@@ -333,15 +339,15 @@ class FlightWindow(QWidget):
         else:
             self.__tick_crsf(thr, yaw, pitch, roll, armed)
 
-    def __handle_joystick_lost(self):
-        """One-time setup when we detect the gamepad is gone.
+    def __handle_joystick_lost(self) -> None:
+        """Однократная настройка при обнаружении пропажи геймпада.
 
         Для MAVLink (PX4) шлём AUTO_RTL — дрон автономно вернётся домой
         и сядет. Heartbeat НЕ глушим: PX4 должен видеть GCS живым, иначе
         запустится встроенный RC-loss (у нас он отключён через NAV_RCL_ACT=0,
         но всё равно полезно поддерживать связь, чтобы RTL прошёл штатно).
 
-        Для CRSF посылаем neutral+DISARM-спам — у Betaflight нет honest
+        Для CRSF посылаем neutral+DISARM-спам — у Betaflight нет честного
         RTL, а полагаться на конфиг RX-failsafe пользователя нельзя.
         """
         if self._js_lost:
@@ -355,21 +361,22 @@ class FlightWindow(QWidget):
         self._lost_lbl.raise_()
 
         if self._fc_kind == 'mavlink':
-            logger.warning('[FlightWindow] joystick disconnected — sending AUTO_RTL')
+            logger.warning('[FlightWindow] джойстик отключён — шлём AUTO_RTL')
             self._lost_lbl.setText('⚠  ДЖОЙСТИК ОТКЛЮЧЁН — ВКЛЮЧЕН RETURN-TO-LAUNCH')
             self._rtl_sent = False
             # Heartbeat оставляем работать — PX4 нужно видеть GCS пока он рулит RTL.
         else:
-            logger.warning('[FlightWindow] joystick disconnected — emergency DISARM (CRSF)')
+            logger.warning('[FlightWindow] джойстик отключён — аварийный DISARM (CRSF)')
             self._lost_lbl.setText('⚠  ДЖОЙСТИК ОТКЛЮЧЁН — ДРОН РАЗАРМИРУЕТСЯ')
             if self._heartbeat_timer is not None:
                 self._heartbeat_timer.stop()
         self.__tick_emergency_failsafe()
 
-    def __tick_emergency_failsafe(self):
+    def __tick_emergency_failsafe(self) -> None:
         """Раз в 5 тиков (~10 Hz) шлём failsafe-команду.
-        MAVLink: AUTO_RTL один раз (PX4 переключается и держит режим
-        сам). CRSF: neutral+DISARM на каждом тике пока окно открыто.
+
+        MAVLink: AUTO_RTL один раз (PX4 переключается и держит режим сам).
+        CRSF: neutral+DISARM на каждом тике, пока окно открыто.
         """
         cnt = getattr(self, '_emerg_cnt', 0) + 1
         self._emerg_cnt = cnt
@@ -384,28 +391,28 @@ class FlightWindow(QWidget):
                 for _ in range(3):
                     self._send_packet(self._mavlink_enc.failsafe_rtl())
                 self._rtl_sent = True
-                logger.info('[FlightWindow] AUTO_RTL sent to PX4')
+                logger.info('[FlightWindow] AUTO_RTL отправлен на PX4')
             except Exception as exc:
-                logger.debug('[FlightWindow] emergency mavlink RTL send: %s', exc)
+                logger.debug('[FlightWindow] ошибка аварийной отправки mavlink RTL: %s', exc)
             return
         try:
             self._send_packet(build_rc_frame(-1.0, 0.0, 0.0, 0.0, armed=False))
         except Exception as exc:
-            logger.debug('[FlightWindow] emergency crsf send: %s', exc)
+            logger.debug('[FlightWindow] ошибка аварийной отправки crsf: %s', exc)
 
     def __tick_crsf(self, thr: float, yaw: float, pitch: float,
                     roll: float, armed: bool) -> None:
         try:
             packet = build_rc_frame(thr, roll, pitch, yaw, armed)
         except Exception as exc:
-            logger.debug('[FlightWindow] CRSF encode error: %s', exc)
+            logger.debug('[FlightWindow] ошибка кодирования CRSF: %s', exc)
             return
-        # Log ARM/DISARM transitions explicitly so we can confirm the
-        # button press is actually being read and a frame with the new
-        # CH5 value is going out. Sticks are noisy at 50 Hz; don't spam.
+        # Логируем переходы ARM/DISARM явно, чтобы подтвердить, что нажатие
+        # кнопки реально считывается и кадр с новым значением CH5 уходит.
+        # Стики шумят на 50 Hz; не спамим.
         if armed != self._last_armed:
             logger.info(
-                '[FlightWindow] CRSF arm transition: %s -> %s '
+                '[FlightWindow] переход arm CRSF: %s -> %s '
                 '(thr=%.2f yaw=%.2f pitch=%.2f roll=%.2f, frame len=%d, head=%s)',
                 self._last_armed, armed, thr, yaw, pitch, roll,
                 len(packet), packet[:6].hex(),
@@ -416,11 +423,11 @@ class FlightWindow(QWidget):
     def __tick_mavlink(self, thr: float, yaw: float, pitch: float,
                        roll: float, armed: bool) -> None:
         assert self._mavlink_enc is not None
-        # One-shot SET_MODE before the operator starts arming: PX4 has no
-        # «default mode» param and stays in Hold without an explicit
-        # SET_MODE command. We do it on the first joystick tick so the
-        # packet channel is definitely open by now. Используется
-        # текущий выбранный mode из dropdown'a (по умолчанию Stabilized).
+        # Однократный SET_MODE до того, как оператор начнёт армить: у PX4
+        # нет параметра «режим по умолчанию», он остаётся в Hold без явной
+        # SET_MODE-команды. Делаем это на первом тике джойстика, так что
+        # packet-канал к этому моменту точно открыт. Используется текущий
+        # выбранный mode из dropdown-а (по умолчанию Stabilized).
         if not self._mode_set_sent:
             self._send_packet(self._mavlink_enc.set_mode(self._current_main_mode))
             self._mode_set_sent = True
@@ -428,26 +435,28 @@ class FlightWindow(QWidget):
         try:
             mc = self._mavlink_enc.manual_control(thr, yaw, pitch, roll)
         except Exception as exc:
-            logger.debug('[FlightWindow] MANUAL_CONTROL encode error: %s', exc)
+            logger.debug('[FlightWindow] ошибка кодирования MANUAL_CONTROL: %s', exc)
             return
         self._send_packet(mc)
 
-        # Edge-triggered arm/disarm. We force-arm (param2=21196 magic) on
-        # the assumption that the operator already disabled pre-arm checks
-        # in QGC per настройка_px4.md — otherwise PX4 ignores normal arms
-        # when sensors aren't fully calibrated.
+        # Arm/disarm по фронту. Делаем force-arm (param2=21196 magic) в
+        # расчёте, что оператор уже отключил pre-arm проверки в QGC по
+        # настройка_px4.md — иначе PX4 игнорирует обычный arm, пока сенсоры
+        # не откалиброваны полностью.
         if self._last_armed is None or armed != self._last_armed:
             try:
                 self._send_packet(self._mavlink_enc.arm_disarm(armed, force=True))
-                logger.info('[FlightWindow] sent %s command', 'ARM' if armed else 'DISARM')
+                logger.info('[FlightWindow] отправлена команда %s', 'ARM' if armed else 'DISARM')
             except Exception as exc:
-                logger.warning('[FlightWindow] arm command error: %s', exc)
+                logger.warning('[FlightWindow] ошибка команды arm: %s', exc)
             self._last_armed = armed
 
     def __on_reboot_clicked(self) -> None:
         """С подтверждением шлёт PX4 MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN.
+
         PX4 ответит COMMAND_ACK и тут же ребутнётся — WebRTC-сессия
-        переподключится, mode/arm нужно будет выставлять заново."""
+        переподключится, mode/arm нужно будет выставлять заново.
+        """
         if self._mavlink_enc is None:
             return
         reply = QMessageBox.question(
@@ -461,13 +470,16 @@ class FlightWindow(QWidget):
             return
         try:
             self._send_packet(self._mavlink_enc.reboot_autopilot())
-            logger.info('[FlightWindow] sent PREFLIGHT_REBOOT_SHUTDOWN')
+            logger.info('[FlightWindow] отправлен PREFLIGHT_REBOOT_SHUTDOWN')
         except Exception as exc:
-            logger.warning('[FlightWindow] reboot send error: %s', exc)
+            logger.warning('[FlightWindow] ошибка отправки reboot: %s', exc)
 
     def __on_mode_picked(self, idx: int) -> None:
-        """Мгновенно шлём SET_MODE при выборе в dropdown. PX4 ответит
-        COMMAND_ACK для DO_SET_MODE — увидите в логах ACCEPTED/DENIED."""
+        """Мгновенно шлёт SET_MODE при выборе в dropdown.
+
+        PX4 ответит COMMAND_ACK для DO_SET_MODE — увидите в логах
+        ACCEPTED/DENIED.
+        """
         if self._mode_combo is None or self._mavlink_enc is None:
             return
         main_mode = self._mode_combo.itemData(idx)
@@ -480,10 +492,10 @@ class FlightWindow(QWidget):
         self._current_main_mode = main_mode
         try:
             self._send_packet(self._mavlink_enc.set_mode(main_mode))
-            logger.info('[FlightWindow] sent SET_MODE main=%d (%s)',
+            logger.info('[FlightWindow] отправлен SET_MODE main=%d (%s)',
                         main_mode, self._mode_combo.currentText())
         except Exception as exc:
-            logger.warning('[FlightWindow] SET_MODE send error: %s', exc)
+            logger.warning('[FlightWindow] ошибка отправки SET_MODE: %s', exc)
 
     def __send_heartbeat(self) -> None:
         if self._mavlink_enc is None:
@@ -491,7 +503,7 @@ class FlightWindow(QWidget):
         try:
             self._send_packet(self._mavlink_enc.heartbeat())
         except Exception as exc:
-            logger.debug('[FlightWindow] heartbeat encode error: %s', exc)
+            logger.debug('[FlightWindow] ошибка кодирования heartbeat: %s', exc)
 
     def _send_packet(self, packet: bytes) -> None:
         if not self._signalling:
@@ -499,9 +511,9 @@ class FlightWindow(QWidget):
         try:
             self._signalling.send_crsf_packet(packet)
         except Exception as exc:
-            logger.debug('[FlightWindow] send_packet error: %s', exc)
+            logger.debug('[FlightWindow] ошибка send_packet: %s', exc)
 
-    def __update_video_frame(self):
+    def __update_video_frame(self) -> None:
         frame = self._get_frame(self._cam_index)
         if frame is not None:
             fh, fw, ch = frame.shape
@@ -512,13 +524,13 @@ class FlightWindow(QWidget):
                 )
             )
 
-    def __finish(self):
+    def __finish(self) -> None:
         self._stop_streams()
         if self._on_close:
             self._on_close()
         self.close()
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: QCloseEvent) -> None:
         self._stop_streams()
         super().closeEvent(event)
 
@@ -526,10 +538,10 @@ class FlightWindow(QWidget):
         self._timer.stop()
         if self._heartbeat_timer is not None:
             self._heartbeat_timer.stop()
-        # Send one final DISARM on close so we don't leave the FC armed
-        # if the operator just hit the back button.
+        # Шлём один финальный DISARM при закрытии, чтобы не оставить FC
+        # армированным, если оператор просто нажал кнопку «назад».
         if self._mavlink_enc is not None and self._last_armed:
             try:
                 self._send_packet(self._mavlink_enc.arm_disarm(False, force=True))
             except Exception as exc:
-                logger.debug('[FlightWindow] final disarm error: %s', exc)
+                logger.debug('[FlightWindow] ошибка финального disarm: %s', exc)

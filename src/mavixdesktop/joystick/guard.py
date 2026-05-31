@@ -1,11 +1,10 @@
-"""Watch a JoystickInput for disconnect mid-flight and send one disarm
-frame to the drone if it goes away.
+"""Следит за JoystickInput на предмет отключения в полёте и шлёт дрону один
+disarm-кадр, если устройство пропадает.
 
-The guard is fc-aware: in CRSF mode it produces a zero-stick RC frame
-with the ARM channel pulled low; in MAVLink mode it produces a
-COMMAND_LONG / MAV_CMD_COMPONENT_ARM_DISARM packet. Both flow through
-the same packet data-channel that already carries joystick traffic to
-the drone, so no extra plumbing is required.
+Guard учитывает тип FC: в CRSF-режиме он формирует RC-кадр с нулевыми
+стиками и опущенным ARM-каналом; в MAVLink-режиме — пакет COMMAND_LONG /
+MAV_CMD_COMPONENT_ARM_DISARM. Оба идут через тот же packet data-channel,
+который уже несёт joystick-трафик дрону, так что доп. обвязки не нужно.
 """
 from __future__ import annotations
 
@@ -19,7 +18,7 @@ def _build_mavlink_disarm() -> bytes | None:
     try:
         from pymavlink.dialects.v20 import common as mavlink
     except ImportError:
-        logger.warning('[joystick-guard] pymavlink not installed; mavlink disarm skipped')
+        logger.warning('[joystick-guard] pymavlink не установлен; mavlink disarm пропущен')
         return None
     mav = mavlink.MAVLink(file=None, srcSystem=255, srcComponent=190)
     msg = mavlink.MAVLink_command_long_message(
@@ -28,7 +27,7 @@ def _build_mavlink_disarm() -> bytes | None:
         command=mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
         confirmation=0,
         param1=0.0,  # 0 = disarm
-        param2=21196.0,  # force-disarm magic (PX4/ArduPilot)
+        param2=21196.0,  # magic force-disarm (PX4/ArduPilot)
         param3=0.0, param4=0.0, param5=0.0, param6=0.0, param7=0.0,
     )
     return msg.pack(mav)
@@ -40,9 +39,9 @@ def _build_crsf_disarm() -> bytes:
 
 
 class JoystickGuard:
-    """Poll a JoystickInput; on a connected→disconnected transition fire
-    exactly one disarm frame via `send_frame`. After firing the guard
-    latches and won't repeat until reset()."""
+    """Опрашивает JoystickInput; при переходе connected→disconnected ровно один
+    раз шлёт disarm-кадр через `send_frame`. После срабатывания guard
+    защёлкивается и не повторяется до reset()."""
 
     def __init__(
         self,
@@ -80,22 +79,22 @@ class JoystickGuard:
         try:
             frame = self._build_frame()
         except Exception as exc:
-            logger.error('[joystick-guard] failed to build disarm frame: %s', exc)
+            logger.error('[joystick-guard] не удалось собрать disarm-кадр: %s', exc)
             return
         if frame:
             try:
                 self._send(frame)
                 logger.warning(
-                    '[joystick-guard] joystick lost, sent %s disarm (%d bytes)',
+                    '[joystick-guard] joystick потерян, отправлен %s disarm (%d байт)',
                     self._fc_type, len(frame),
                 )
             except Exception as exc:
-                logger.error('[joystick-guard] send failed: %s', exc)
+                logger.error('[joystick-guard] отправка не удалась: %s', exc)
         if self._on_disarm is not None:
             try:
                 self._on_disarm()
             except Exception as exc:
-                logger.debug('[joystick-guard] on_disarm callback error: %s', exc)
+                logger.debug('[joystick-guard] ошибка колбэка on_disarm: %s', exc)
 
     def _build_frame(self) -> bytes | None:
         if self._fc_type == 'crsf':
