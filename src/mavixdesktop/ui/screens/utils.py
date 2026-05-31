@@ -29,8 +29,7 @@ from mavixdesktop.ui.style import theme
 _ICONS_DIR = Path(__file__).parent.parent / 'icons'
 
 
-# --- SVG-хелперы ---
-
+#### SVG-хелперы #######################################################################
 def svg_pixmap(name: str, size: int, color: str | None = None) -> QPixmap:
     """Загружает SVG из ui/icons/<name> и возвращает QPixmap.
 
@@ -91,8 +90,7 @@ def mavix_logo_pixmap(size: int) -> QPixmap:
     return px
 
 
-# --- Фабрики overlay-кнопок ---
-
+#### Фабрики overlay-кнопок ############################################################
 def overlay_btn(text: str, parent: QWidget, size: int | None = None) -> QPushButton:
     """Прозрачная круглая кнопка с текстовым символом (стрелки и т.п.).
 
@@ -174,8 +172,7 @@ def overlay_icon_btn(svg_name: str, parent: QWidget,
     return btn
 
 
-# --- AnimatedCard ---
-
+#### AnimatedCard ######################################################################
 class AnimatedCard(QWidget):
     """База для карточек с анимируемой по hover акцентной полосой внизу.
 
@@ -241,8 +238,7 @@ class AnimatedCard(QWidget):
         painter.end()
 
 
-# --- CardGrid ---
-
+#### CardGrid ##########################################################################
 class CardGrid(QWidget):
     """Адаптивный grid, перераскладывающий колонки при ресайзе.
 

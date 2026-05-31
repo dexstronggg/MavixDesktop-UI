@@ -52,6 +52,7 @@ def _local_ice_servers() -> list[dict]:
     return servers
 
 
+#### Координатор сессии ################################################################
 class SessionCoordinator:
     def __init__(
         self,
@@ -80,8 +81,6 @@ class SessionCoordinator:
         self.on_drones_changed: Callable[[list[dict]], None] | None = None
         self.on_fc_changed: Callable[[str, str], None] | None = None
         self.on_cameras_received: Callable[[list[dict]], None] | None = None
-        self.on_cameras_changed: Callable[[list[int]], None] | None = None
-        self.on_drone_disconnected: Callable[[str], None] | None = None
         self.on_drone_offline: Callable[[str], None] | None = None
         self.on_connect_failed: Callable[[str], None] | None = None
         self.on_error: Callable[[str], None] | None = None
@@ -205,6 +204,7 @@ class SessionCoordinator:
             return
         packet.send_bytes(frame)
 
+#### Диспетчер сигнальных сообщений ####################################################
     async def _on_message(self, msg: dict) -> None:
         kind = msg.get('type')
         match kind:
@@ -244,11 +244,6 @@ class SessionCoordinator:
                 if isinstance(drone_id, str) and self._target_drone_id == drone_id:
                     self._reconnect_drone_id = drone_id
                 await self._teardown_session()
-                if self.on_drone_disconnected is not None and isinstance(drone_id, str):
-                    try:
-                        self.on_drone_disconnected(drone_id)
-                    except Exception as exc:
-                        logger.warning('[coord] ошибка on_drone_disconnected: %s', exc)
                 if self._reconnect_drone_id is not None:
                     await self.request_drone_list()
             case 'auth_warning':
@@ -389,6 +384,7 @@ class SessionCoordinator:
             return new_access
         raise ApiError('refresh не вернул access-токен')
 
+#### Интеграция с FC и QGC-relay #######################################################
     def _wire_channels_to_fc(self) -> None:
         """Как только data-каналы появились, подключает packet-канал к FC."""
         if self._manager is None or self._manager.channels is None:
@@ -407,8 +403,6 @@ class SessionCoordinator:
             await self._handle_fc_message(payload)
         elif kind == 'cameras':
             self._handle_cameras_message(payload)
-        elif kind == 'cameras_changed':
-            self._handle_cameras_changed_message(payload)
         elif kind == 'battery':
             self._handle_battery_message(payload)
         elif kind == 'command_ack':
@@ -467,16 +461,6 @@ class SessionCoordinator:
                 self.on_cameras_received(cameras)
             except Exception as exc:
                 logger.warning('[coord] ошибка on_cameras_received: %s', exc)
-
-    def _handle_cameras_changed_message(self, payload: dict) -> None:
-        indices = payload.get('device_indices')
-        if not isinstance(indices, list):
-            return
-        if self.on_cameras_changed is not None:
-            try:
-                self.on_cameras_changed(indices)
-            except Exception as exc:
-                logger.warning('[coord] ошибка on_cameras_changed: %s', exc)
 
     def _on_config_message(self, payload: dict | list) -> None:
         # ConfigChannel вызывает это синхронно; планируем async-обработчик.

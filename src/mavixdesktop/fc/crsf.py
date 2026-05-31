@@ -24,6 +24,7 @@ class CRSF:
         0x29: 'DEVICE_INFO',
     }
 
+#### CRC и сборка кадра ################################################################
     @staticmethod
     def crc8(data: bytes) -> int:
         crc = 0
@@ -38,6 +39,7 @@ class CRSF:
         body = bytes([ftype]) + payload
         return bytes([addr, len(body) + 1]) + body + bytes([CRSF.crc8(body)])
 
+#### Сборка исходящих кадров ###########################################################
     @staticmethod
     def rc_frame(channels: list[int]) -> bytes:
         ch = (list(channels) + [CH_CENTER] * 16)[:16]
@@ -55,6 +57,7 @@ class CRSF:
     def ping_frame() -> bytes:
         return CRSF._frame(0x28, bytes([0xC8, 0xEE]))
 
+#### Разбор и декодирование ############################################################
     @staticmethod
     def parse_frames(buf: bytearray) -> Iterator[tuple[int, bytes]]:
         while len(buf) >= 4:
@@ -101,6 +104,7 @@ class CRSF:
                 pass
         return None
 
+#### Преобразование значений осей ######################################################
     @staticmethod
     def axis_to_crsf(v: float, dz: float = 0.05) -> int:
         if abs(v) < dz:

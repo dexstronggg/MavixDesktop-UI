@@ -277,8 +277,7 @@ class LoginPage(QWidget):
         bar.addWidget(gear)
         return bar
 
-    # --- Карточка ---
-
+    #### Карточка ##########################################################################
     def _build_card(self) -> QWidget:
         card = QFrame()
         card.setObjectName('authCard')
@@ -437,8 +436,7 @@ class LoginPage(QWidget):
     def _icon_pixmap_as_icon(self, name: str, size: int) -> QIcon:
         return QIcon(svg_pixmap(name, size, color=theme.TEXT_MUTED))
 
-    # --- Публичный API ---
-
+    #### Публичный API #####################################################################
     def set_error(self, message: str) -> None:
         self.error.setText(message)
         self.error.setVisible(bool(message))
@@ -512,8 +510,7 @@ class LoginPage(QWidget):
         )
         self._forgot_msg.show()
 
-    # --- Внутреннее ---
-
+    #### Внутреннее ########################################################################
     def _toggle_password_visibility(self, visible: bool) -> None:
         self.password.setEchoMode(
             QLineEdit.EchoMode.Normal if visible else QLineEdit.EchoMode.Password

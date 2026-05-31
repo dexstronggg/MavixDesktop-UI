@@ -287,22 +287,6 @@ async def test_cameras_message_with_non_list_ignored():
     assert c.cameras == []
 
 
-async def test_cameras_changed_message_fires_callback():
-    sc = _signal()
-    c = _coord(sc, _api())
-    received: list = []
-    c.on_cameras_changed = received.append
-    await c._on_config_message_async({'type': 'cameras_changed', 'device_indices': [0, 1, 2]})
-    assert received == [[0, 1, 2]]
-
-
-async def test_cameras_changed_message_with_non_list_ignored():
-    sc = _signal()
-    c = _coord(sc, _api())
-    c.on_cameras_changed = lambda _: pytest.fail('should not fire')
-    await c._on_config_message_async({'type': 'cameras_changed', 'device_indices': 'x'})
-
-
 async def test_send_bitrate_update_routes_to_config_channel():
     sc = _signal()
     c = _coord(sc, _api())
@@ -338,7 +322,7 @@ async def test_send_reboot_no_session_is_noop():
     await c.send_reboot()
 
 
-# ---------- reconnect on drone_disconnected ----------
+#### reconnect on drone_disconnected ###################################################
 
 async def test_drone_disconnected_remembers_target_for_reconnect():
     sc = _signal()
@@ -347,14 +331,11 @@ async def test_drone_disconnected_remembers_target_for_reconnect():
     mgr.close_async = AsyncMock()
     c._manager = mgr
     c._target_drone_id = 'drone-A'
-    notified = []
-    c.on_drone_disconnected = notified.append
 
     await c._on_message({'type': 'drone_disconnected', 'drone_id': 'drone-A'})
 
     assert c._reconnect_drone_id == 'drone-A'
     assert c._manager is None
-    assert notified == ['drone-A']
 
 
 async def test_drone_disconnected_for_other_drone_no_reconnect():
@@ -417,7 +398,7 @@ async def test_drones_event_does_not_reconnect_if_offline():
     assert c._reconnect_drone_id == 'drone-A'  # still waiting
 
 
-# ---------- auth_refreshed ----------
+#### auth_refreshed ####################################################################
 
 async def test_auth_refreshed_updates_signal_client_token():
     sc = _signal()
@@ -476,7 +457,7 @@ async def test_auth_refreshed_skips_persist_when_unchanged():
     assert c._refresh_token == 'r-token'
 
 
-# ---------- error / shutdown ----------
+#### error / shutdown ##################################################################
 
 async def test_error_message_fires_callback():
     sc = _signal()

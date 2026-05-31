@@ -35,6 +35,7 @@ from mavixdesktop.ui.screens.utils import (
 from mavixdesktop.ui.style import theme
 
 
+#### Хелперы шапки и карточек ##########################################################
 def _brand_widget(parent: QWidget | None = None) -> QWidget:
     """Логотип-бренд: квадратик с M плюс надпись MAVIX, как в шапке сайта."""
     w = QWidget(parent)
@@ -122,6 +123,7 @@ def _truncate_id(drone_id: str, max_chars: int = _ID_MAX_CHARS) -> str:
     return f'{drone_id[:head]}…{drone_id[-tail:]}'
 
 
+#### Карточка дрона ####################################################################
 class DroneCard(AnimatedCard):
     clicked = Signal(str)
     delete_requested = Signal(str)
@@ -289,6 +291,7 @@ class _DroneGrid(CardGrid):
     GAP    = 20
 
 
+#### Статистика и подсказки ############################################################
 class _StatsBar(QWidget):
     """Сводка по флоту: всего / готов / offline / подключение.
 
@@ -433,6 +436,7 @@ class _DocsHint(QWidget):
         QDesktopServices.openUrl(QUrl(f'{base}/dashboard/docs/user'))
 
 
+#### Страница списка дронов ############################################################
 class DroneListPage(QWidget):
     def __init__(self, on_select: Callable[[str], None], on_refresh: Callable[[], None],
                  on_logout: Callable[[], None], on_joystick_cfg: Callable[[], None],

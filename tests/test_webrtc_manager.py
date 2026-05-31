@@ -145,7 +145,7 @@ async def test_close_async_closes_peer_and_session(monkeypatch):
     assert mgr.active_drone_id is None
 
 
-# ---------- on_channel_attached callback ----------
+#### on_channel_attached callback ######################################################
 # Hub.attach happens when aiortc fires the 'datachannel' event after
 # DTLS+SCTP completes — not immediately after offer/answer. The callback
 # lets the coordinator know "the channel is actually ready now" so it

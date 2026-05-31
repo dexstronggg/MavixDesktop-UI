@@ -10,6 +10,7 @@ class ApiError(Exception):
     pass
 
 
+#### HTTP-клиент REST API ##############################################################
 class ApiSession:
     """HTTP-клиент REST API MavixServer: login, refresh, ice-servers, list-drones."""
 
@@ -34,6 +35,7 @@ class ApiSession:
             logger.debug('[api] ошибка проверки health: %s', exc)
             return False
 
+#### Аутентификация ####################################################################
     async def login(self, email: str, password: str) -> dict:
         async with self._session.post(
             f'{settings.http_url}/api/v1/auth/login',
@@ -71,6 +73,7 @@ class ApiSession:
                 raise ApiError(data.get('detail', 'запрос восстановления пароля не удался'))
             return data
 
+#### ICE-серверы и дроны ###############################################################
     async def ice_servers(self) -> list[dict]:
         try:
             async with self._session.get(f'{settings.http_url}/api/v1/ice-servers') as r:

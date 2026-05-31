@@ -64,7 +64,7 @@ def test_build_configuration_ignores_entries_without_urls(monkeypatch):
     assert len(cfg.iceServers) == 1
 
 
-# ---------- _patch_dtls_setup_passive ----------
+#### _patch_dtls_setup_passive #########################################################
 # The drone runs GStreamer webrtcbin which always wants to be the DTLS
 # client (a=setup:active). aiortc, by default, also returns
 # a=setup:active in its answer. With both sides claiming active, DTLS

@@ -41,10 +41,10 @@ class Settings(BaseSettings):
         extra='ignore',
     )
 
-    # --- Server ---
+#### Сервер ############################################################################
     signal_url: str = Field(default='https://drone-mavix.ru', alias='SIGNAL_URL')
 
-    # --- WebRTC ICE overrides ---
+#### Переопределения WebRTC ICE ########################################################
     # Если оставить пустым, desktop использует то, что вернёт сервер из
     # /api/v1/ice-servers. Дефолты ниже повторяют production STUN/TURN,
     # чтобы свежая установка дотягивалась до нужного relay ещё до логина.
@@ -53,24 +53,24 @@ class Settings(BaseSettings):
     turn_username: str = Field(default='myuser', alias='TURN_USERNAME')
     turn_password: str = Field(default='BxBF+DZ0JZU6lK1MiSyj8oG/+gwKJeIF', alias='TURN_PASSWORD')
 
-    # --- QGC / MAVLink relay ---
+#### QGC / MAVLink relay ###############################################################
     qgc_host: str = Field(default='127.0.0.1', alias='QGC_HOST')
     qgc_port: int = Field(default=14550, alias='QGC_PORT')
     qgc_bind_port: int = Field(default=0, alias='QGC_BIND_PORT')
 
-    # --- Debug: force-relay ---
+#### Отладка: force-relay ##############################################################
     # Если True, в SDP отбрасываются все candidate-строки кроме relay.
     # Имитирует корпоративный/университетский firewall, где host и srflx
     # пары не работают. Удобно для проверки, что TURN-only путь живой,
     # не выходя из домашней сети.
     force_relay: bool = Field(default=False, alias='FORCE_RELAY')
 
-    # --- Paths ---
+#### Пути ##############################################################################
     data_path: Path = _USER_BASE / 'data'
     log_path: Path = Field(default_factory=lambda: _USER_BASE / 'logs' / f'mavixdesktop_{date.today()}.log')
     config_dir: Path = _USER_BASE
 
-    # --- Auth ---
+#### Аутентификация ####################################################################
     keyring_service: str = Field(default='mavixdesktop', alias='KEYRING_SERVICE')
 
     @property

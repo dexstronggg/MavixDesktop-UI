@@ -43,6 +43,7 @@ PX4_AUTO_SUB_RTL = 5
 ARM_FORCE_MAGIC = 21196  # MAV_CMD_COMPONENT_ARM_DISARM param2 для force-arm
 
 
+#### Кодировщик MAVLink ################################################################
 class MavlinkEncoder:
     """Строит сырые MAVLink2 байтовые кадры для исходящих пакетов."""
 
@@ -168,6 +169,7 @@ class MavlinkEncoder:
         return msg.pack(self._mav)
 
 
+#### Помощники нормализации осей #######################################################
 def _to_axis(value: float) -> int:
     """Зажимает и масштабирует значение стика -1..1 в MAVLink-диапазон -1000..1000."""
     if value < -1.0:

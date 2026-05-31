@@ -42,6 +42,7 @@ from mavixdesktop.ui.screens.widgets import StickWidget
 from mavixdesktop.ui.style import theme
 
 
+#### Алиасы совместимости ##############################################################
 # Алиасы совместимости, чтобы остальная часть этого 800-строчного legacy-
 # экрана продолжала работать без изменений. Реальные порты этих символов
 # живут в mavixdesktop.joystick.
@@ -94,6 +95,7 @@ _STEPS = [
 ]
 
 
+#### Прогресс-индикатор калибровки #####################################################
 class _StepProgress(QWidget):
     """Точечный progress-индикатор шагов калибровки.
 
@@ -172,6 +174,7 @@ class _StepProgress(QWidget):
         p.end()
 
 
+#### Карточки джойстиков ###############################################################
 _CARD_W  = 220
 # 14 (top margin) + 56 (icon) + 6 + 34 (имя — 2 строки) + 6 + 14 (статус)
 # + 6 + 52 (actions с иконкой + подписью) + 6 (bottom margin) ≈ 194.
@@ -396,6 +399,7 @@ class _JoystickGrid(CardGrid):
     GAP    = _GAP
 
 
+#### Превью стиков и оверлеи ###########################################################
 class _StickPreviewDialog(QDialog):
     """Всплывающее окно — показывает позиции стиков в реальном времени."""
 
@@ -582,6 +586,7 @@ class QGCLaunchingOverlay(QDialog):
         super().closeEvent(event)
 
 
+#### Экран настройки джойстиков ########################################################
 class JoystickSetupPage(QWidget):
     DEMO_JOYSTICK_NAME = 'Демо-контроллер (Mock)'
 
@@ -725,6 +730,7 @@ class JoystickSetupPage(QWidget):
             cards.append(card)
         self._grid.set_cards(cards)
 
+    #### Обработчики карточек ##############################################################
     def _on_card_clicked(self, index: int) -> None:
         # Раньше тут стоял if self._demo: QMessageBox → return — теперь
         # пропускаем дальше даже в демо-режиме, чтобы дизайн диалога
@@ -762,6 +768,7 @@ class JoystickSetupPage(QWidget):
         elif action == 'file_save':
             self._save_to_file(index, name)
 
+    #### Загрузка и сохранение файлов ######################################################
     def _load_from_file(self, index: int, name: str) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, 'Загрузить калибровку', '', 'JSON (*.json)'
@@ -806,6 +813,7 @@ class JoystickSetupPage(QWidget):
                                 f'Калибровка сохранена в:\n{path}')
 
 
+#### Диалог калибровки #################################################################
 class JoystickCalibrationDialog(QDialog):
     def __init__(self, joystick_index: int, joystick_name: str,
                  parent: QWidget | None = None) -> None:
@@ -857,6 +865,7 @@ class JoystickCalibrationDialog(QDialog):
 
         self._update_ui()
 
+    #### Опрос джойстика ###################################################################
     def _read_axes(self) -> list[float]:
         pygame.event.pump()
         return [self._js.get_axis(i) for i in range(self._js.get_numaxes())]
@@ -916,6 +925,7 @@ class JoystickCalibrationDialog(QDialog):
                             self._next_btn.setText(f'Далее (ось {i})')
                             break
 
+    #### Шаги калибровки ###################################################################
     def _on_next(self) -> None:
         vals = self._read_axes()
         center = self._data.get('center', [0.0] * len(vals))

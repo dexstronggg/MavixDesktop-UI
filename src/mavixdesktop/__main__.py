@@ -25,8 +25,7 @@ def _init_dirs() -> None:
     setup_file_logging()
 
 
-# --- Headless-режим ---
-
+#### Headless-режим ####################################################################
 async def _authenticate_headless(api: ApiSession, email: str | None, password: str | None) -> tuple[str, str]:
     stored_email, stored_refresh = token_store.load()
     if stored_refresh:
@@ -71,8 +70,7 @@ async def _run_headless(email: str | None, password: str | None) -> None:
         await api.close()
 
 
-# --- GUI-режим ---
-
+#### GUI-режим #########################################################################
 def _server_reachable(timeout_sec: float = 2.0) -> bool:
     """Быстрый sync-пинг сервера на /api/v1/health. True = жив, иначе False.
 
@@ -232,8 +230,7 @@ def _run_gui(demo: bool = False) -> int:
     return app.exec()
 
 
-# --- Точка входа ---
-
+#### Точка входа #######################################################################
 def main() -> None:
     parser = argparse.ArgumentParser(prog='mavixdesktop', description='Mavix GCS')
     parser.add_argument('--headless', action='store_true',

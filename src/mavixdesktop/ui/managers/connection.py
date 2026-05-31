@@ -37,8 +37,7 @@ class ConnectionManager:
         self._track_callback = None
         self._reset_callback = None
 
-    # --- Публичный API для App ---
-
+    #### Публичный API для App #############################################################
     @property
     def coordinator(self) -> SessionCoordinator | None:
         return self._coord
@@ -163,8 +162,7 @@ class ConnectionManager:
             if own_session:
                 await api.close()
 
-    # --- Внутреннее ---
-
+    #### Мост Qt в asyncio #################################################################
     def _ensure_loop_started(self) -> None:
         if self._loop is not None:
             return
@@ -242,6 +240,7 @@ class ConnectionManager:
         self._coord.on_battery_changed = self._emit_battery
         self._coord_task = asyncio.create_task(self._coord.run())
 
+    #### События coordinator в сигналы Qt ##################################################
     def _emit_drones(self, drones: list[dict]) -> None:
         try:
             self._bridge.client_list_updated.emit(drones)
