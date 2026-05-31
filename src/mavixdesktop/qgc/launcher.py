@@ -1,4 +1,4 @@
-"""Find and launch QGroundControl with a SDL_GAMECONTROLLERCONFIG env var."""
+"""Поиск и запуск QGroundControl с env-переменной SDL_GAMECONTROLLERCONFIG."""
 from __future__ import annotations
 
 import os
@@ -27,9 +27,9 @@ def save_qgc_path(path: Path) -> None:
     try:
         _QGC_PATH_FILE.parent.mkdir(parents=True, exist_ok=True)
         _QGC_PATH_FILE.write_text(str(path), encoding='utf-8')
-        logger.info('[qgc] saved user path: %s', path)
+        logger.info('[qgc] сохранён пользовательский путь: %s', path)
     except OSError as exc:
-        logger.warning('[qgc] could not save user path: %s', exc)
+        logger.warning('[qgc] не удалось сохранить пользовательский путь: %s', exc)
 
 
 def clear_saved_qgc_path() -> None:
@@ -38,7 +38,7 @@ def clear_saved_qgc_path() -> None:
     except FileNotFoundError:
         pass
     except OSError as exc:
-        logger.warning('[qgc] could not clear user path: %s', exc)
+        logger.warning('[qgc] не удалось очистить пользовательский путь: %s', exc)
 
 
 def _looks_like_qgc(name: str) -> bool:
@@ -132,7 +132,7 @@ _last_launched_proc: subprocess.Popen | None = None
 def is_qgc_running() -> bool:
     try:
         from PySide6.QtCore import QSharedMemory
-    except Exception:
+    except ImportError:
         # Без Qt можем только глянуть на наш собственный Popen.
         proc = _last_launched_proc
         return proc is not None and proc.poll() is None
@@ -146,9 +146,9 @@ def is_qgc_running() -> bool:
 def launch_qgc(sdl_config: str = '') -> subprocess.Popen | None:
     qgc_path = find_qgc()
     if not qgc_path:
-        logger.warning('[qgc] QGroundControl not found')
+        logger.warning('[qgc] QGroundControl не найден')
         return None
-    logger.info('[qgc] found %s', qgc_path)
+    logger.info('[qgc] найден %s', qgc_path)
     env = os.environ.copy()
     if sdl_config:
         env['SDL_GAMECONTROLLERCONFIG'] = sdl_config
@@ -160,9 +160,9 @@ def launch_qgc(sdl_config: str = '') -> subprocess.Popen | None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        logger.info('[qgc] launched pid=%d', proc.pid)
+        logger.info('[qgc] запущен pid=%d', proc.pid)
         _last_launched_proc = proc
         return proc
     except Exception as exc:
-        logger.error('[qgc] launch failed: %s', exc)
+        logger.error('[qgc] запуск не удался: %s', exc)
         return None

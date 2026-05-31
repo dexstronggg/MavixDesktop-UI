@@ -1,28 +1,50 @@
+"""Экран настройки джойстиков: список, калибровка и превью стиков."""
+from __future__ import annotations
+
 import json
 import subprocess
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import pygame
-from PySide6.QtCore import Qt, QSize, QTimer, Signal, QPoint
-from PySide6.QtGui import QGuiApplication, QIcon, QPainter, QColor
+from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import (
+    QCloseEvent,
+    QColor,
+    QGuiApplication,
+    QHideEvent,
+    QIcon,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QShowEvent,
+)
 from PySide6.QtWidgets import (
-    QWidget, QDialog, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QToolButton, QMessageBox, QFileDialog,
-    QScrollArea, QFrame,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from mavixdesktop.core.config import settings
-from mavixdesktop.ui.style import theme
 from mavixdesktop.joystick import calibration as joystick_calibration
 from mavixdesktop.joystick.input import JoystickInput
 from mavixdesktop.joystick.manager import build_sdl_config, list_joysticks
-from .utils import svg_pixmap, AnimatedCard, CardGrid
-from .widgets import StickWidget
+from mavixdesktop.ui.screens.utils import AnimatedCard, CardGrid, svg_pixmap
+from mavixdesktop.ui.screens.widgets import StickWidget
+from mavixdesktop.ui.style import theme
 
 
-# Compatibility aliases so the rest of this 800-line legacy screen keeps
-# working unchanged. Real ports of these symbols live in mavixdesktop.joystick.
+# Алиасы совместимости, чтобы остальная часть этого 800-строчного legacy-
+# экрана продолжала работать без изменений. Реальные порты этих символов
+# живут в mavixdesktop.joystick.
 class JoystickManager:
     @staticmethod
     def list_joysticks() -> list[str]:
@@ -97,7 +119,7 @@ class _StepProgress(QWidget):
     _DOT_GAP = 12
     _HALO_PAD = 4  # сколько px halo выступает за пределы dot со всех сторон
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._current = 0
         # Высота: dot + halo сверху + halo снизу + небольшой запас.
@@ -109,7 +131,7 @@ class _StepProgress(QWidget):
         self._current = step
         self.update()
 
-    def paintEvent(self, event):
+    def paintEvent(self, event: QPaintEvent) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
         accent = QColor(theme.ACCENT)
@@ -149,6 +171,7 @@ class _StepProgress(QWidget):
             x += d + gap
         p.end()
 
+
 _CARD_W  = 220
 # 14 (top margin) + 56 (icon) + 6 + 34 (имя — 2 строки) + 6 + 14 (статус)
 # + 6 + 52 (actions с иконкой + подписью) + 6 (bottom margin) ≈ 194.
@@ -164,7 +187,8 @@ class _PopupRow(AnimatedCard):
     _BAR_RADIUS    = theme.RADIUS_SM
     _BAR_HEIGHT    = 2
 
-    def __init__(self, text: str, callback, parent=None):
+    def __init__(self, text: str, callback: Callable[[], None],
+                 parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFixedHeight(42)
         self.setCursor(Qt.PointingHandCursor)
@@ -180,14 +204,14 @@ class _PopupRow(AnimatedCard):
         )
         lay.addWidget(lbl)
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.LeftButton:
             self._callback()
         super().mousePressEvent(event)
 
 
 class _CardMenu(QFrame):
-    def __init__(self, items: list, parent=None):
+    def __init__(self, items: list, parent: QWidget | None = None) -> None:
         super().__init__(parent, Qt.Popup | Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_StyledBackground, True)
         self.setStyleSheet(f"""
@@ -206,7 +230,7 @@ class _CardMenu(QFrame):
             lay.addWidget(row)
         self.adjustSize()
 
-    def show_at(self, pos):
+    def show_at(self, pos: QPoint) -> None:
         self.move(pos)
         self.show()
 
@@ -215,10 +239,11 @@ class JoystickCard(AnimatedCard):
     clicked = Signal(int)
     action  = Signal(int, str)
 
-    def __init__(self, index: int, name: str, calibrated: bool):
+    def __init__(self, index: int, name: str, calibrated: bool) -> None:
         super().__init__()
         self._index = index
-        self._active_menu = None  # keep reference to prevent GC while popup is open
+        # держим ссылку, чтобы popup не собрался GC пока он открыт
+        self._active_menu = None
 
         self.setFixedSize(_CARD_W, _CARD_H)
         self.setCursor(Qt.PointingHandCursor)
@@ -292,7 +317,7 @@ class JoystickCard(AnimatedCard):
         lay.addWidget(name_lbl)
         lay.addWidget(status_row)
 
-        # ── Явные кнопки действий вместо ...-меню (под статусом) ──────────────
+        # --- Явные кнопки действий вместо ...-меню (под статусом) ---
         actions_row = QWidget()
         actions_row.setStyleSheet('background: transparent; border: none;')
         ar = QHBoxLayout(actions_row)
@@ -353,11 +378,11 @@ class JoystickCard(AnimatedCard):
 
         lay.addWidget(actions_row)
 
-    def _on_hover(self, hovered: bool):
+    def _on_hover(self, hovered: bool) -> None:
         self.setStyleSheet(self._style_hover if hovered else self._style_normal)
         self._animate_bar(1000 if hovered else 0)
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         # Клики по кнопкам действий перехватывают сами QPushButton —
         # сюда долетают только клики по «телу» карточки.
         if event.button() == Qt.LeftButton:
@@ -375,7 +400,8 @@ class _StickPreviewDialog(QDialog):
     """Всплывающее окно — показывает позиции стиков в реальном времени."""
 
     def __init__(self, joystick_index: int, joystick_name: str,
-                 calibration: dict, parent=None, on_takeoff=None):
+                 calibration: dict, parent: QWidget | None = None,
+                 on_takeoff: Callable[[int, dict], None] | None = None) -> None:
         super().__init__(parent)
         self._on_takeoff = on_takeoff
         self._joystick_index = joystick_index
@@ -409,7 +435,7 @@ class _StickPreviewDialog(QDialog):
         self._timer.timeout.connect(self.__poll)
         self._timer.start()
 
-    def __build_title_bar(self, joystick_name: str, root: QVBoxLayout):
+    def __build_title_bar(self, joystick_name: str, root: QVBoxLayout) -> None:
         title_row = QHBoxLayout()
         title_lbl = QLabel(joystick_name)
         title_lbl.setStyleSheet(
@@ -421,15 +447,15 @@ class _StickPreviewDialog(QDialog):
         close_btn.setFixedSize(28, 28)
         close_btn.setIcon(QIcon(svg_pixmap('cross.svg', 14, color=theme.TEXT_PRIMARY)))
         close_btn.setIconSize(QSize(14, 14))
-        close_btn.setStyleSheet(f"""
-            QPushButton {{
+        close_btn.setStyleSheet("""
+            QPushButton {
                 background: transparent;
                 border: none;
                 border-radius: 14px;
-            }}
-            QPushButton:hover {{
+            }
+            QPushButton:hover {
                 background: rgba(255,80,80,0.20);
-            }}
+            }
         """)
         close_btn.clicked.connect(self.close)
         title_row.addWidget(title_lbl)
@@ -437,7 +463,7 @@ class _StickPreviewDialog(QDialog):
         title_row.addWidget(close_btn)
         root.addLayout(title_row)
 
-    def __build_sticks(self, root: QVBoxLayout):
+    def __build_sticks(self, root: QVBoxLayout) -> None:
         sticks_row = QHBoxLayout()
         sticks_row.addStretch()
         self._stick_l = StickWidget('Тяга / Рыск.', label_font_px=12)
@@ -448,7 +474,7 @@ class _StickPreviewDialog(QDialog):
         sticks_row.addStretch()
         root.addLayout(sticks_row)
 
-    def __poll(self):
+    def __poll(self) -> None:
         try:
             thr, yaw, pitch, roll = self._js.get_stick_positions()
             self._stick_l.set_position(yaw, thr)
@@ -456,13 +482,13 @@ class _StickPreviewDialog(QDialog):
         except Exception:
             pass
 
-    def __takeoff(self):
+    def __takeoff(self) -> None:
         self._timer.stop()
         self.accept()
         if self._on_takeoff:
             self._on_takeoff(self._joystick_index, self._calibration)
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: QCloseEvent) -> None:
         self._timer.stop()
         super().closeEvent(event)
 
@@ -470,7 +496,8 @@ class _StickPreviewDialog(QDialog):
 class QGCLaunchingOverlay(QDialog):
     """Статус «Открываю QGroundControl…»; закрывается когда окно QGC появилось."""
 
-    def __init__(self, qgc_proc, parent=None):
+    def __init__(self, qgc_proc: subprocess.Popen,
+                 parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowFlags(
             Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
@@ -486,8 +513,8 @@ class QGCLaunchingOverlay(QDialog):
             }}
         """)
 
-        self.qgc_proc_ = qgc_proc
-        self.deadline_ = time.monotonic() + 6.0
+        self._qgc_proc = qgc_proc
+        self._deadline = time.monotonic() + 6.0
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(20, 18, 20, 18)
@@ -513,10 +540,10 @@ class QGCLaunchingOverlay(QDialog):
         self.activateWindow()
 
     def __check(self) -> None:
-        if self.qgc_proc_.poll() is not None:
+        if self._qgc_proc.poll() is not None:
             self.close()
             return
-        if self.__qgc_window_visible() or time.monotonic() > self.deadline_:
+        if self.__qgc_window_visible() or time.monotonic() > self._deadline:
             self.close()
 
     def __qgc_window_visible(self) -> bool:
@@ -538,10 +565,10 @@ class QGCLaunchingOverlay(QDialog):
         return False
 
     def __qgc_pid_tree(self) -> set[str]:
-        pids = {str(self.qgc_proc_.pid)}
+        pids = {str(self._qgc_proc.pid)}
         try:
             result = subprocess.run(
-                ['pgrep', '-P', str(self.qgc_proc_.pid)],
+                ['pgrep', '-P', str(self._qgc_proc.pid)],
                 capture_output=True, text=True, timeout=1,
             )
             if result.returncode == 0:
@@ -558,12 +585,13 @@ class QGCLaunchingOverlay(QDialog):
 class JoystickSetupPage(QWidget):
     DEMO_JOYSTICK_NAME = 'Демо-контроллер (Mock)'
 
-    def __init__(self, on_back: Callable, on_takeoff: Callable = None,
-                 demo: bool = False):
+    def __init__(self, on_back: Callable[[], None],
+                 on_takeoff: Callable[[int, dict], None] | None = None,
+                 demo: bool = False) -> None:
         super().__init__()
-        # None sentinel forces the very first _refresh to populate the UI even
-        # when there are zero joysticks (which would otherwise compare equal
-        # to an empty list and skip the rebuild path).
+        # Sentinel None заставляет самый первый _refresh заполнить UI даже
+        # при нуле джойстиков (иначе сравнение с пустым списком дало бы
+        # равенство и пропустило бы путь перестроения).
         self._joystick_names: list[str] | None = None
         self._on_takeoff = on_takeoff
         self._fc_type: str = 'none'
@@ -594,25 +622,25 @@ class JoystickSetupPage(QWidget):
         root.addWidget(scroll, 1)
         root.addWidget(self._empty, 1)
 
-        # Auto-rescan pygame joysticks every 3s while the page is visible so a
-        # plugged-in controller appears without the user having to hunt for a
-        # button. _refresh is idempotent (skips the rebuild if the device list
-        # is identical), so polling is cheap.
+        # Пересканируем pygame-джойстики каждые 3 с, пока страница видна,
+        # чтобы подключённый контроллер появился без поиска кнопки
+        # пользователем. _refresh идемпотентен (пропускает перестроение,
+        # если список устройств идентичен), так что polling дешёвый.
         self._auto_refresh_timer = QTimer(self)
         self._auto_refresh_timer.setInterval(3000)
         self._auto_refresh_timer.timeout.connect(self._refresh)
 
         self._refresh()
 
-    def showEvent(self, event):
+    def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
         self._auto_refresh_timer.start()
 
-    def hideEvent(self, event):
+    def hideEvent(self, event: QHideEvent) -> None:
         super().hideEvent(event)
         self._auto_refresh_timer.stop()
 
-    def __build_top_bar(self, on_back: Callable) -> QWidget:
+    def __build_top_bar(self, on_back: Callable[[], None]) -> QWidget:
         # Локальные хелперы вынесены в drone_list_page; импортируем
         # их здесь, чтобы шапка двух кабинетных экранов жила в одном
         # визуальном языке.
@@ -659,10 +687,10 @@ class JoystickSetupPage(QWidget):
 
         return top_bar
 
-    def set_fc_type(self, fc_type: str):
+    def set_fc_type(self, fc_type: str) -> None:
         self._fc_type = fc_type
 
-    def _refresh(self):
+    def _refresh(self) -> None:
         # Всегда сначала спрашиваем pygame о реальных джойстиках — даже в
         # демо-режиме: если у оператора есть подключённый USB-контроллер,
         # дизайн экранов калибровки/превью нужно проверять именно на нём.
@@ -672,8 +700,9 @@ class JoystickSetupPage(QWidget):
         if self._demo and not names:
             names = [self.DEMO_JOYSTICK_NAME]
 
-        # Auto-refresh tick: skip the rebuild if the device list hasn't changed,
-        # so we don't churn QWidget children (and stomp on any open menu) 3x/sec.
+        # Тик авто-обновления: пропускаем перестроение, если список устройств
+        # не изменился, чтобы не пересоздавать дочерние QWidget (и не сносить
+        # открытое меню) 3 раза в секунду.
         if names == self._joystick_names:
             return
         self._joystick_names = names
@@ -696,7 +725,7 @@ class JoystickSetupPage(QWidget):
             cards.append(card)
         self._grid.set_cards(cards)
 
-    def _on_card_clicked(self, index: int):
+    def _on_card_clicked(self, index: int) -> None:
         # Раньше тут стоял if self._demo: QMessageBox → return — теперь
         # пропускаем дальше даже в демо-режиме, чтобы дизайн диалога
         # калибровки/превью можно было увидеть глазами. Если в системе
@@ -718,7 +747,7 @@ class JoystickSetupPage(QWidget):
                                           on_takeoff=takeoff_cb)
                 dlg.exec()
 
-    def _on_card_action(self, index: int, action: str):
+    def _on_card_action(self, index: int, action: str) -> None:
         # Блокер демо-режима убран — см. комментарий в _on_card_clicked.
         # «Загрузить файл»/«Сохранить файл» работают и без реального
         # устройства (это работа с JSON), «Калибровать» в демо без
@@ -733,17 +762,17 @@ class JoystickSetupPage(QWidget):
         elif action == 'file_save':
             self._save_to_file(index, name)
 
-    def _load_from_file(self, index: int, name: str):
+    def _load_from_file(self, index: int, name: str) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, 'Загрузить калибровку', '', 'JSON (*.json)'
         )
         if not path:
             return
         try:
-            with open(path, 'r') as f:
+            with open(path) as f:
                 data = json.load(f)
-        except Exception as e:
-            QMessageBox.critical(self, 'Ошибка чтения файла', str(e))
+        except Exception as exc:
+            QMessageBox.critical(self, 'Ошибка чтения файла', str(exc))
             return
         ok, msg = JoystickCalibration.validate(data)
         if not ok:
@@ -756,7 +785,7 @@ class JoystickSetupPage(QWidget):
             f'Калибровка для «{name}» успешно загружена и сохранена.'
         )
 
-    def _save_to_file(self, index: int, name: str):
+    def _save_to_file(self, index: int, name: str) -> None:
         cal = JoystickCalibration.load(name)
         if not cal:
             QMessageBox.warning(self, 'Нет калибровки',
@@ -770,22 +799,23 @@ class JoystickSetupPage(QWidget):
         try:
             with open(path, 'w') as f:
                 json.dump(cal, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            QMessageBox.critical(self, 'Ошибка сохранения', str(e))
+        except Exception as exc:
+            QMessageBox.critical(self, 'Ошибка сохранения', str(exc))
             return
         QMessageBox.information(self, 'Сохранено',
                                 f'Калибровка сохранена в:\n{path}')
 
 
 class JoystickCalibrationDialog(QDialog):
-    def __init__(self, joystick_index: int, joystick_name: str, parent=None):
+    def __init__(self, joystick_index: int, joystick_name: str,
+                 parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle('Калибровка джойстика')
         self.setMinimumWidth(460)
         self._step = 0
         self._data: dict = {}
         self._joystick_name = joystick_name
-        self.calibration: dict = None
+        self.calibration: dict | None = None
         self._arm_btn_states: list | None = None
         self._arm_axis_states: list | None = None
 
@@ -836,7 +866,7 @@ class JoystickCalibrationDialog(QDialog):
         deltas = [(abs(vals[i] - center[i]), i) for i in range(len(vals)) if i not in exclude]
         return max(deltas)[1] if deltas else 0
 
-    def _poll(self):
+    def _poll(self) -> None:
         vals = self._read_axes()
         n = len(vals)
 
@@ -886,7 +916,7 @@ class JoystickCalibrationDialog(QDialog):
                             self._next_btn.setText(f'Далее (ось {i})')
                             break
 
-    def _on_next(self):
+    def _on_next(self) -> None:
         vals = self._read_axes()
         center = self._data.get('center', [0.0] * len(vals))
 
@@ -943,13 +973,13 @@ class JoystickCalibrationDialog(QDialog):
         self._next_btn.setText('Далее')
         self._update_ui()
 
-    def _update_ui(self):
+    def _update_ui(self) -> None:
         self._instruction.setText(_STEPS[self._step])
         self._progress.set_current(self._step)
         if self._step == _STEP_DONE:
             self._next_btn.setText('Готово')
 
-    def _build_calibration(self):
+    def _build_calibration(self) -> None:
         c = self._data
         self.calibration = {
             'axis_thr':   c.get('axis_thr',   2),
@@ -980,6 +1010,6 @@ class JoystickCalibrationDialog(QDialog):
             self.calibration, self._joystick_name, guid
         )
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: QCloseEvent) -> None:
         self._poll_timer.stop()
         super().closeEvent(event)

@@ -1,20 +1,42 @@
-from typing import Callable
+from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal, QTimer, QUrl, QSize
-from PySide6.QtGui import QPixmap, QPainter, QIcon, QDesktopServices, QAction
+from collections.abc import Callable
+
+from PySide6.QtCore import QSize, Qt, QTimer, QUrl, Signal
+from PySide6.QtGui import (
+    QAction,
+    QDesktopServices,
+    QHideEvent,
+    QIcon,
+    QMouseEvent,
+    QPainter,
+    QPixmap,
+    QShowEvent,
+)
 from PySide6.QtWidgets import (
-    QMenu, QMessageBox,
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QScrollArea, QFrame,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
 from mavixdesktop.core.config import settings
+from mavixdesktop.ui.screens.utils import (
+    AnimatedCard,
+    CardGrid,
+    mavix_logo_pixmap,
+    svg_pixmap,
+)
 from mavixdesktop.ui.style import theme
-from .utils import svg_pixmap, mavix_logo_pixmap, AnimatedCard, CardGrid
 
 
 def _brand_widget(parent: QWidget | None = None) -> QWidget:
-    """Логотип-бренд: квадратик с M + надпись MAVIX, как в шапке сайта."""
+    """Логотип-бренд: квадратик с M плюс надпись MAVIX, как в шапке сайта."""
     w = QWidget(parent)
     w.setStyleSheet('background: transparent;')
     h = QHBoxLayout(w)
@@ -37,9 +59,9 @@ def _brand_widget(parent: QWidget | None = None) -> QWidget:
 
 def _icon_button(icon_name: str | None, text: str,
                  parent: QWidget | None = None) -> QPushButton:
-    """Ghost-кнопка с опциональной SVG-иконкой + текстом.
+    """Ghost-кнопка с опциональной SVG-иконкой плюс текстом.
 
-    Если ``icon_name`` is None — кнопка только текстовая (используется
+    Если icon_name равен None — кнопка только текстовая (используется
     для «Выйти», чтобы не делать акцент иконкой).
     """
     btn = QPushButton(text, parent)
@@ -49,6 +71,7 @@ def _icon_button(icon_name: str | None, text: str,
     btn.setStyleSheet(theme.QSS_BUTTON_SECONDARY)
     btn.setMinimumHeight(36)
     return btn
+
 
 _CARD_W   = 210
 _CARD_H   = 230
@@ -103,7 +126,8 @@ class DroneCard(AnimatedCard):
     clicked = Signal(str)
     delete_requested = Signal(str)
 
-    def __init__(self, drone_id: str, status: str, index: int, icon_pixmap: QPixmap):
+    def __init__(self, drone_id: str, status: str, index: int,
+                 icon_pixmap: QPixmap) -> None:
         super().__init__()
         self._drone_id = drone_id
         self._status = status
@@ -202,7 +226,7 @@ class DroneCard(AnimatedCard):
         self._dots_btn.setIconSize(QSize(16, 16))
         self._dots_btn.setToolTip('Действия')
         self._dots_btn.setStyleSheet(
-            f'QPushButton {{ background: transparent; border: none; border-radius: 14px; }}'
+            'QPushButton { background: transparent; border: none; border-radius: 14px; }'
             f' QPushButton:hover {{ background: {theme.BG_HOVER}; }}'
         )
         self._dots_btn.clicked.connect(self._show_menu)
@@ -248,12 +272,12 @@ class DroneCard(AnimatedCard):
         b = int(h[4:6], 16)
         return f'rgba({r},{g},{b},{alpha})'
 
-    def _on_hover(self, hovered: bool):
+    def _on_hover(self, hovered: bool) -> None:
         effective = hovered and self._ready
         self.setStyleSheet(self._style_hover if effective else self._style_normal)
         self._animate_bar(1000 if effective else 0)
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         if self._ready and event.button() == Qt.LeftButton:
             self.clicked.emit(self._drone_id)
         super().mousePressEvent(event)
@@ -404,16 +428,16 @@ class _DocsHint(QWidget):
 
         lay.addStretch()
 
-    def _open_docs(self, _event) -> None:
+    def _open_docs(self, _event: QMouseEvent) -> None:
         base = settings.http_url.rstrip('/')
         QDesktopServices.openUrl(QUrl(f'{base}/dashboard/docs/user'))
 
 
 class DroneListPage(QWidget):
-    def __init__(self, on_select: Callable, on_refresh: Callable,
-                 on_logout: Callable, on_joystick_cfg: Callable,
-                 on_open_settings: Callable | None = None,
-                 on_delete_drone: Callable[[str], None] | None = None):
+    def __init__(self, on_select: Callable[[str], None], on_refresh: Callable[[], None],
+                 on_logout: Callable[[], None], on_joystick_cfg: Callable[[], None],
+                 on_open_settings: Callable[[], None] | None = None,
+                 on_delete_drone: Callable[[str], None] | None = None) -> None:
         super().__init__()
         self._on_select = on_select
         self._on_delete_drone = on_delete_drone
@@ -543,15 +567,15 @@ class DroneListPage(QWidget):
         # выше занимает основную высоту, hint остаётся на дне окна.
         root.addWidget(self._hint)
 
-    def showEvent(self, event):
+    def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
         self._refresh_timer.start()
 
-    def hideEvent(self, event):
+    def hideEvent(self, event: QHideEvent) -> None:
         super().hideEvent(event)
         self._refresh_timer.stop()
 
-    def update(self, drones: list):
+    def update(self, drones: list) -> None:
         if not drones:
             self._stats.set_counts(0, 0, 0, 0)
             self._empty.show()
@@ -565,8 +589,8 @@ class DroneListPage(QWidget):
         cards = []
         counts = {'ready': 0, 'offline': 0, 'connecting': 0}
         for i, d in enumerate(drones):
-            # Accept both new format ({drone_id, online}) and legacy
-            # ({session_id, status}); prefer the new fields when present.
+            # Принимаем и новый формат ({drone_id, online}), и старый
+            # ({session_id, status}); при наличии предпочитаем новые поля.
             drone_id = d.get('drone_id', d.get('session_id', ''))
             if 'online' in d:
                 status = 'ready' if d.get('online') else 'offline'

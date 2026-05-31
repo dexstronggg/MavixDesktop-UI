@@ -1,7 +1,7 @@
-"""Joystick stick positions → CRSF RC frame."""
+"""Позиции стиков joystick → RC-кадр CRSF."""
 from __future__ import annotations
 
-from mavixdesktop.fc.crsf import CH_CENTER, CH_MAX, CH_MIN, CRSF
+from mavixdesktop.fc.crsf import CH_MAX, CH_MIN, CRSF
 
 
 def build_rc_frame(
@@ -11,18 +11,18 @@ def build_rc_frame(
     yaw: float,
     armed: bool,
 ) -> bytes:
-    """Build a CRSF RC channels frame (type 0x16) from normalised stick values.
+    """Собирает CRSF RC channels frame (тип 0x16) из нормированных значений стиков.
 
-    All stick inputs are expected in [-1.0, 1.0]; clamping/dead-zone is
-    delegated to CRSF.axis_to_crsf / CRSF.throttle_to_crsf. The mapping
-    follows the standard TAER channel order:
+    Все входы стиков ожидаются в [-1.0, 1.0]; clamping/dead-zone делегированы
+    CRSF.axis_to_crsf / CRSF.throttle_to_crsf. Маппинг следует стандартному
+    порядку каналов TAER:
 
       CH1 Throttle  (T)
       CH2 Aileron   (A) — roll
       CH3 Elevator  (E) — pitch
       CH4 Rudder    (R) — yaw
-      CH5 ARM       — CH_MAX when armed, CH_MIN otherwise
-      CH6..CH16     — centered (CH_CENTER)
+      CH5 ARM       — CH_MAX когда armed, иначе CH_MIN
+      CH6..CH16     — центрированы (CH_CENTER)
     """
     channels = [
         CRSF.throttle_to_crsf(throttle),

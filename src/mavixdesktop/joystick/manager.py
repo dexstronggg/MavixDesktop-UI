@@ -1,18 +1,14 @@
-"""Discovery + SDL config string generation. No reading of axes here."""
+"""Обнаружение joystick + генерация SDL-конфиг-строки. Оси здесь не читаются."""
 from __future__ import annotations
 
 import platform
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
 
 
 def list_joysticks() -> list[str]:
-    """Return the names of all connected joysticks via pygame.
+    """Возвращает имена всех подключённых joystick через pygame.
 
-    Imports pygame lazily so tests that don't touch a real device
-    don't have to bring it in.
+    Импортирует pygame лениво, чтобы тесты, не трогающие реальное
+    устройство, не были обязаны его подтягивать.
     """
     import pygame
     pygame.joystick.init()
@@ -24,11 +20,11 @@ def list_joysticks() -> list[str]:
 
 
 def build_sdl_config(cal: dict, name: str, guid: str) -> str:
-    """Build an SDL_GAMECONTROLLERCONFIG-format string from a calibration dict.
+    """Собирает строку формата SDL_GAMECONTROLLERCONFIG из словаря калибровки.
 
-    Used by QGroundControl integration to interpret joystick axes the same
-    way the desktop does. Direction inversion is derived from the
-    calibration's min/max bounds (max < min means the raw axis is inverted).
+    Используется интеграцией с QGroundControl, чтобы тот интерпретировал оси
+    joystick так же, как desktop. Инверсия направления выводится из границ
+    min/max калибровки (max < min означает, что сырая ось инвертирована).
     """
     def axis_str(sdl_key: str, cal_key: str, inverted: bool) -> str:
         ax = cal.get(f'axis_{cal_key}', 0)
@@ -40,7 +36,7 @@ def build_sdl_config(cal: dict, name: str, guid: str) -> str:
     yaw_inv   = cal.get('yaw_max',   1.0) < cal.get('yaw_min',   -1.0)
     roll_inv  = cal.get('roll_max',  1.0) < cal.get('roll_min',  -1.0)
 
-    # SDL lefty/righty expect up=-1; if raw up > 0, we need inversion (~)
+    # SDL lefty/righty ожидают up=-1; если сырое up > 0, нужна инверсия (~)
     lefty_inv  = not thr_inv
     righty_inv = not pitch_inv
 

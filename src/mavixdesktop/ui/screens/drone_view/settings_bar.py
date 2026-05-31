@@ -6,32 +6,41 @@
   - кнопку и результаты спидтеста
   - кнопку сохранения настроек
 """
-from typing import Callable
+from __future__ import annotations
 
-from PySide6.QtCore import QSize, QPoint, Qt, QObject, QEvent, QModelIndex
-from PySide6.QtGui import QIcon, QPainter, QPen, QColor
+from collections.abc import Callable
+
+from PySide6.QtCore import QEvent, QModelIndex, QObject, QPoint, QSize, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel,
-    QPushButton, QComboBox, QLineEdit, QStyle, QStyledItemDelegate,
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
+    QWidget,
 )
 
-from mavixdesktop.ui.style import theme
 from mavixdesktop.ui.screens.utils import svg_pixmap
+from mavixdesktop.ui.style import theme
 
 
 class _PopupItemDelegate(QStyledItemDelegate):
-    """Делегат для popup'а combobox'а — рисует hover вручную.
+    """Делегат для popup-списка combobox — рисует hover вручную.
 
-    QSS-правило ``QAbstractItemView::item:hover`` не срабатывает в
-    комбинации QListView + Fusion + scoped stylesheet: предыдущие
-    попытки через mouseTracking и WA_Hover не дали эффекта (Qt style
-    engine берёт State_MouseOver не у того виджета, либо переопределяет
-    цвет через свою палитру). Здесь рисуем hover/selected напрямую:
-    fillRect под item'ом и pen цветом ACCENT — минуя style engine.
+    QSS-правило QAbstractItemView::item:hover не срабатывает в комбинации
+    QListView + Fusion + scoped stylesheet: предыдущие попытки через
+    mouseTracking и WA_Hover не дали эффекта (Qt style engine берёт
+    State_MouseOver не у того виджета, либо переопределяет цвет через
+    свою палитру). Здесь рисуем hover/selected напрямую: fillRect под
+    item-ом и pen цветом ACCENT — минуя style engine.
 
-    Hover-index трекается через :class:`_HoverTracker` event-filter
-    на viewport: на каждый MouseMove запоминаем index под курсором,
-    зовём viewport.update() — paint() перерисовывает с подсветкой.
+    Hover-индекс трекается через _HoverTracker event-filter на viewport:
+    на каждый MouseMove запоминаем index под курсором, зовём
+    viewport.update() — paint() перерисовывает с подсветкой.
     """
 
     # Заливка hover/selected — rgba от theme.ACCENT (#22d3ee) с alpha
@@ -39,14 +48,15 @@ class _PopupItemDelegate(QStyledItemDelegate):
     # в QSS, но через QColor — на этот раз гарантированно.
     _HIGHLIGHT_BG = QColor(34, 211, 238, 30)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._hover_index = QModelIndex()
 
     def set_hover_index(self, index: QModelIndex) -> None:
         self._hover_index = QModelIndex(index) if index is not None else QModelIndex()
 
-    def paint(self, painter: QPainter, option, index: QModelIndex) -> None:
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem,
+              index: QModelIndex) -> None:
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing, True)
 
@@ -74,12 +84,12 @@ class _HoverTracker(QObject):
     при следующем paint() и красит hover.
     """
 
-    def __init__(self, view, delegate: _PopupItemDelegate):
+    def __init__(self, view: QWidget, delegate: _PopupItemDelegate) -> None:
         super().__init__(view)
         self._view = view
         self._delegate = delegate
 
-    def eventFilter(self, obj, event):
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.MouseMove:
             try:
                 pos = event.position().toPoint()
@@ -152,7 +162,7 @@ class _BoundedComboBox(QComboBox):
         }}
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
         # Кастомный делегат + tracker для надёжного hover-painting.
         # QSS-route оказался ненадёжным (см. _PopupItemDelegate docstring).
@@ -162,7 +172,7 @@ class _BoundedComboBox(QComboBox):
         self.view().viewport().installEventFilter(self._hover_tracker)
         self._restyle_popup()
 
-    def paintEvent(self, event):
+    def paintEvent(self, event: QPaintEvent) -> None:
         """Рисуем стандартный QComboBox, а сверху — chevron-down справа
         как визуальный индикатор «это раскрывающийся список».
 
@@ -186,15 +196,16 @@ class _BoundedComboBox(QComboBox):
         p.drawLine(cx, cy + 2, cx + 4, cy - 2)
         p.end()
 
-    def _restyle_popup(self):
-        """Применить наши стили к view и контейнеру popup'а. Вызывается
-        и в __init__, и в showPopup — контейнер создаётся Qt лениво,
-        и при __init__ его ещё может не существовать.
+    def _restyle_popup(self) -> None:
+        """Применяет наши стили к view и контейнеру popup-а.
+
+        Вызывается и в __init__, и в showPopup — контейнер создаётся Qt
+        лениво, и при __init__ его ещё может не существовать.
 
         Дополнительно включаем mouseTracking + WA_Hover на view и его
-        viewport — без этого QStyle::State_MouseOver не ставится у
-        item'а под курсором, и правило ``QAbstractItemView::item:hover``
-        в QSS не триггерится (QListView по дефолту tracking выключен).
+        viewport — без этого QStyle::State_MouseOver не ставится у item-а
+        под курсором, и правило QAbstractItemView::item:hover в QSS не
+        триггерится (QListView по дефолту tracking выключен).
         """
         view = self.view()
         if view is None:
@@ -211,9 +222,9 @@ class _BoundedComboBox(QComboBox):
             container.setAttribute(Qt.WA_StyledBackground, True)
             container.setStyleSheet(self._POPUP_CONTAINER_QSS)
 
-    def showPopup(self):
+    def showPopup(self) -> None:
         super().showPopup()
-        # Контейнер popup'а мог только что появиться — перекрашиваем.
+        # Контейнер popup-а мог только что появиться — перекрашиваем.
         self._restyle_popup()
         popup = self.view().window() if self.view() is not None else None
         app_win = self.window()
@@ -238,15 +249,14 @@ class _BoundedComboBox(QComboBox):
 class SettingsBar(QWidget):
     """Панель с настройками камеры, статусом FC и спидтестом.
 
-    Публичный API
-    -------------
-    update_fc_status(fc_type, fc_name) : обновить статус FC
-    update_ping(rtt_ms)                : обновить показание peer-to-peer пинга
-    update_camera(camera)              : заполнить дропдауны параметрами камеры
-    get_selected_params()              : → (param_index, bitrate) или (None, None)
+    Публичный API: update_fc_status(fc_type, fc_name) обновляет статус FC,
+    update_camera(camera) заполняет дропдауны параметрами камеры,
+    get_selected_params() возвращает (param_index, bitrate) или
+    (None, None).
     """
 
-    def __init__(self, on_save: Callable, on_calibrate: Callable):
+    def __init__(self, on_save: Callable[[], None],
+                 on_calibrate: Callable[[], None]) -> None:
         super().__init__()
         # objectName-селектор: фон относится только к этому виджету
         # и не каскадирует в дочерние QComboBox / QLineEdit.
@@ -309,15 +319,16 @@ class SettingsBar(QWidget):
         """)
         self.setFixedHeight(72)
 
-        self._params = []
+        self._params: list = []
         self.__build(on_save, on_calibrate)
 
-    def __build(self, on_save: Callable, on_calibrate: Callable):
+    def __build(self, on_save: Callable[[], None],
+                on_calibrate: Callable[[], None]) -> None:
         layout = QHBoxLayout(self)
         layout.setContentsMargins(20, 0, 20, 0)
         layout.setSpacing(10)
 
-        # ── Левая часть: FC-статус и предупреждение ───────────────────────────
+        # --- Левая часть: FC-статус и предупреждение ---
         self.fc_status_label = QLabel('FC: Не подключён')
         self.fc_status_label.setStyleSheet(
             f'color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_SM}px;'
@@ -337,7 +348,7 @@ class SettingsBar(QWidget):
         layout.addWidget(self.warn_label)
         layout.addStretch()
 
-        # ── Правая часть: настройки камеры ────────────────────────────────────
+        # --- Правая часть: настройки камеры ---
         layout.addWidget(self.__muted('Разрешение'))
         self.resolution_box = _BoundedComboBox()
         self.resolution_box.setMinimumWidth(140)
@@ -367,7 +378,7 @@ class SettingsBar(QWidget):
         self.bitrate_input.setCursor(Qt.PointingHandCursor)
         layout.addWidget(self.bitrate_input)
 
-        # ── Кнопка принудительной калибровки камер ────────────────────────────
+        # --- Кнопка принудительной калибровки камер ---
         self.calibrate_btn = QPushButton('⟳ Калибровка камер')
         self.calibrate_btn.setFixedHeight(36)
         self.calibrate_btn.setStyleSheet(f"""
@@ -391,7 +402,7 @@ class SettingsBar(QWidget):
         layout.addWidget(self.calibrate_btn)
         layout.addSpacing(6)
 
-        # ── Кнопка сохранения ─────────────────────────────────────────────────
+        # --- Кнопка сохранения ---
         self.save_btn = QPushButton()
         self.save_btn.setFixedSize(40, 40)
         self.save_btn.setEnabled(False)
@@ -430,10 +441,10 @@ class SettingsBar(QWidget):
         )
         return lbl
 
-    # ── FC и спидтест ─────────────────────────────────────────────────────────
+    # --- FC и спидтест ---
 
-    def update_fc_status(self, fc_type: str, fc_name: str):
-        """Обновить текст статуса FC."""
+    def update_fc_status(self, fc_type: str, fc_name: str) -> None:
+        """Обновляет текст статуса FC."""
         if not fc_type or fc_type == 'none':
             self.fc_status_label.setText('FC: Не подключён')
         elif fc_type == 'crsf':
@@ -442,10 +453,10 @@ class SettingsBar(QWidget):
             self.fc_status_label.setText(f'FC: {fc_name} (MAVLink)')
         self.warn_label.setVisible(fc_type == 'crsf')
 
-    # ── Настройки камеры ──────────────────────────────────────────────────────
+    # --- Настройки камеры ---
 
-    def update_camera(self, camera: dict):
-        """Заполнить дропдауны разрешения/FPS по конфигу камеры."""
+    def update_camera(self, camera: dict) -> None:
+        """Заполняет дропдауны разрешения/FPS по конфигу камеры."""
         self._params = camera.get('params', [])
         param_index = camera.get('param_index', 0)
         bitrate = camera.get('bitrate_kbs', 1000)
@@ -475,7 +486,7 @@ class SettingsBar(QWidget):
         self.bitrate_input.setText(str(bitrate))
         self.save_btn.setEnabled(True)
 
-    def _fill_fps(self, resolution, cur_param):
+    def _fill_fps(self, resolution: tuple[int, int] | None, cur_param: dict | None) -> None:
         if resolution is None:
             return
         w, h = resolution
@@ -494,13 +505,13 @@ class SettingsBar(QWidget):
         self.fps_box.setCurrentIndex(cur_fps_idx)
         self.fps_box.blockSignals(False)
 
-    def _on_resolution_changed(self, _):
+    def _on_resolution_changed(self, _: int) -> None:
         res = self.resolution_box.currentData()
         if res:
             self._fill_fps(res, None)
 
     def get_selected_params(self):
-        """Вернуть (param_index, bitrate_kbs) по текущему выбору или (None, None)."""
+        """Возвращает (param_index, bitrate_kbs) по текущему выбору или (None, None)."""
         res = self.resolution_box.currentData()
         fps = self.fps_box.currentData()
         if res is None or fps is None:

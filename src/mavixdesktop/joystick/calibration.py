@@ -1,4 +1,4 @@
-"""Persistent joystick calibration: save/load JSON files under settings.data_path."""
+"""Постоянная калибровка joystick: сохранение/загрузка JSON-файлов в settings.data_path."""
 from __future__ import annotations
 
 import json
@@ -45,5 +45,5 @@ def load(joystick_name: str, data_dir: Path | None = None) -> dict | None:
 def validate(data: dict) -> tuple[bool, str]:
     missing = REQUIRED_KEYS - set(data.keys())
     if missing:
-        return False, f'Missing keys: {", ".join(sorted(missing))}'
+        return False, f'Отсутствуют ключи: {", ".join(sorted(missing))}'
     return True, ''

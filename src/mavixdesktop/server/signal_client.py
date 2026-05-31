@@ -14,36 +14,36 @@ if TYPE_CHECKING:
 
 
 class SignalClient:
-    """Thin WebSocket client for /ws/gcs.
+    """Тонкий WebSocket-клиент для /ws/gcs.
 
-    Auth happens via the first message {type:auth, token:<access_jwt>} after
-    accept (the server pattern, not a custom header).
+    Авторизация идёт через первое сообщение {type:auth, token:<access_jwt>}
+    после accept (паттерн сервера, а не кастомный заголовок).
     """
 
     def __init__(self, url: str, access_token: str) -> None:
         self._url = url
         self._access_token = access_token
-        self._conn: 'ClientConnection | None' = None
+        self._conn: ClientConnection | None = None
 
     @property
     def is_connected(self) -> bool:
         return self._conn is not None
 
     def update_access_token(self, new_token: str) -> None:
-        """Used by the coordinator after a refresh_auth round-trip."""
+        """Используется координатором после round-trip refresh_auth."""
         self._access_token = new_token
 
     async def connect(self) -> bool:
         try:
             self._conn = await ws_connect(self._url)
         except (OSError, websockets.exceptions.InvalidURI, websockets.exceptions.InvalidHandshake) as exc:
-            logger.info('[signal] connect error: %s', exc)
+            logger.info('[signal] ошибка подключения: %s', exc)
             self._conn = None
             return False
         try:
             await self._conn.send(json.dumps({'type': 'auth', 'token': self._access_token}))
         except (websockets.exceptions.ConnectionClosed, OSError) as exc:
-            logger.info('[signal] auth send error: %s', exc)
+            logger.info('[signal] ошибка отправки auth: %s', exc)
             await self.disconnect()
             return False
         return True
@@ -54,22 +54,22 @@ class SignalClient:
         try:
             await self._conn.close()
         except (websockets.exceptions.ConnectionClosed, OSError) as exc:
-            logger.debug('[signal] disconnect error: %s', exc)
+            logger.debug('[signal] ошибка отключения: %s', exc)
         finally:
             self._conn = None
 
     async def send(self, payload: dict) -> None:
         if self._conn is None:
-            raise RuntimeError('signal client not connected')
+            raise RuntimeError('signal-клиент не подключён')
         await self._conn.send(json.dumps(payload))
 
     async def listen(self, on_message: Callable[[dict], Awaitable[None]]) -> None:
         if self._conn is None:
-            raise RuntimeError('signal client not connected')
+            raise RuntimeError('signal-клиент не подключён')
         async for raw in self._conn:
             try:
                 msg = json.loads(raw)
             except (json.JSONDecodeError, ValueError) as exc:
-                logger.warning('[signal] bad json: %s', exc)
+                logger.warning('[signal] некорректный json: %s', exc)
                 continue
             await on_message(msg)

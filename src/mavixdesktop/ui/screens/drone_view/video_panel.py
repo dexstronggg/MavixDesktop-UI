@@ -1,30 +1,38 @@
-"""Панель видео с оверлейными кнопками управления.
+"""Панель видео с overlay-кнопками управления.
 
 Отвечает только за отображение видео и кнопки поверх него:
 назад, переключение камер, джойстик, взлёт.
 """
-from typing import Callable
+from __future__ import annotations
+
+from collections.abc import Callable
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QFrame, QLabel, QProgressBar, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtGui import QImage, QPixmap, QResizeEvent
+from PySide6.QtWidgets import (
+    QFrame,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
-from mavixdesktop.ui.style import theme
 from mavixdesktop.ui.screens.utils import overlay_btn, overlay_icon_btn
+from mavixdesktop.ui.style import theme
+
 
 class VideoPanel(QWidget):
-    """Видео + все оверлейные элементы управления.
+    """Видео плюс все overlay-элементы управления.
 
-    Параметры
-    ---------
-    on_prev / on_next : переключение камеры влево/вправо
-    on_back           : кнопка «назад к списку»
-    on_joy            : открыть настройку джойстика
-    on_takeoff        : кнопка «взлёт»
+    on_prev / on_next переключают камеру влево/вправо, on_back — кнопка
+    «назад к списку», on_joy открывает настройку джойстика, on_takeoff —
+    кнопка «взлёт».
     """
 
-    def __init__(self, on_prev: Callable, on_next: Callable,
-                 on_back: Callable, on_joy: Callable, on_takeoff: Callable):
+    def __init__(self, on_prev: Callable[[], None], on_next: Callable[[], None],
+                 on_back: Callable[[], None], on_joy: Callable[[], None],
+                 on_takeoff: Callable[[], None]) -> None:
         super().__init__()
         self.setMinimumSize(640, 360)
 
@@ -39,10 +47,11 @@ class VideoPanel(QWidget):
         self.__build_error_overlay()
         self.__reposition(800, 600)
 
-    # ── Построение виджетов ───────────────────────────────────────────────────
+    # --- Построение виджетов ---
 
-    def __build_controls(self, on_prev: Callable, on_next: Callable,
-                         on_back: Callable, on_joy: Callable, on_takeoff: Callable):
+    def __build_controls(self, on_prev: Callable[[], None], on_next: Callable[[], None],
+                         on_back: Callable[[], None], on_joy: Callable[[], None],
+                         on_takeoff: Callable[[], None]) -> None:
         self.back_btn = overlay_icon_btn('arrow_back.svg', self)
         self.back_btn.setToolTip('Назад к списку дронов')
         self.back_btn.clicked.connect(on_back)
@@ -66,10 +75,10 @@ class VideoPanel(QWidget):
         self.takeoff_btn.clicked.connect(on_takeoff)
         self.__style_takeoff(False)
 
-    def __build_speed_overlay(self):
-        # Compact single-line ping indicator that stays in the corner all
-        # the time the WebRTC session is up. No toggle button — RTT is
-        # cheap (8 bytes/s over the ping data-channel) and always useful.
+    def __build_speed_overlay(self) -> None:
+        # Компактный однострочный индикатор пинга, всё время висит в углу,
+        # пока поднята WebRTC-сессия. Без toggle-кнопки — RTT дешёвый
+        # (8 байт/с по ping data-channel) и всегда полезен.
         self.speed_overlay = QLabel('— мс', self)
         self.speed_overlay.setAlignment(Qt.AlignCenter)
         self.speed_overlay.setFixedSize(90, 26)
@@ -86,15 +95,15 @@ class VideoPanel(QWidget):
         """
         self.speed_overlay.setStyleSheet(corner_qss)
 
-        # Sibling overlay for battery percentage. Same look, sits directly
-        # above the ping label. Hidden until the first telemetry frame.
+        # Соседний overlay для процента батареи. Тот же вид, сидит прямо
+        # над лейблом пинга. Скрыт до первого кадра телеметрии.
         self.battery_overlay = QLabel('—', self)
         self.battery_overlay.setAlignment(Qt.AlignCenter)
         self.battery_overlay.setFixedSize(90, 26)
         self.battery_overlay.setStyleSheet(corner_qss)
         self.battery_overlay.hide()
 
-    def __build_calibration_overlay(self):
+    def __build_calibration_overlay(self) -> None:
         self.calib_overlay = QFrame(self)
         self.calib_overlay.setStyleSheet(f"""
             QFrame {{д
@@ -136,7 +145,7 @@ class VideoPanel(QWidget):
         self.calib_overlay.setFixedSize(520, 140)
         self.calib_overlay.hide()
 
-    def __build_error_overlay(self):
+    def __build_error_overlay(self) -> None:
         self.error_overlay = QLabel('', self)
         self.error_overlay.setAlignment(Qt.AlignCenter)
         self.error_overlay.setWordWrap(True)
@@ -155,8 +164,11 @@ class VideoPanel(QWidget):
         self.error_overlay.hide()
 
     def show_error_banner(self, text: str) -> None:
-        """Показать красный баннер по центру (например, «Камеры не найдены»).
-        Caller должен сам убрать его (через hide_error_banner или навигацию)."""
+        """Показывает красный баннер по центру (например, «Камеры не найдены»).
+
+        Вызывающая сторона сама убирает баннер (через hide_error_banner
+        или навигацию).
+        """
         self.error_overlay.setText(text)
         self.error_overlay.show()
         self.error_overlay.raise_()
@@ -165,7 +177,7 @@ class VideoPanel(QWidget):
     def hide_error_banner(self) -> None:
         self.error_overlay.hide()
 
-    def __build_labels(self):
+    def __build_labels(self) -> None:
         self.warn_lbl = QLabel('⚠  Смена настроек во время полёта недоступна', self)
         self.warn_lbl.setAlignment(Qt.AlignCenter)
         self.warn_lbl.setStyleSheet(f"""
@@ -188,7 +200,7 @@ class VideoPanel(QWidget):
             'background: transparent;'
         )
 
-    def __style_takeoff(self, enabled: bool):
+    def __style_takeoff(self, enabled: bool) -> None:
         if enabled:
             self.takeoff_btn.setStyleSheet(f"""
                 QPushButton {{
@@ -214,13 +226,13 @@ class VideoPanel(QWidget):
                 }}
             """)
 
-    # ── Позиционирование при ресайзе ──────────────────────────────────────────
+    # --- Позиционирование при ресайзе ---
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, event: QResizeEvent) -> None:
         self.__reposition(event.size().width(), event.size().height())
         super().resizeEvent(event)
 
-    def __reposition(self, w: int, h: int):
+    def __reposition(self, w: int, h: int) -> None:
         self.video.setGeometry(0, 0, w, h)
 
         c = theme.OVERLAY_BTN_CORNER
@@ -256,10 +268,10 @@ class VideoPanel(QWidget):
         self.hint_lbl.setFixedWidth(hw)
         self.hint_lbl.move((w - hw) // 2, h - 24)
 
-    # ── Публичный API ─────────────────────────────────────────────────────────
+    # --- Публичный API ---
 
-    def show_frame(self, img):
-        """Отобразить кадр из numpy-массива (BGR)."""
+    def show_frame(self, img) -> None:
+        """Отображает кадр из numpy-массива (BGR)."""
         h, w, ch = img.shape
         qimg = QImage(img.data, w, h, ch * w, QImage.Format.Format_BGR888)
         self.video.setPixmap(
@@ -271,29 +283,32 @@ class VideoPanel(QWidget):
             self.calib_overlay.hide()
 
     def set_calibration_visible(self, visible: bool) -> None:
-        """Показать/скрыть оверлей «Идёт калибровка камеры…» по центру."""
+        """Показывает/скрывает overlay «Идёт калибровка камеры…» по центру."""
         self.calib_overlay.setVisible(visible)
         if visible:
             self.calib_overlay.raise_()
 
-    def update_ping_overlay(self, rtt_ms: float):
-        """Обновить overlay с peer-to-peer пингом (RTT по WebRTC ping-каналу)."""
+    def update_ping_overlay(self, rtt_ms: float) -> None:
+        """Обновляет overlay с peer-to-peer пингом (RTT по WebRTC ping-каналу)."""
         text = '— мс' if rtt_ms < 0 else f'{rtt_ms:.0f} мс'
         self.speed_overlay.setText(text)
 
-    def update_battery_overlay(self, percent: int, voltage: float):
-        """Показать напряжение батареи рядом с пингом. Скрыт, пока с борта
-        не пришёл ни один кадр телеметрии. `percent` принимается для
-        совместимости сигнала, но не показывается — пилоту полезнее
-        видеть реальный вольтаж, чем оценочный «остаток в %»."""
+    def update_battery_overlay(self, percent: int, voltage: float) -> None:
+        """Показывает напряжение батареи рядом с пингом.
+
+        Скрыт, пока с борта не пришёл ни один кадр телеметрии. percent
+        принимается для совместимости сигнала, но не показывается —
+        пилоту полезнее видеть реальный вольтаж, чем оценочный «остаток
+        в %».
+        """
         if voltage <= 0:
             return
         self.battery_overlay.setText(f'{voltage:.1f} V')
         if not self.battery_overlay.isVisible():
             self.battery_overlay.show()
 
-    def set_fc(self, fc_type: str):
-        """Обновить видимость кнопки взлёта и подсказки MAVLink по типу FC."""
+    def set_fc(self, fc_type: str) -> None:
+        """Обновляет видимость кнопки взлёта и подсказки MAVLink по типу FC."""
         if fc_type in ('crsf', 'mavlink'):
             self.takeoff_btn.show()
             self.takeoff_btn.setEnabled(True)

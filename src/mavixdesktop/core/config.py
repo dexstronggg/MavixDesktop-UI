@@ -1,14 +1,14 @@
-"""App-wide settings.
+"""Глобальные настройки приложения.
 
-Precedence (highest wins):
-  1. OS env vars
-  2. ~/.config/mavixdesktop/config.json (Settings UI writes here)
-  3. .env at the project root (only meaningful when running from sources)
-  4. defaults below
+Приоритет (выше — главнее):
+  1. переменные окружения ОС
+  2. ~/.config/mavixdesktop/config.json (туда пишет Settings UI)
+  3. .env в корне проекта (имеет смысл только при запуске из исходников)
+  4. дефолты ниже
 
-The JSON path is the one the user actually edits via the in-app
-Settings page. The .env at the project root is a dev convenience and
-does not exist inside the installed PyInstaller bundle.
+JSON-файл — это то, что пользователь реально правит через страницу
+Settings внутри приложения. .env в корне проекта — удобство для
+разработки и отсутствует внутри установленного PyInstaller-бандла.
 """
 from __future__ import annotations
 
@@ -23,11 +23,11 @@ from mavixdesktop.core import user_config
 
 _PROJECT_ROOT = Path(__file__).parents[3]
 
-# Project-root .env is for development only; in an installed bundle
-# this path resolves into _MEIPASS and finds nothing - harmless.
+# .env в корне проекта — только для разработки; в установленном бандле
+# этот путь резолвится в _MEIPASS и ничего не находит — это безвредно.
 load_dotenv(_PROJECT_ROOT / '.env', override=False)
 
-# User config JSON overrides .env / defaults but loses to OS env vars.
+# JSON пользователя перекрывает .env / дефолты, но уступает env-переменным ОС.
 user_config.apply_to_env()
 
 _USER_BASE = Path.home() / '.config' / 'mavixdesktop'
@@ -45,9 +45,9 @@ class Settings(BaseSettings):
     signal_url: str = Field(default='https://drone-mavix.ru', alias='SIGNAL_URL')
 
     # --- WebRTC ICE overrides ---
-    # If left empty, the desktop uses whatever the server returns from
-    # /api/v1/ice-servers. Defaults below mirror the production STUN/TURN
-    # so a fresh install reaches the right relay even before logging in.
+    # Если оставить пустым, desktop использует то, что вернёт сервер из
+    # /api/v1/ice-servers. Дефолты ниже повторяют production STUN/TURN,
+    # чтобы свежая установка дотягивалась до нужного relay ещё до логина.
     stun_server: str = Field(default='stun:turn.drone-mavix.ru:3478', alias='STUN_SERVER')
     turn_server: str = Field(default='turns:turn.drone-mavix.ru:443', alias='TURN_SERVER')
     turn_username: str = Field(default='myuser', alias='TURN_USERNAME')
@@ -91,9 +91,9 @@ settings = Settings()
 
 
 def reload_from_user_config() -> None:
-    """Re-read the JSON config and update the global `settings` object
-    in place. Called by the Settings UI after a save so the rest of the
-    app sees the new values without a restart."""
+    """Перечитывает JSON-конфиг и обновляет глобальный объект `settings`
+    на месте. Вызывается из Settings UI после сохранения, чтобы остальное
+    приложение увидело новые значения без перезапуска."""
     user_config.apply_to_env()
     fresh = Settings()
     for field_name in fresh.model_fields:

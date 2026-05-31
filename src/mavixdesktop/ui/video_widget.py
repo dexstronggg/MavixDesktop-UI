@@ -1,9 +1,9 @@
-"""Render numpy ndarray (BGR24) frames into a QLabel via QImage/QPixmap.
+"""Отрисовка numpy-кадров ndarray (BGR24) в QLabel через QImage/QPixmap.
 
-VideoManager calls .show_frame(img) on every QTimer tick (~33 ms) with
-the latest decoded frame; we wrap it into a QImage with Format_BGR888,
-scale to the widget's current size while preserving aspect ratio, and
-push it as a QPixmap.
+VideoManager зовёт .show_frame(img) на каждом тике QTimer (~33 ms) с
+последним декодированным кадром; мы оборачиваем его в QImage формата
+Format_BGR888, масштабируем под текущий размер виджета с сохранением
+пропорций и выставляем как QPixmap.
 """
 from __future__ import annotations
 
@@ -26,14 +26,14 @@ class VideoWidget(QLabel):
         self.setStyleSheet('background-color: black;')
         self.setText('no video')
 
-    def show_frame(self, img: 'np.ndarray') -> None:
+    def show_frame(self, img: np.ndarray) -> None:
         if img is None:
             return
         if img.ndim != 3 or img.shape[2] != 3:
             return
         height, width, _ = img.shape
         bytes_per_line = img.strides[0]
-        # OpenCV / aiortc deliver BGR; QImage has a direct format for that.
+        # OpenCV / aiortc отдают BGR; для него у QImage есть прямой формат.
         qimg = QImage(img.data, width, height, bytes_per_line, QImage.Format.Format_BGR888)
         pix = QPixmap.fromImage(qimg)
         target = self.size()

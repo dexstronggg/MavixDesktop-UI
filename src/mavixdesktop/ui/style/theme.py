@@ -1,77 +1,77 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-#  DESIGN SYSTEM — единственный файл для всех визуальных настроек
-#  Чтобы изменить цвет, шрифт, отступ или размер — редактируй только здесь.
-#
-#  Палитра выровнена со стилем сайта Mavix (тёмный фон + cyan-акцент).
-# ═══════════════════════════════════════════════════════════════════════════════
+"""Дизайн-система — единственный файл со всеми визуальными настройками.
 
-# ── Цвета ─────────────────────────────────────────────────────────────────────
-BG            = "#07090E"   # deep space navy — основной фон окна
-BG_SURFACE    = "#11151D"   # панели, шапки, тулбары
-BG_INPUT      = "#161B24"   # карточки, поля ввода
-BG_HOVER      = "#1A2030"   # фон при наведении
-BORDER        = "#1F2733"   # рамка по умолчанию
-BORDER_HOVER  = "#2A3340"   # рамка при наведении
-BORDER_FOCUS  = "#22d3ee"   # рамка при фокусе — cyan-акцент
-ACCENT        = "#22d3ee"   # основной cyan-акцент (Tailwind cyan-400)
-ACCENT_HOVER  = "#67e8f9"   # акцент при наведении (светлее)
-ACCENT_PRESS  = "#06b6d4"   # акцент при нажатии (темнее)
-ACCENT_SUBTLE = "rgba(34, 211, 238, 0.12)"  # лёгкая cyan-подсветка
-CYAN          = "#22d3ee"   # синоним ACCENT для существующих ссылок
-TEXT_PRIMARY  = "#E8EEF5"   # основной текст
-TEXT_MUTED    = "#8893A4"   # вторичный / приглушённый
-TEXT_DISABLED = "#4A5563"   # неактивный
-BORDER_DARK   = "#0E1117"   # тёмная сетка / разделители (StickWidget)
-STATUS_READY  = "#4ADE80"   # зелёный — готов / онлайн
-STATUS_ERROR  = "#F87171"   # красный — недоступен / ошибка
-STATUS_ARM    = "#4ADE80"   # ARM (полётный экран)
-STATUS_DISARM = "#F87171"   # DISARM (полётный экран)
-WARNING       = "#FBBF24"   # жёлтое предупреждение
-BG_VIDEO      = "#000000"   # фон видеопотока
+Чтобы изменить цвет, шрифт, отступ или размер — редактируй только здесь.
+Палитра выровнена со стилем сайта Mavix (тёмный фон + cyan-акцент).
+"""
 
-# ── Шрифты ────────────────────────────────────────────────────────────────────
+from __future__ import annotations
+
+# --- Цвета ---
+BG            = '#07090E'   # deep space navy — основной фон окна
+BG_SURFACE    = '#11151D'   # панели, шапки, тулбары
+BG_INPUT      = '#161B24'   # карточки, поля ввода
+BG_HOVER      = '#1A2030'   # фон при наведении
+BORDER        = '#1F2733'   # рамка по умолчанию
+BORDER_HOVER  = '#2A3340'   # рамка при наведении
+BORDER_FOCUS  = '#22d3ee'   # рамка при фокусе — cyan-акцент
+ACCENT        = '#22d3ee'   # основной cyan-акцент (Tailwind cyan-400)
+ACCENT_HOVER  = '#67e8f9'   # акцент при наведении (светлее)
+ACCENT_PRESS  = '#06b6d4'   # акцент при нажатии (темнее)
+ACCENT_SUBTLE = 'rgba(34, 211, 238, 0.12)'  # лёгкая cyan-подсветка
+CYAN          = '#22d3ee'   # синоним ACCENT для существующих ссылок
+TEXT_PRIMARY  = '#E8EEF5'   # основной текст
+TEXT_MUTED    = '#8893A4'   # вторичный / приглушённый
+TEXT_DISABLED = '#4A5563'   # неактивный
+BORDER_DARK   = '#0E1117'   # тёмная сетка / разделители (StickWidget)
+STATUS_READY  = '#4ADE80'   # зелёный — готов / онлайн
+STATUS_ERROR  = '#F87171'   # красный — недоступен / ошибка
+STATUS_ARM    = '#4ADE80'   # ARM (полётный экран)
+STATUS_DISARM = '#F87171'   # DISARM (полётный экран)
+WARNING       = '#FBBF24'   # жёлтое предупреждение
+BG_VIDEO      = '#000000'   # фон видеопотока
+
+# --- Шрифты ---
 # Inter — основной интерфейсный, JetBrains Mono — для моноширинных
 # (ID дронов, токены). Если Inter не установлен в системе, Qt
 # подставит дефолтный sans-serif из цепочки fallback.
-FONT_FAMILY      = '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif'
-FONT_FAMILY_MONO = '"JetBrains Mono", "SF Mono", "Cascadia Mono", Consolas, monospace'
+FONT_FAMILY      = "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+FONT_FAMILY_MONO = "'JetBrains Mono', 'SF Mono', 'Cascadia Mono', Consolas, monospace"
 
-# ── Отступы (px) ──────────────────────────────────────────────────────────────
+# --- Отступы (px) ---
 SPACE_XS = 4
 SPACE_SM = 8
 SPACE_MD = 16
 SPACE_LG = 24
 SPACE_XL = 40
 
-# ── Скругления углов (px) ─────────────────────────────────────────────────────
+# --- Скругления углов (px) ---
 RADIUS_SM = 6
 RADIUS_MD = 8
 RADIUS_LG = 12
 
-# ── Размеры шрифта (px) ───────────────────────────────────────────────────────
+# --- Размеры шрифта (px) ---
 FONT_SIZE_SM    = 14
 FONT_SIZE_BASE  = 16
 FONT_SIZE_LG    = 20
 FONT_SIZE_TITLE = 24
 FONT_SIZE_HERO  = 32
 
-# ── Размеры кнопок-иконок оверлея (px) ───────────────────────────────────────
+# --- Размеры кнопок-иконок оверлея (px) ---
 OVERLAY_BTN_CORNER      = 60   # назад / джойстик (угловые)
 OVERLAY_BTN_CORNER_ICON = 36   # размер SVG-иконки внутри угловой кнопки
 OVERLAY_BTN_SIDE        = 64   # стрелки переключения камер (боковые)
 OVERLAY_BTN_SIDE_FONT   = 24   # размер символа стрелки в боковой кнопке
 
-# ── Анимации ──────────────────────────────────────────────────────────────────
+# --- Анимации ---
 ANIM_FAST = 150   # мс — короткие переходы (hover)
 ANIM_MED  = 200   # мс — focus glow, появление
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  ГЛОБАЛЬНЫЙ STYLESHEET — применяется ко всему приложению через
-#  app.setStyleSheet() в __main__.py. Охватывает все стандартные Qt-виджеты.
-#  Виджет-специфичные стили ниже могут дополнять или переопределять.
-# ═══════════════════════════════════════════════════════════════════════════════
+# --- Глобальный stylesheet ---
+# Применяется ко всему приложению через app.setStyleSheet() в __main__.py.
+# Охватывает все стандартные Qt-виджеты; виджет-специфичные стили ниже
+# могут дополнять или переопределять его.
 
-QSS_GLOBAL = f"""
+QSS_GLOBAL = f'''
 
 /* ── Базовые элементы ─────────────────────────────────────────────────────── */
 QWidget {{
@@ -402,15 +402,14 @@ QLabel {{
     background: transparent;
 }}
 
-"""
+'''
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  КОМПОНЕНТНЫЕ СТИЛИ — для конкретных виджетов, переопределяют глобальные
-#  правила через widget.setStyleSheet(theme.QSS_*)
-# ═══════════════════════════════════════════════════════════════════════════════
+# --- Компонентные стили ---
+# Для конкретных виджетов, переопределяют глобальные правила через
+# widget.setStyleSheet(theme.QSS_*).
 
 # Поле ввода с увеличенным паддингом (токен, поиск)
-QSS_INPUT = f"""
+QSS_INPUT = f'''
 QLineEdit {{
     background-color: {BG_INPUT};
     color: {TEXT_PRIMARY};
@@ -427,10 +426,10 @@ QLineEdit:hover:!focus {{
 QLineEdit:focus {{
     border-color: {ACCENT};
 }}
-"""
+'''
 
 # Основная кнопка (cyan-заливка, тёмный текст — как btn-primary на сайте)
-QSS_BUTTON_PRIMARY = f"""
+QSS_BUTTON_PRIMARY = f'''
 QPushButton {{
     background-color: {ACCENT};
     color: {BG};
@@ -452,13 +451,13 @@ QPushButton:disabled {{
     color: {TEXT_DISABLED};
     border: none;
 }}
-"""
+'''
 
 # Вторичная кнопка (ghost / outline) — для шапки кабинета, действий в карточках.
 # На hover красится в cyan-акцент (это паттерн для positive/navigation действий
 # — джойстик, назад). Если действие деструктивное (logout) — переопределить
 # QSS на сайте создания кнопки на красный, см. drone_list_page._icon_button.
-QSS_BUTTON_SECONDARY = f"""
+QSS_BUTTON_SECONDARY = f'''
 QPushButton {{
     background-color: transparent;
     color: {TEXT_MUTED};
@@ -476,20 +475,20 @@ QPushButton:pressed {{
     background-color: {BG_INPUT};
     color: {ACCENT};
 }}
-"""
+'''
 
 # Карточка на экране токена (большая, со скруглёнными краями)
-QSS_TOKEN_CARD = f"""
+QSS_TOKEN_CARD = f'''
 QWidget#tokenCard {{
     background-color: {BG_INPUT};
     border: 1px solid {BORDER};
     border-radius: {RADIUS_LG}px;
 }}
-"""
+'''
 
 # Икон-кнопка без рамки и фона — для icon-only кнопок (eye, joystick
 # card actions). На hover — лёгкая подложка, на pressed — чуть темнее.
-QSS_BUTTON_ICON = f"""
+QSS_BUTTON_ICON = f'''
 QPushButton {{
     background: transparent;
     border: none;
@@ -505,4 +504,4 @@ QPushButton:pressed {{
 QPushButton:disabled {{
     background: transparent;
 }}
-"""
+'''
