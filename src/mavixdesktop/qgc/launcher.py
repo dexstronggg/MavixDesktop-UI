@@ -12,6 +12,7 @@ from mavixdesktop.core.logger import logger
 _QGC_PATH_FILE = Path.home() / '.config' / 'mavixdesktop' / 'qgc_path.txt'
 
 
+#### Сохранённый путь к QGC ############################################################
 def get_saved_qgc_path() -> Path | None:
     try:
         text = _QGC_PATH_FILE.read_text(encoding='utf-8').strip()
@@ -41,6 +42,7 @@ def clear_saved_qgc_path() -> None:
         logger.warning('[qgc] не удалось очистить пользовательский путь: %s', exc)
 
 
+#### Поиск установленного QGC ##########################################################
 def _looks_like_qgc(name: str) -> bool:
     n = name.lower()
     return n.startswith('qgroundcontrol') or n.startswith('qground_control') or n.startswith('qground-control')
@@ -117,6 +119,7 @@ def find_qgc() -> Path | None:
     return None
 
 
+#### Запуск и контроль процесса ########################################################
 # QGroundControl сам реализует single-instance через QSharedMemory с
 # фиксированным ключом «QGroundControlRunGuardKey» (см. src/RunGuard.h в
 # mavlink/qgroundcontrol). Сегмент создаёт сам GUI-процесс QGC и

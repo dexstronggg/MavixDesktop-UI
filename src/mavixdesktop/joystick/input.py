@@ -34,6 +34,7 @@ class JoystickInput:
             self._instance_id = None
         self._connected = True
 
+#### Публичный API #####################################################################
     @property
     def name(self) -> str:
         return self._js.get_name()
@@ -81,6 +82,7 @@ class JoystickInput:
                 return False
         return self._poll_arm_button()
 
+#### Внутренние помощники ##############################################################
     def _read_axis(self, name: str) -> float:
         idx = self._cal.get(f'axis_{name}', 0)
         try:

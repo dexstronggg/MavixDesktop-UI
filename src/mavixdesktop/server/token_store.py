@@ -16,6 +16,7 @@ _REFRESH_KEY = 'refresh_token'
 _EMAIL_KEY = 'email'
 
 
+#### Внутренние помощники ##############################################################
 def _file_path() -> Path:
     return settings.config_dir / 'tokens.json'
 
@@ -54,6 +55,7 @@ def _keyring() -> object | None:
         return None
 
 
+#### Публичный API #####################################################################
 def save(email: str, refresh_token: str) -> None:
     kr = _keyring()
     if kr is not None:

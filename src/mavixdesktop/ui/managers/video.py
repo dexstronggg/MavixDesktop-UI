@@ -40,8 +40,7 @@ class VideoManager:
         self._timer = QTimer(interval=33)
         self._timer.timeout.connect(self._tick)
 
-    # --- Управление треками ---
-
+    #### Управление треками ################################################################
     def on_track(self, track: VideoStreamTrack) -> None:
         """Регистрирует новый видеотрек от WebRTC."""
         if track.kind != 'video':
@@ -100,8 +99,7 @@ class VideoManager:
         self.track_queues.clear()
         self._track_ids.clear()
 
-    # --- Управление камерой ---
-
+    #### Управление камерой ################################################################
     def shift_cam(self, delta: int) -> int:
         """Переключает активную камеру на delta позиций. Возвращает новый индекс."""
         if not self._track_ids:
@@ -135,8 +133,7 @@ class VideoManager:
     def cam_count(self) -> int:
         return len(self._track_ids)
 
-    # --- Таймер ---
-
+    #### Таймер ############################################################################
     def start(self) -> None:
         """Запускает таймер отрисовки видео."""
         self._timer.start()

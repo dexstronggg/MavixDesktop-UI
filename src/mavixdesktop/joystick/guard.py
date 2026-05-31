@@ -14,6 +14,7 @@ from mavixdesktop.core.logger import logger
 from mavixdesktop.joystick.input import JoystickInput
 
 
+#### Сборка disarm-кадров ##############################################################
 def _build_mavlink_disarm() -> bytes | None:
     try:
         from pymavlink.dialects.v20 import common as mavlink
@@ -38,6 +39,7 @@ def _build_crsf_disarm() -> bytes:
     return build_rc_frame(throttle=-1.0, roll=0.0, pitch=0.0, yaw=0.0, armed=False)
 
 
+#### Guard потери joystick #############################################################
 class JoystickGuard:
     """Опрашивает JoystickInput; при переходе connected→disconnected ровно один
     раз шлёт disarm-кадр через `send_frame`. После срабатывания guard
@@ -75,6 +77,7 @@ class JoystickGuard:
         self._fired = True
         return True
 
+#### Внутренние помощники ##############################################################
     def _fire_disarm(self) -> None:
         try:
             frame = self._build_frame()

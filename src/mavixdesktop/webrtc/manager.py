@@ -20,6 +20,7 @@ SignalSender = Callable[[dict], Awaitable[None]]
 TrackHandler = Callable[['MediaStreamTrack'], None]
 
 
+#### Менеджер WebRTC-сессии ############################################################
 class WebRTCManager:
     def __init__(self, send: SignalSender, ice_servers: list[dict] | None = None) -> None:
         self._send = send
@@ -94,6 +95,7 @@ class WebRTCManager:
             await self._peer.close()
         self.end_session()
 
+#### Внутренние помощники ##############################################################
     def _guard(self, drone_id: str) -> bool:
         if self._peer is None:
             logger.warning('[manager] сообщение для drone=%s, но активной сессии нет', drone_id)

@@ -88,6 +88,7 @@ class FlightWindow(QWidget):
         self._timer.timeout.connect(self.__tick)
         self._timer.start()
 
+    #### Построение UI #####################################################################
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
         if not self._help_shown and not self._passive:
@@ -217,6 +218,7 @@ class FlightWindow(QWidget):
         else:
             self._reboot_btn: QPushButton | None = None
 
+    #### Геометрия и позиционирование ######################################################
     def resizeEvent(self, event: QResizeEvent) -> None:
         self.__reposition()
         super().resizeEvent(event)
@@ -265,6 +267,7 @@ class FlightWindow(QWidget):
         self._lost_lbl.adjustSize()
         self._lost_lbl.move((w - self._lost_lbl.width()) // 2, (h - self._lost_lbl.height()) // 2)
 
+    #### Игровой цикл и ввод ###############################################################
     def __prev_cam(self) -> None:
         n = self._cam_count()
         if n > 0:
@@ -339,6 +342,7 @@ class FlightWindow(QWidget):
         else:
             self.__tick_crsf(thr, yaw, pitch, roll, armed)
 
+    #### Аварийный failsafe ################################################################
     def __handle_joystick_lost(self) -> None:
         """Однократная настройка при обнаружении пропажи геймпада.
 
@@ -400,6 +404,7 @@ class FlightWindow(QWidget):
         except Exception as exc:
             logger.debug('[FlightWindow] ошибка аварийной отправки crsf: %s', exc)
 
+    #### Кодирование команд FC #############################################################
     def __tick_crsf(self, thr: float, yaw: float, pitch: float,
                     roll: float, armed: bool) -> None:
         try:
@@ -451,6 +456,7 @@ class FlightWindow(QWidget):
                 logger.warning('[FlightWindow] ошибка команды arm: %s', exc)
             self._last_armed = armed
 
+    #### Обработчики панели управления #####################################################
     def __on_reboot_clicked(self) -> None:
         """С подтверждением шлёт PX4 MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN.
 
@@ -497,6 +503,7 @@ class FlightWindow(QWidget):
         except Exception as exc:
             logger.warning('[FlightWindow] ошибка отправки SET_MODE: %s', exc)
 
+    #### Отправка и рендер #################################################################
     def __send_heartbeat(self) -> None:
         if self._mavlink_enc is None:
             return
@@ -524,6 +531,7 @@ class FlightWindow(QWidget):
                 )
             )
 
+    #### Закрытие окна #####################################################################
     def __finish(self) -> None:
         self._stop_streams()
         if self._on_close:

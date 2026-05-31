@@ -116,6 +116,7 @@ class SettingsPage(QWidget):
 
         self._load_values()
 
+    #### Построение UI #####################################################################
     def _build_header(self) -> QWidget:
         header = QWidget()
         header.setStyleSheet('background: transparent;')
@@ -236,8 +237,7 @@ class SettingsPage(QWidget):
         actions.addWidget(save_btn)
         return actions
 
-    # --- Данные ---
-
+    #### Данные и сохранение ###############################################################
     def _load_values(self) -> None:
         # Берём значения из живого объекта settings, чтобы форма отражала
         # эффективный конфиг (включая возможный override из OS env).

@@ -172,8 +172,7 @@ class App(QMainWindow):
             # Прекращаем опрос, когда пользователь ушёл с экрана; возобновляем в _handle_*.
             self._drone_list_refresh_timer.stop()
 
-    # --- Навигация ---
-
+    #### Навигация #########################################################################
     def _navigate_to(self, widget: QWidget) -> None:
         current = self.stack.currentWidget()
         if current is not widget:
@@ -184,8 +183,7 @@ class App(QMainWindow):
         if self._nav_history:
             self.stack.setCurrentIndex(self._nav_history.pop())
 
-    # --- Аутентификация ---
-
+    #### Аутентификация ####################################################################
     def _handle_login(self, email: str, password: str) -> None:
         self.login_page.set_busy(True)
         self.login_page.set_error('')
@@ -225,8 +223,7 @@ class App(QMainWindow):
         self.login_page.reset()
         self.stack.setCurrentWidget(self.login_page)
 
-    # --- Список дронов и выбор ---
-
+    #### Список дронов и выбор #############################################################
     def _on_drones(self, drones: list[dict]) -> None:
         try:
             self.drone_list_page.update(drones)
@@ -339,8 +336,7 @@ class App(QMainWindow):
         if self.stack.currentWidget() is self.drone_view_page:
             self.drone_view_page.set_calibration_visible(True)
 
-    # --- Drone-view: камеры, FC, битрейт, калибровка ---
-
+    #### Drone-view: камеры, FC, битрейт, калибровка #######################################
     def _on_cameras_received(self, cameras: list) -> None:
         self._state.cameras = cameras
         self.drone_view_page.save_btn.setEnabled(True)
@@ -504,8 +500,7 @@ class App(QMainWindow):
         self._conn._submit(coord.send_calibrate())
         logger.info('[app] команда принудительной калибровки отправлена')
 
-    # --- Джойстик и полёт ---
-
+    #### Джойстик и полёт ##################################################################
     def _open_joystick_setup(self) -> None:
         self._navigate_to(self.joystick_setup_page)
 
@@ -610,8 +605,7 @@ class App(QMainWindow):
         self.stack.setCurrentWidget(self.drone_view_page)
         self._video.start()
 
-    # --- Joystick guard ---
-
+    #### Joystick guard ####################################################################
     def _start_joystick_guard(
         self,
         joystick_index: int,
@@ -666,8 +660,7 @@ class App(QMainWindow):
             'Связь с джойстиком потеряна. Дрону отправлена команда DISARM.',
         )
 
-    # --- Peer-to-peer ping ---
-
+    #### Peer-to-peer ping #################################################################
     def _tick_ping(self) -> None:
         """Отправляет один ping по peer-каналу ping и обновляет UI
         последним измеренным RTT. send_ping диспатчится в asyncio event
@@ -688,6 +681,7 @@ class App(QMainWindow):
         self._bridge.speed_updated.emit(rtt)
 
 
+#### Адаптер для FlightWindow ##########################################################
 class _CoordinatorAdapter:
     """Тонкая прослойка, чтобы FlightWindow (ожидающий устаревший
     Signalling-API) мог общаться с новым Coordinator. Пробрасываются только

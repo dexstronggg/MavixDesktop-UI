@@ -28,6 +28,7 @@ from mavixdesktop.ui.screens.utils import svg_pixmap
 from mavixdesktop.ui.style import theme
 
 
+#### Кастомный combobox с popup-стилизацией ############################################
 class _PopupItemDelegate(QStyledItemDelegate):
     """Делегат для popup-списка combobox — рисует hover вручную.
 
@@ -246,6 +247,7 @@ class _BoundedComboBox(QComboBox):
         popup.move(popup_geom.x(), new_y)
 
 
+#### Панель настроек ###################################################################
 class SettingsBar(QWidget):
     """Панель с настройками камеры, статусом FC и спидтестом.
 
@@ -441,8 +443,7 @@ class SettingsBar(QWidget):
         )
         return lbl
 
-    # --- FC и спидтест ---
-
+    #### FC и спидтест #####################################################################
     def update_fc_status(self, fc_type: str, fc_name: str) -> None:
         """Обновляет текст статуса FC."""
         if not fc_type or fc_type == 'none':
@@ -453,8 +454,7 @@ class SettingsBar(QWidget):
             self.fc_status_label.setText(f'FC: {fc_name} (MAVLink)')
         self.warn_label.setVisible(fc_type == 'crsf')
 
-    # --- Настройки камеры ---
-
+    #### Настройки камеры ##################################################################
     def update_camera(self, camera: dict) -> None:
         """Заполняет дропдауны разрешения/FPS по конфигу камеры."""
         self._params = camera.get('params', [])

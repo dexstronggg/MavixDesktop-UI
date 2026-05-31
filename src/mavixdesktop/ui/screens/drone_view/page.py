@@ -47,8 +47,7 @@ class DroneViewPage(QWidget):
         self.save_btn = self._settings_bar.save_btn
         self.calibrate_btn = self._settings_bar.calibrate_btn
 
-    # --- Клавиши ---
-
+    #### Клавиши ###########################################################################
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key_Left:
             self._on_prev()
@@ -57,8 +56,7 @@ class DroneViewPage(QWidget):
         else:
             super().keyPressEvent(event)
 
-    # --- Публичный API (делегируем компонентам) ---
-
+    #### Публичный API (делегируем компонентам) ############################################
     def show_frame(self, img) -> None:
         """Показывает кадр видеопотока."""
         self._video_panel.show_frame(img)

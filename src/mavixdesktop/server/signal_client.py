@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from websockets.asyncio.client import ClientConnection
 
 
+#### Сигнальный WebSocket-клиент #######################################################
 class SignalClient:
     """Тонкий WebSocket-клиент для /ws/gcs.
 
@@ -58,6 +59,7 @@ class SignalClient:
         finally:
             self._conn = None
 
+#### Обмен сообщениями #################################################################
     async def send(self, payload: dict) -> None:
         if self._conn is None:
             raise RuntimeError('signal-клиент не подключён')

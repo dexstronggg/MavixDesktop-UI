@@ -32,6 +32,7 @@ TrackHandler = Callable[['MediaStreamTrack'], None]
 DataChannelHandler = Callable[['RTCDataChannel'], None]
 
 
+#### Помощники обработки SDP/ICE #######################################################
 def _patch_dtls_setup_passive(sdp: str) -> str:
     """Переписывает каждую строку `a=setup:active` в SDP на `a=setup:passive`.
 
@@ -163,6 +164,7 @@ def _build_configuration(ice_servers: list[dict]) -> RTCConfiguration:
     return RTCConfiguration(iceServers=servers)
 
 
+#### WebRTC-сессия пира ################################################################
 class PeerSession:
     """Одна активная WebRTC-сессия с одним дроном. Создаётся при возврате
     'connect' от сервера, уничтожается, когда GCS или дрон разрывают пару."""
@@ -291,6 +293,7 @@ class PeerSession:
         except Exception as exc:
             logger.debug('[peer] ошибка close: %s', exc)
 
+#### Обработчики событий aiortc ########################################################
     def _handle_track(self, track: MediaStreamTrack) -> None:
         logger.info('[peer] событие track: kind=%s id=%s', track.kind, track.id)
         if self.on_track is None:

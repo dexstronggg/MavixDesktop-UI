@@ -14,7 +14,7 @@ async def _serve(handler, host: str = 'localhost'):
     return await websockets.serve(handler, host, 0)
 
 
-# ---------- check_connection ----------
+#### check_connection ##################################################################
 
 async def test_check_connection_returns_true_on_success():
     async def handler(ws, *args):
@@ -35,7 +35,7 @@ async def test_check_connection_returns_false_on_unreachable():
     assert await tester.check_connection() is False
 
 
-# ---------- download / upload / ping loops ----------
+#### download / upload / ping loops ####################################################
 
 async def test_download_measures_throughput():
     async def handler(ws, *args):
@@ -121,7 +121,7 @@ async def test_ping_measures_rtt():
         await server.wait_closed()
 
 
-# ---------- lifecycle ----------
+#### lifecycle #########################################################################
 
 async def test_stop_cancels_run():
     tester = SpeedTester('ws://localhost:1')  # unreachable

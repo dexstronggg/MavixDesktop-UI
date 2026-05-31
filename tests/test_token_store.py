@@ -93,7 +93,7 @@ def test_save_falls_back_to_file_if_keyring_raises(isolated_config_dir, monkeypa
     assert refresh == 'r-xyz'
 
 
-# ---------- file-mode tests ----------
+#### file-mode tests ###################################################################
 # The refresh token is a long-lived credential; the fallback file must
 # be owner-only readable. These tests guard against regressions in the
 # permission-setting logic.

@@ -6,7 +6,7 @@
 
   packet  — бинарные FC-пакеты (двунаправленный мост к MavlinkRelay / CRSF)
   ping    — round-trip echo для измерения RTT
-  config  — JSON: FC info, camera config, calibrate, cameras_changed
+  config  — JSON: FC info, camera config, calibrate
 """
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ PacketHandler = Callable[[bytes], None]
 JsonHandler = Callable[[dict | list], None]
 
 
+#### Обёртки data-каналов ##############################################################
 class _BaseChannel:
     LABEL: str = ''
 
@@ -179,6 +180,7 @@ _LABEL_TO_CLASS = {
 }
 
 
+#### Реестр data-каналов ###############################################################
 class DataChannelHub:
     """Владеет максимум одним каналом каждого известного label. По мере того
     как дрон открывает каналы в WebRTC-сессии, менеджер вызывает .attach(),

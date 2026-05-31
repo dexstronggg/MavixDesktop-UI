@@ -17,6 +17,7 @@ from mavixdesktop.core.logger import logger
 PacketCallback = Callable[[bytes], None]
 
 
+#### UDP-протокол relay ################################################################
 class _RelayProtocol(asyncio.DatagramProtocol):
     def __init__(self, on_packet: PacketCallback) -> None:
         self._on_packet = on_packet
@@ -35,6 +36,7 @@ class _RelayProtocol(asyncio.DatagramProtocol):
         logger.debug('[mavlink-relay] error_received: %s', exc)
 
 
+#### Relay QGC <-> data-channel ########################################################
 class MavlinkRelay:
     def __init__(self, qgc_host: str, qgc_port: int, bind_port: int = 0) -> None:
         self._qgc_host = qgc_host

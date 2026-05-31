@@ -10,7 +10,7 @@ import websockets
 from mavixdesktop.server.signal_client import SignalClient
 
 
-# ---------- unit tests with mocked ws_connect ----------
+#### unit tests with mocked ws_connect #################################################
 
 async def test_connect_sends_auth_first_message():
     fake_conn = AsyncMock()
@@ -69,7 +69,7 @@ async def test_disconnect_noop_when_not_connected():
     assert not sc.is_connected
 
 
-# ---------- integration with real websockets server ----------
+#### integration with real websockets server ###########################################
 
 class _Server:
     def __init__(self) -> None:

@@ -47,8 +47,7 @@ class VideoPanel(QWidget):
         self.__build_error_overlay()
         self.__reposition(800, 600)
 
-    # --- Построение виджетов ---
-
+    #### Построение виджетов ###############################################################
     def __build_controls(self, on_prev: Callable[[], None], on_next: Callable[[], None],
                          on_back: Callable[[], None], on_joy: Callable[[], None],
                          on_takeoff: Callable[[], None]) -> None:
@@ -226,8 +225,7 @@ class VideoPanel(QWidget):
                 }}
             """)
 
-    # --- Позиционирование при ресайзе ---
-
+    #### Позиционирование при ресайзе ######################################################
     def resizeEvent(self, event: QResizeEvent) -> None:
         self.__reposition(event.size().width(), event.size().height())
         super().resizeEvent(event)
@@ -268,8 +266,7 @@ class VideoPanel(QWidget):
         self.hint_lbl.setFixedWidth(hw)
         self.hint_lbl.move((w - hw) // 2, h - 24)
 
-    # --- Публичный API ---
-
+    #### Публичный API #####################################################################
     def show_frame(self, img) -> None:
         """Отображает кадр из numpy-массива (BGR)."""
         h, w, ch = img.shape

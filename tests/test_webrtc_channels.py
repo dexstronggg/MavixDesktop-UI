@@ -40,7 +40,7 @@ def _fire(ch: MagicMock, event: str, *args) -> None:
     handler(*args)
 
 
-# ---------- PacketChannel ----------
+#### PacketChannel #####################################################################
 
 def test_packet_send_when_closed_is_noop():
     ch = _mock_channel('packet-channel', ready_state='connecting')
@@ -94,7 +94,7 @@ def test_packet_handler_errors_swallowed():
     _fire(ch, 'message', b'\x00')
 
 
-# ---------- PingChannel ----------
+#### PingChannel #######################################################################
 
 def test_ping_send_when_closed_is_noop():
     ch = _mock_channel('ping-channel')
@@ -131,7 +131,7 @@ def test_ping_ignores_unknown_nonce():
     assert pc.last_rtt_ms is None
 
 
-# ---------- ConfigChannel ----------
+#### ConfigChannel #####################################################################
 
 def test_config_send_when_closed_is_noop():
     ch = _mock_channel('config-channel')
@@ -193,7 +193,7 @@ def test_config_on_message_skips_invalid_json():
     assert received == []
 
 
-# ---------- DataChannelHub ----------
+#### DataChannelHub ####################################################################
 
 def test_hub_attach_packet():
     hub = DataChannelHub()

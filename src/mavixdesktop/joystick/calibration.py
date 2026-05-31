@@ -16,6 +16,7 @@ REQUIRED_KEYS = frozenset({
 })
 
 
+#### Внутренние помощники ##############################################################
 def _safe_name(joystick_name: str) -> str:
     return ''.join(c for c in joystick_name if c.isalnum() or c in ' _-')
 
@@ -25,6 +26,7 @@ def _path(joystick_name: str, data_dir: Path | None = None) -> Path:
     return base / f'{_safe_name(joystick_name)}.json'
 
 
+#### Публичный API #####################################################################
 def save(cal: dict, joystick_name: str, data_dir: Path | None = None) -> Path:
     target = _path(joystick_name, data_dir)
     target.parent.mkdir(parents=True, exist_ok=True)
