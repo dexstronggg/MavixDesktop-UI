@@ -1,110 +1,61 @@
-"""Кодирование/декодирование кадров протокола CRSF (TBS Crossfire).
+"""Кодирование позиций стиков в RC-кадры протокола CRSF (TBS Crossfire).
 
-Бинарный протокол: RC-каналы, телеметрия и служебные кадры с CRC8.
-Меняется только оформление — формат кадров и CRC сохраняются как есть.
+Сторона оператора: собирает кадр RC_CHANNELS из нормированных значений
+стиков и отдаёт его дрону по сети. Разбор телеметрии и служебные кадры
+живут на стороне дрона (MavixBoard) — поэтому здесь их нет.
 """
+
 from __future__ import annotations
 
-import struct
-from collections.abc import Iterator
+#### Константы протокола ###############################################################
+# CRSF device-address получателя по умолчанию — полётный контроллер
+ADDR_FC = 0xC8
 
-BAUDRATE = 420000
+# Тип кадра RC-каналов (3-й байт)
+FRAME_RC_CHANNELS = 0x16
+
+# Кодирование RC-каналов
+CHANNEL_COUNT = 16               # кадр всегда содержит ровно 16 каналов
+CHANNEL_BITS = 11                # каждый канал — 11 бит
+CHANNEL_MAX_RAW = 0x7FF          # максимум, влезающий в 11 бит (2047)
+RC_PAYLOAD_BYTES = 22            # 16 × 11 = 176 бит = 22 байта
+
+# Рабочий диапазон значения канала (конвенция CRSF): минимум / центр / максимум
 CH_MIN, CH_CENTER, CH_MAX = 172, 992, 1811
+
+# CRC-8 (полином 0xD5, как в DVB-S2)
+CRC8_POLY = 0xD5
+CRC8_MSB = 0x80                  # старший бит байта — флаг переноса в цикле
+BYTE_MASK = 0xFF
 
 
 class CRSF:
-    TYPE_NAMES: dict[int, str] = {
-        0x02: 'GPS',
-        0x08: 'BATTERY',
-        0x14: 'LINK_STATS',
-        0x16: 'RC_CHANNELS',
-        0x1E: 'ATTITUDE',
-        0x21: 'FLIGHT_MODE',
-        0x28: 'DEVICE_PING',
-        0x29: 'DEVICE_INFO',
-    }
-
-#### CRC и сборка кадра ################################################################
+    #### CRC и сборка кадра ################################################################
     @staticmethod
     def crc8(data: bytes) -> int:
         crc = 0
-        for b in data:
-            crc ^= b
+        for byte in data:
+            crc ^= byte
             for _ in range(8):
-                crc = ((crc << 1) ^ 0xD5 if crc & 0x80 else crc << 1) & 0xFF
+                crc = ((crc << 1) ^ CRC8_POLY if crc & CRC8_MSB else crc << 1) & BYTE_MASK
         return crc
 
     @staticmethod
-    def _frame(ftype: int, payload: bytes, addr: int = 0xC8) -> bytes:
+    def _frame(ftype: int, payload: bytes, addr: int = ADDR_FC) -> bytes:
         body = bytes([ftype]) + payload
         return bytes([addr, len(body) + 1]) + body + bytes([CRSF.crc8(body)])
 
-#### Сборка исходящих кадров ###########################################################
+    #### Кодирование RC-каналов ############################################################
     @staticmethod
     def rc_frame(channels: list[int]) -> bytes:
-        ch = (list(channels) + [CH_CENTER] * 16)[:16]
+        # дополняем центром / обрезаем до ровно CHANNEL_COUNT каналов
+        ch = (list(channels) + [CH_CENTER] * CHANNEL_COUNT)[:CHANNEL_COUNT]
         bits = 0
-        for i, v in enumerate(ch):
-            bits |= max(0, min(0x7FF, v)) << (i * 11)
-        return CRSF._frame(0x16, bits.to_bytes(22, 'little'))
+        for i, value in enumerate(ch):
+            bits |= max(0, min(CHANNEL_MAX_RAW, value)) << (i * CHANNEL_BITS)
+        return CRSF._frame(FRAME_RC_CHANNELS, bits.to_bytes(RC_PAYLOAD_BYTES, 'little'))
 
-    @staticmethod
-    def link_stats_frame(rssi: int = -50, lq: int = 100) -> bytes:
-        r = rssi & 0xFF
-        return CRSF._frame(0x14, bytes([r, r, lq, 10, 0, 4, 2, r, lq, 10]))
-
-    @staticmethod
-    def ping_frame() -> bytes:
-        return CRSF._frame(0x28, bytes([0xC8, 0xEE]))
-
-#### Разбор и декодирование ############################################################
-    @staticmethod
-    def parse_frames(buf: bytearray) -> Iterator[tuple[int, bytes]]:
-        while len(buf) >= 4:
-            if buf[0] not in (0xC8, 0xEE, 0xEC, 0x00):
-                buf.pop(0)
-                continue
-            fl = buf[1]
-            if not 2 <= fl <= 62:
-                buf.pop(0)
-                continue
-            total = fl + 2
-            if len(buf) < total:
-                break
-            raw = bytes(buf[:total])
-            del buf[:total]
-            if CRSF.crc8(raw[2:-1]) == raw[-1]:
-                yield raw[2], raw[3:-1]
-
-    @staticmethod
-    def decode_telemetry(ftype: int, payload: bytes) -> dict | None:
-        p = payload
-        if ftype == 0x08 and len(p) >= 8:
-            return {'type': 'battery', 'voltage': int.from_bytes(p[0:2], 'big') / 10,
-                    'current': int.from_bytes(p[2:4], 'big') / 10,
-                    'capacity': int.from_bytes(p[4:7], 'big'), 'remaining': p[7]}
-        if ftype == 0x02 and len(p) >= 15:
-            return {'type': 'gps', 'lat': struct.unpack('>i', p[0:4])[0] / 1e7,
-                    'lon': struct.unpack('>i', p[4:8])[0] / 1e7,
-                    'satellites': p[14], 'alt': int.from_bytes(p[12:14], 'big', signed=True) - 1000}
-        if ftype == 0x1E and len(p) >= 6:
-            def r(i: int) -> float:
-                return round(struct.unpack('>h', p[i:i + 2])[0] / 10000 * 57.2958, 1)
-
-            return {'type': 'attitude', 'pitch': r(0), 'roll': r(2), 'yaw': r(4)}
-        if ftype == 0x21:
-            try:
-                return {'type': 'flight_mode', 'mode': p.rstrip(b'\x00').decode('ascii')}
-            except UnicodeDecodeError:
-                pass
-        if ftype == 0x29:
-            try:
-                return {'type': 'device_info', 'name': p[2:].split(b'\x00')[0].decode('ascii')}
-            except UnicodeDecodeError:
-                pass
-        return None
-
-#### Преобразование значений осей ######################################################
+    #### Преобразование осей в каналы ######################################################
     @staticmethod
     def axis_to_crsf(v: float, dz: float = 0.05) -> int:
         if abs(v) < dz:
@@ -116,7 +67,3 @@ class CRSF:
     def throttle_to_crsf(v: float) -> int:
         n = max(0.0, min(1.0, (v + 1) / 2))
         return int(CH_MIN + n * (CH_MAX - CH_MIN))
-
-    @staticmethod
-    def crsf_to_us(v: int) -> float:
-        return 1500 + (v - CH_CENTER) / 1.6
