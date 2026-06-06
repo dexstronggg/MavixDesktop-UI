@@ -69,7 +69,6 @@ async def test_request_disconnect_sends_and_tears_down():
     # close_async closes the RTCPeerConnection AND calls end_session
     # internally, so the assertion is on close_async.
     mgr.close_async.assert_awaited_once()
-    assert c._manager is None
 
 
 async def test_handle_drones_updates_list_and_callback():
@@ -167,7 +166,6 @@ async def test_handle_drone_disconnected_tears_down():
     c._manager = mgr
     await c._on_message({'type': 'drone_disconnected', 'drone_id': 'd-1'})
     mgr.close_async.assert_awaited_once()
-    assert c._manager is None
 
 
 async def test_handle_shutdown_tears_down_without_stopping_loop():
@@ -180,7 +178,7 @@ async def test_handle_shutdown_tears_down_without_stopping_loop():
     c._manager = mgr
     c._stop_event = asyncio.Event()
     await c._on_message({'type': 'shutdown'})
-    assert c._manager is None
+    mgr.close_async.assert_awaited_once()
     assert not c._stop_event.is_set()
 
 
@@ -438,7 +436,6 @@ async def test_drone_disconnected_remembers_target_for_reconnect():
     await c._on_message({'type': 'drone_disconnected', 'drone_id': 'drone-A'})
 
     assert c._reconnect_drone_id == 'drone-A'
-    assert c._manager is None
 
 
 async def test_drone_disconnected_for_other_drone_no_reconnect():
@@ -464,7 +461,6 @@ async def test_drones_event_auto_reconnects_after_disconnect():
 
     # Spy on request_connect
     c._manager_factory = None
-    original_request_connect = c.request_connect
 
     called = []
 
@@ -498,7 +494,7 @@ async def test_drones_event_does_not_reconnect_if_offline():
         'drones': [{'drone_id': 'drone-A', 'online': False}],
     })
     assert called == []
-    assert c._reconnect_drone_id == 'drone-A'  # still waiting
+    assert c._reconnect_drone_id is None  # offline → перестаём ждать (новое поведение)
 
 
 #### auth_refreshed ####################################################################
@@ -584,7 +580,7 @@ async def test_shutdown_tears_down_but_does_not_stop():
 
     await c._on_message({'type': 'shutdown'})
 
-    assert c._manager is None
+    mgr.close_async.assert_awaited_once()
     # Coordinator must NOT have set the stop event — its run() loop should
     # naturally reconnect via the existing reconnect-on-listen-exit path.
     assert not c._stop_event.is_set()

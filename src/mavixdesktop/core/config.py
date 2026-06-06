@@ -43,6 +43,9 @@ class Settings(BaseSettings):
 
 #### Сервер ############################################################################
     signal_url: str = Field(default='https://drone-mavix.ru', alias='SIGNAL_URL')
+    # Явное переопределение WS-адреса; если задано — используется как есть
+    # (иначе ws_url выводится из signal_url + /ws/gcs).
+    signal_ws_url: str = Field(default='', alias='SIGNAL_WS_URL')
 
 #### Переопределения WebRTC ICE ########################################################
     # Если оставить пустым, desktop использует то, что вернёт сервер из
@@ -75,6 +78,8 @@ class Settings(BaseSettings):
 
     @property
     def ws_url(self) -> str:
+        if self.signal_ws_url:
+            return self.signal_ws_url
         base = self.signal_url
         if base.startswith('https://'):
             return 'wss://' + base[len('https://'):].rstrip('/') + '/ws/gcs'
