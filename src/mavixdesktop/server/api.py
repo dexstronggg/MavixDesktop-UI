@@ -46,6 +46,20 @@ class ApiSession:
                 raise ApiError(data.get('detail', 'вход не удался'))
             return data
 
+    async def operator_login(self, username: str, password: str) -> dict:
+        """Вход оператора в desktop по username/password (выдаёт админ).
+
+        Возвращает пару токенов с ролью operator (sub=operator_id).
+        """
+        async with self._session.post(
+            f'{settings.http_url}/api/v1/auth/operator/login',
+            json={'username': username, 'password': password},
+        ) as r:
+            data = await r.json()
+            if r.status != 200:
+                raise ApiError(data.get('detail', 'вход не удался'))
+            return data
+
     async def refresh(self, refresh_token: str) -> dict:
         async with self._session.post(
             f'{settings.http_url}/api/v1/auth/refresh',
@@ -107,3 +121,34 @@ class ApiSession:
             if r.status == 404:
                 raise ApiError('Дрон уже удалён или не найден')
             raise ApiError(detail or f'Не удалось удалить дрон (HTTP {r.status})')
+
+#### Доставки (оператор) ###############################################################
+    async def _delivery_post(self, path: str, access_token: str) -> dict:
+        url = f'{settings.http_url}/api/v1/deliveries/{path}'
+        headers = {'Authorization': f'Bearer {access_token}'}
+        async with self._session.post(url, headers=headers) as r:
+            data = await r.json()
+            if r.status != 200:
+                raise ApiError(data.get('detail', f'операция не удалась (HTTP {r.status})'))
+            return data
+
+    async def list_offered_deliveries(self, access_token: str) -> list[dict]:
+        """Заявки со статусом offered для админа этого оператора."""
+        url = f'{settings.http_url}/api/v1/deliveries/offered'
+        headers = {'Authorization': f'Bearer {access_token}'}
+        async with self._session.get(url, headers=headers) as r:
+            if r.status != 200:
+                return []
+            data = await r.json()
+            return data if isinstance(data, list) else []
+
+    async def accept_delivery(self, delivery_id: str, access_token: str) -> dict:
+        """Принять заявку (гонка «такси»). 409 → уже принята другим."""
+        return await self._delivery_post(f'{delivery_id}/accept', access_token)
+
+    async def set_delivery_in_flight(self, delivery_id: str, access_token: str) -> dict:
+        return await self._delivery_post(f'{delivery_id}/in-flight', access_token)
+
+    async def mark_delivery_delivered(self, delivery_id: str, access_token: str) -> dict:
+        """Отметить груз доставленным (после сброса) — сервер уведомит админа."""
+        return await self._delivery_post(f'{delivery_id}/delivered', access_token)
