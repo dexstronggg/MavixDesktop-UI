@@ -109,26 +109,27 @@ def test_ping_send_records_inflight():
     pc = PingChannel(ch)
     pc.send_ping()
     ch.send.assert_called_once()
-    sent_payload = json.loads(ch.send.call_args.args[0].decode('utf-8'))
-    assert sent_payload['nonce'] == 1
-    assert pc.last_rtt_ms is None  # no reply yet
+    # протокол бинарный: 8 сырых байт (monotonic-таймстамп), без nonce/json
+    sent_payload = ch.send.call_args.args[0]
+    assert isinstance(sent_payload, (bytes, bytearray))
+    assert len(sent_payload) == PingChannel._PAYLOAD_SIZE
+    assert pc.last_rtt_ms is None  # эха ещё не было
 
 
 def test_ping_echo_records_rtt():
     ch = _mock_channel('ping-channel', ready_state='open')
     pc = PingChannel(ch)
     pc.send_ping()
-    nonce = json.loads(ch.send.call_args.args[0].decode('utf-8'))['nonce']
-    echoed = json.dumps({'nonce': nonce, 't': 0}).encode('utf-8')
-    _fire(ch, 'message', echoed)
+    echoed = ch.send.call_args.args[0]  # плата эхом возвращает тот же payload
+    _fire(ch, 'message', bytes(echoed))
     assert pc.last_rtt_ms is not None
     assert pc.last_rtt_ms >= 0
 
 
-def test_ping_ignores_unknown_nonce():
+def test_ping_ignores_wrong_size_payload():
     ch = _mock_channel('ping-channel', ready_state='open')
     pc = PingChannel(ch)
-    _fire(ch, 'message', json.dumps({'nonce': 999, 't': 0}).encode('utf-8'))
+    _fire(ch, 'message', b'\x00\x01\x02')  # не 8 байт — игнорируется
     assert pc.last_rtt_ms is None
 
 

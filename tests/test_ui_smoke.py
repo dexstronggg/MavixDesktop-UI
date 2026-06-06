@@ -115,7 +115,7 @@ def test_app_resumes_when_refresh_token_stored(qapp, monkeypatch):
 
     from mavixdesktop.ui.app import App
     app = App()
-    assert app.stack.currentWidget() is app.drone_list_page
+    assert app.stack.currentWidget() is app.delivery_page
 
 
 def test_token_page_constructs(qapp):
