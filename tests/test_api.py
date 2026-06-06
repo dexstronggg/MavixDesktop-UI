@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import aiohttp
 import pytest
@@ -16,7 +16,7 @@ class _FakeResponse:
     async def json(self) -> dict:
         return self._payload
 
-    async def __aenter__(self) -> '_FakeResponse':
+    async def __aenter__(self) -> _FakeResponse:
         return self
 
     async def __aexit__(self, *exc) -> None:
@@ -109,3 +109,53 @@ async def test_ice_servers_handles_non_list_payload():
     session = _session_with('get', _FakeResponse(200, {'ice_servers': None}))
     api = ApiSession(session)
     assert await api.ice_servers() == []
+
+
+#### operator login + deliveries ######################################################
+
+async def test_operator_login_returns_tokens():
+    session = _session_with('post', _FakeResponse(200, {'access_token': 'a', 'refresh_token': 'r', 'token_type': 'bearer'}))
+    api = ApiSession(session)
+    data = await api.operator_login('op-1', 'pw')
+    assert data['access_token'] == 'a'
+
+
+async def test_operator_login_raises_on_401():
+    session = _session_with('post', _FakeResponse(401, {'detail': 'неверные учётные данные'}))
+    api = ApiSession(session)
+    with pytest.raises(ApiError):
+        await api.operator_login('op-1', 'bad')
+
+
+async def test_accept_delivery_returns_delivery():
+    session = _session_with('post', _FakeResponse(200, {'delivery_id': 'd1', 'status': 'accepted'}))
+    api = ApiSession(session)
+    data = await api.accept_delivery('d1', 'tok')
+    assert data['status'] == 'accepted'
+
+
+async def test_accept_delivery_conflict_raises():
+    session = _session_with('post', _FakeResponse(409, {'detail': 'заявка уже принята'}))
+    api = ApiSession(session)
+    with pytest.raises(ApiError):
+        await api.accept_delivery('d1', 'tok')
+
+
+async def test_list_offered_returns_list():
+    session = _session_with('get', _FakeResponse(200, [{'delivery_id': 'd1'}]))
+    api = ApiSession(session)
+    data = await api.list_offered_deliveries('tok')
+    assert data == [{'delivery_id': 'd1'}]
+
+
+async def test_list_offered_empty_on_error():
+    session = _session_with('get', _FakeResponse(403, {}))
+    api = ApiSession(session)
+    assert await api.list_offered_deliveries('tok') == []
+
+
+async def test_mark_delivered_returns_delivery():
+    session = _session_with('post', _FakeResponse(200, {'delivery_id': 'd1', 'status': 'delivered'}))
+    api = ApiSession(session)
+    data = await api.mark_delivery_delivered('d1', 'tok')
+    assert data['status'] == 'delivered'

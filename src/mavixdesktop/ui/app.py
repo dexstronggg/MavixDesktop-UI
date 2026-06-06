@@ -1,7 +1,12 @@
-"""Главное Qt-окно MavixDesktop.
+"""Главное Qt-окно MavixDesktop (приложение ОПЕРАТОРА системы доставки).
 
-Поток экранов: вход → список дронов → DroneViewPage (видео + настройки) →
-опционально JoystickSetupPage → FlightWindow.
+Поток экранов: вход (оператор) → ожидание заявок (DeliveryPage) →
+[принята заявка] → DroneViewPage (видео) → JoystickSetupPage → FlightWindow
+(видео + джойстик + карта в углу + кнопка сброса груза).
+
+Дрон не выбирается вручную — он берётся из принятой заявки
+(delivery.drone_id). Долетев, оператор жмёт «Сброс груза» → дрон сбрасывает
+груз (CH8=DROP), доставка помечается delivered.
 
 Связывает PySide6-UI с mavixdesktop.coordinator.SessionCoordinator через
 ConnectionManager (адаптирует async event loop к Qt-сигналам) и
@@ -31,13 +36,14 @@ from mavixdesktop.ui.managers.connection import ConnectionManager
 from mavixdesktop.ui.managers.demo_connection import DemoConnectionManager
 from mavixdesktop.ui.managers.video import VideoManager
 from mavixdesktop.ui.screens.bridge import Bridge
-from mavixdesktop.ui.screens.drone_list_page import DroneListPage
+from mavixdesktop.ui.screens.delivery_page import DeliveryPage
 from mavixdesktop.ui.screens.drone_view import DroneViewPage
 from mavixdesktop.ui.screens.flight_window import FlightWindow
 from mavixdesktop.ui.screens.joystick_setup import (
     JoystickSetupPage,
     QGCLaunchingOverlay,
 )
+from mavixdesktop.ui.screens.map_widget import telemetry_to_args
 from mavixdesktop.ui.screens.settings_page import SettingsPage
 from mavixdesktop.ui.state import SessionState
 
@@ -75,7 +81,6 @@ class App(QMainWindow):
         self._conn.set_track_callback(self._video.on_track, on_reset=self._on_session_reset)
 
         # Подписка на колбэки уровня coordinator (приходят через ConnectionManager.bridge).
-        self._bridge.client_list_updated.connect(self._on_drones)
         self._bridge.fc_info_received.connect(self._on_fc_info)
         self._bridge.config_received.connect(self._on_cameras_received)
         self._bridge.speed_updated.connect(
@@ -84,8 +89,14 @@ class App(QMainWindow):
         self._bridge.drone_went_offline.connect(self._on_drone_went_offline)
         self._bridge.connect_failed.connect(self._on_connect_failed)
         self._bridge.battery_updated.connect(self._on_battery_updated)
+        self._bridge.telemetry_received.connect(self._on_telemetry)
         self._bridge.login_succeeded.connect(self._on_login_succeeded)
         self._bridge.login_failed.connect(self._on_login_failed)
+        # Доставки.
+        self._bridge.delivery_offered.connect(self._on_delivery_offered)
+        self._bridge.delivery_taken.connect(self._on_delivery_taken)
+        self._bridge.delivery_accepted.connect(self._on_delivery_accepted)
+        self._bridge.delivery_accept_failed.connect(self._on_delivery_accept_failed)
 
         # Сборка экранов.
         self.login_page = LoginPage(
@@ -93,16 +104,13 @@ class App(QMainWindow):
             on_forgot_password=self._handle_forgot_password,
             on_open_settings=self._open_settings,
         )
-        self.drone_list_page = DroneListPage(
-            on_select=self._handle_select_drone,
-            on_refresh=self._handle_refresh,
+        self.delivery_page = DeliveryPage(
+            on_accept=self._handle_accept_delivery,
             on_logout=self._handle_logout,
-            on_joystick_cfg=self._open_joystick_setup,
             on_open_settings=self._open_settings,
-            on_delete_drone=self._handle_delete_drone,
         )
         self.drone_view_page = DroneViewPage(
-            on_back=self._handle_back_to_list,
+            on_back=self._handle_back_to_deliveries,
             on_prev=lambda: self._video.shift_cam(-1),
             on_next=lambda: self._video.shift_cam(1),
             on_save=self._handle_save_config,
@@ -119,15 +127,16 @@ class App(QMainWindow):
 
         self.stack = QStackedWidget()
         self.stack.addWidget(self.login_page)
-        self.stack.addWidget(self.drone_list_page)
+        self.stack.addWidget(self.delivery_page)
         self.stack.addWidget(self.drone_view_page)
         self.stack.addWidget(self.joystick_setup_page)
         self.stack.addWidget(self.settings_page)
         self.setCentralWidget(self.stack)
-        # Куда возвращаться при закрытии Settings (открыта из login/list).
+        # Куда возвращаться при закрытии Settings (открыта из login/deliveries).
         self._settings_return_to = self.login_page
 
         self._flight_window: FlightWindow | None = None
+        self._settings_from_flight = False
         self._qgc_overlay: QGCLaunchingOverlay | None = None
         # Следит за активным джойстиком, пока идёт полётная сессия; если
         # стик пропадает в полёте — шлёт дрону один disarm-фрейм.
@@ -153,24 +162,14 @@ class App(QMainWindow):
         self._arm_poll_timer = QTimer(interval=100)
         self._arm_poll_timer.timeout.connect(self._poll_arm_button)
 
-        # Периодически обновляем список дронов, пока виден экран списка.
-        self._drone_list_refresh_timer = QTimer(interval=5000)
-        self._drone_list_refresh_timer.timeout.connect(self._tick_drone_list_refresh)
+        # Активная заявка (для проброса точки назначения на карту полёта).
+        self._active_delivery: dict | None = None
 
         # Старт: тихое восстановление при наличии refresh-токена, иначе вход.
         if self._conn.resume():
-            self.stack.setCurrentWidget(self.drone_list_page)
-            QTimer.singleShot(500, self._conn.request_drone_list)
-            self._drone_list_refresh_timer.start()
+            self.stack.setCurrentWidget(self.delivery_page)
         else:
             self.stack.setCurrentWidget(self.login_page)
-
-    def _tick_drone_list_refresh(self) -> None:
-        if self.stack.currentWidget() is self.drone_list_page:
-            self._conn.request_drone_list()
-        else:
-            # Прекращаем опрос, когда пользователь ушёл с экрана; возобновляем в _handle_*.
-            self._drone_list_refresh_timer.stop()
 
     #### Навигация #########################################################################
     def _navigate_to(self, widget: QWidget) -> None:
@@ -184,18 +183,16 @@ class App(QMainWindow):
             self.stack.setCurrentIndex(self._nav_history.pop())
 
     #### Аутентификация ####################################################################
-    def _handle_login(self, email: str, password: str) -> None:
+    def _handle_login(self, username: str, password: str) -> None:
         self.login_page.set_busy(True)
         self.login_page.set_error('')
-        self._conn.login(email, password)
+        self._conn.login(username, password)
 
     def _on_login_succeeded(self) -> None:
         self.login_page.set_busy(False)
         self.login_page.set_error('')
         if self.stack.currentWidget() is self.login_page:
-            self.stack.setCurrentWidget(self.drone_list_page)
-        QTimer.singleShot(500, self._conn.request_drone_list)
-        self._drone_list_refresh_timer.start()
+            self.stack.setCurrentWidget(self.delivery_page)
 
     def _on_login_failed(self, reason: str) -> None:
         self.login_page.set_busy(False)
@@ -214,65 +211,87 @@ class App(QMainWindow):
     def _handle_logout(self) -> None:
         self._ping_timer.stop()
         self._stop_arm_listener()
-        self._drone_list_refresh_timer.stop()
         self._conn.logout()
         self._video.stop()
         self._video.reset()
+        self._active_delivery = None
+        self.delivery_page.clear()
         # Сбрасываем форму логина — иначе после logout оператор видит
-        # старый forgot-message, заполненный email и пр.
+        # старый forgot-message, заполненный логин и пр.
         self.login_page.reset()
         self.stack.setCurrentWidget(self.login_page)
 
-    #### Список дронов и выбор #############################################################
-    def _on_drones(self, drones: list[dict]) -> None:
+    #### Заявки на доставку ###############################################################
+    def _on_delivery_offered(self, delivery: dict) -> None:
+        """Пришла новая заявка — показываем карточку на экране ожидания."""
         try:
-            self.drone_list_page.update(drones)
+            self.delivery_page.add_offer(delivery)
         except Exception as exc:
-            logger.warning('[app] ошибка обновления списка дронов: %s', exc)
+            logger.warning('[app] ошибка показа заявки: %s', exc)
 
-    def _handle_refresh(self) -> None:
-        self._conn.request_drone_list()
+    def _on_delivery_taken(self, delivery_id: str) -> None:
+        """Заявку забрал другой оператор — убираем карточку."""
+        self.delivery_page.remove_offer(delivery_id)
 
-    def _open_settings(self) -> None:
-        """Открыть страницу настроек. Запоминаем, откуда пришли, чтобы
-        закрытие вернуло на исходный экран."""
-        current = self.stack.currentWidget()
-        if current is not self.settings_page:
-            self._settings_return_to = current
-        self.stack.setCurrentWidget(self.settings_page)
+    def _handle_accept_delivery(self, delivery: dict) -> None:
+        """Кнопка «Принять» на карточке заявки → accept_delivery в coordinator."""
+        self._conn.accept_delivery(delivery)
 
-    def _close_settings(self) -> None:
-        target = self._settings_return_to or self.login_page
-        self.stack.setCurrentWidget(target)
-
-    def _handle_delete_drone(self, drone_id: str) -> None:
-        """Удаляет дрон через REST API. Список обновится автоматически
-        через WS-list_drones внутри ConnectionManager."""
-        def on_done(error: str | None) -> None:
-            if error:
-                QMessageBox.warning(self, 'Ошибка', error)
-        self._conn.delete_drone(drone_id, on_done=on_done)
-
-    def _handle_select_drone(self, drone_id: str) -> None:
-        if not drone_id:
-            return
-        self._state.selected_drone_id = drone_id
+    def _on_delivery_accepted(self, delivery: dict) -> None:
+        """Заявка успешно принята (200) — coordinator уже инициировал connect.
+        Запоминаем заявку (точка назначения нужна для карты), открываем
+        drone-view с видео."""
+        self._active_delivery = dict(delivery)
+        delivery_id = delivery.get('delivery_id', '')
+        self.delivery_page.remove_offer(delivery_id)
+        self._state.selected_drone_id = delivery.get('drone_id')
         self._state.cam_index = 0
-        self._conn.select_drone(drone_id)
         self._video.start()
-        # Ping показываем всё время, пока поднята WebRTC-сессия; кнопки-
-        # переключателя больше нет. Это дёшево (8 bytes/s), а оператору во
-        # время полёта всегда нужен видимый индикатор задержки.
         self._ping_timer.start()
-        self._drone_list_refresh_timer.stop()
-        # В демо overlay калибровки не нужен и его нечем погасить — кадров
-        # с камеры нет, а именно первый frame сбрасывает overlay в реальной
-        # сессии. Без этого условия overlay висел бы поверх всего drone-view.
         if not self._demo:
             self.drone_view_page.set_calibration_visible(True)
         self.stack.setCurrentWidget(self.drone_view_page)
 
-    def _handle_back_to_list(self) -> None:
+    def _on_delivery_accept_failed(self, delivery_id: str, reason: str) -> None:
+        """409 / ошибка accept — убираем карточку и поясняем оператору."""
+        self.delivery_page.remove_offer(delivery_id)
+        QMessageBox.information(
+            self, 'Заявку уже забрали',
+            reason or 'Эту заявку уже принял другой оператор.',
+        )
+
+    def _open_settings(self) -> None:
+        """Открыть страницу настроек. Запоминаем, откуда пришли, чтобы
+        закрытие вернуло на исходный экран.
+
+        Settings могут открываться и из полётного окна (кнопка-шестерёнка):
+        в этом случае временно прячем fullscreen-FlightWindow, показываем
+        главное окно с настройками, а на закрытии возвращаем полёт."""
+        current = self.stack.currentWidget()
+        if current is not self.settings_page:
+            self._settings_return_to = current
+        self._settings_from_flight = self._flight_window is not None
+        if self._settings_from_flight:
+            self._flight_window.hide()
+            self.showNormal()
+            self.raise_()
+            self.activateWindow()
+        self.stack.setCurrentWidget(self.settings_page)
+
+    def _close_settings(self) -> None:
+        if getattr(self, '_settings_from_flight', False) and self._flight_window is not None:
+            self._settings_from_flight = False
+            self.stack.setCurrentWidget(self.drone_view_page)
+            self._flight_window.showFullScreen()
+            self._flight_window.raise_()
+            self._flight_window.activateWindow()
+            return
+        target = self._settings_return_to or self.login_page
+        self.stack.setCurrentWidget(target)
+
+    def _handle_back_to_deliveries(self) -> None:
+        """Возврат с drone-view на экран ожидания заявок (оператор прервал
+        доставку, не сбросив груз). Сессия с дроном разрывается."""
         self._video.stop()
         self._ping_timer.stop()
         self._stop_arm_listener()
@@ -280,11 +299,10 @@ class App(QMainWindow):
         self._conn.disconnect_drone()
         self._video.reset()
         self._state.reset()
+        self._active_delivery = None
         self.drone_view_page.set_calibration_visible(False)
         self.drone_view_page.update_fc_status('none', '')
-        self.stack.setCurrentWidget(self.drone_list_page)
-        self._drone_list_refresh_timer.start()
-        self._conn.request_drone_list()
+        self.stack.setCurrentWidget(self.delivery_page)
 
     def _on_battery_updated(self, percent: int, voltage: float) -> None:
         """Раздача CRSF BATTERY_SENSOR: показать на drone-view и, если
@@ -296,6 +314,19 @@ class App(QMainWindow):
             except Exception as exc:
                 logger.debug('[app] обновление заряда в полётном окне: %s', exc)
 
+    def _on_telemetry(self, payload: dict) -> None:
+        """GPS/heading-телеметрия с борта → карта в полётном окне."""
+        if self._flight_window is None:
+            return
+        args = telemetry_to_args(payload)
+        if args is None:
+            return
+        lat, lon, heading = args
+        try:
+            self._flight_window.update_telemetry(lat, lon, heading)
+        except Exception as exc:
+            logger.debug('[app] ошибка обновления карты телеметрией: %s', exc)
+
     def _on_drone_went_offline(self, drone_id: str) -> None:
         """Coordinator подтвердил, что дрон действительно офлайн (а не
         кратковременный сбой при renegotiation). Если пользователь всё ещё
@@ -303,8 +334,8 @@ class App(QMainWindow):
         на замороженном кадре."""
         if self.stack.currentWidget() is not self.drone_view_page:
             return
-        logger.info('[app] дрон %s офлайн, возврат к списку', drone_id)
-        self._handle_back_to_list()
+        logger.info('[app] дрон %s офлайн, возврат к заявкам', drone_id)
+        self._handle_back_to_deliveries()
 
     def _on_connect_failed(self, drone_id: str) -> None:
         """Board сбросил peer во время подключения (нет камер / ошибка
@@ -321,7 +352,7 @@ class App(QMainWindow):
     def _dismiss_error_banner_and_back(self) -> None:
         self.drone_view_page.hide_error_banner()
         if self.stack.currentWidget() is self.drone_view_page:
-            self._handle_back_to_list()
+            self._handle_back_to_deliveries()
 
     def _on_session_reset(self) -> None:
         """Вызывается из connection.ConnectionManager на session_ended.
@@ -329,9 +360,9 @@ class App(QMainWindow):
         затем — если пользователь всё ещё на drone-view (т.е. идёт авто-
         переподключение после смены параметров или hot-plug камеры) — снова
         показывает overlay калибровки, пока не придёт первый кадр следующей
-        сессии. При полном отключении (возврат к списку) _handle_back_to_list
-        вместо этого зовёт video.reset(), который сбрасывает и индекс
-        камеры."""
+        сессии. При полном отключении (возврат к заявкам)
+        _handle_back_to_deliveries вместо этого зовёт video.reset(), который
+        сбрасывает и индекс камеры."""
         self._video.clear_tracks()
         if self.stack.currentWidget() is self.drone_view_page:
             self.drone_view_page.set_calibration_visible(True)
@@ -594,7 +625,17 @@ class App(QMainWindow):
             on_close=self._handle_flight_closed,
             fc_kind=fc_kind,
             passive=passive,
+            on_drop=self._conn.mark_delivered,
+            on_open_settings=self._open_settings,
         )
+        # Точка назначения из принятой заявки → маркер на карте.
+        if self._active_delivery is not None:
+            try:
+                lat = float(self._active_delivery.get('destination_lat'))
+                lon = float(self._active_delivery.get('destination_lon'))
+                self._flight_window.set_destination(lat, lon)
+            except (TypeError, ValueError):
+                logger.debug('[app] заявка без координат назначения — маркер не ставим')
         self._flight_window.showFullScreen()
         self._start_joystick_guard(joystick_index, calibration, js=js_input)
 
