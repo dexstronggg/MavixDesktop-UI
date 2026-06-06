@@ -1,4 +1,6 @@
-"""Экран входа по email и паролю, используется при отсутствии refresh-токена.
+"""Экран входа оператора по username и паролю (выдаёт администратор).
+
+Используется при отсутствии refresh-токена.
 
 Визуальный язык — Aviation Dark (см. Mavix Web): тёмный фон с лёгким cyan
 свечением, карточка по центру, логотип сверху, поля с иконками,
@@ -330,7 +332,7 @@ class LoginPage(QWidget):
         )
         layout.addWidget(title)
 
-        subtitle = QLabel('Введите данные вашего аккаунта')
+        subtitle = QLabel('Введите логин и пароль оператора')
         subtitle.setAlignment(Qt.AlignCenter)
         subtitle.setStyleSheet(
             f'color: {theme.TEXT_MUTED}; background: transparent;'
@@ -341,7 +343,9 @@ class LoginPage(QWidget):
         layout.addSpacing(10)
 
         # --- Поля ввода ---
-        self._email_wrap = _IconLineEdit('email.svg', 'Email', echo=False)
+        # Логин оператора (username). Атрибут .email сохранён для обратной
+        # совместимости со старым кодом формы, но семантически это username.
+        self._email_wrap = _IconLineEdit('email.svg', 'Логин', echo=False)
         self.email = self._email_wrap.input
         self.email.returnPressed.connect(self._submit)
         layout.addWidget(self._email_wrap)
@@ -408,6 +412,9 @@ class LoginPage(QWidget):
         forgot_row.addWidget(self._forgot_link)
         forgot_row.addStretch()
         layout.addLayout(forgot_row)
+        # Оператор не восстанавливает пароль сам — креды выдаёт администратор.
+        # Ссылку скрываем, но виджет оставляем (форма-логика на него ссылается).
+        self._forgot_link.hide()
 
         # --- Сообщение после запроса восстановления (изначально скрыто) ---
         self._forgot_msg = QLabel('')
@@ -520,10 +527,10 @@ class LoginPage(QWidget):
     def _submit(self) -> None:
         if not self._submit_btn.isEnabled():
             return
-        email = self.email.text().strip()
+        username = self.email.text().strip()
         pw = self.password.text()
-        if not email or not pw:
-            self.set_error('Email и пароль обязательны')
+        if not username or not pw:
+            self.set_error('Логин и пароль обязательны')
             return
         self.set_error('')
-        self._on_login(email, pw)
+        self._on_login(username, pw)

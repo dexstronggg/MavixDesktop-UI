@@ -35,7 +35,9 @@ class FlightWindow(QWidget):
                  get_frame: Callable[[int], object], cam_count: Callable[[], int],
                  loop: asyncio.AbstractEventLoop, on_close: Callable[[], None],
                  fc_kind: str = 'crsf',
-                 passive: bool = False) -> None:
+                 passive: bool = False,
+                 on_drop: Callable[[], None] | None = None,
+                 on_open_settings: Callable[[], None] | None = None) -> None:
         super().__init__()
         self.setWindowTitle('Flight')
         self._js = joystick_input
@@ -44,8 +46,15 @@ class FlightWindow(QWidget):
         self._cam_count = cam_count
         self._loop = loop
         self._on_close = on_close
+        self._on_drop = on_drop
+        self._on_open_settings = on_open_settings
         self._cam_index = 0
         self._help_shown = False
+        # Залипает на N тиков после нажатия кнопки сброса груза, чтобы CH8
+        # успел гарантированно уйти на борт несколькими RC-кадрами (50..100 Hz
+        # поток, один потерянный пакет недопустим для физического сброса).
+        self._drop_hold_ticks = 0
+        self._delivered_marked = False
         # passive=True — окно только ПОКАЗЫВАЕТ видео + стики + battery +
         # ping; никаких MAVLink-фреймов не шлёт. Используется когда
         # параллельно запущен QGroundControl, который сам обрабатывает
@@ -105,6 +114,39 @@ class FlightWindow(QWidget):
 
         self._back_btn = overlay_icon_btn('arrow_back.svg', self)
         self._back_btn.clicked.connect(self.__finish)
+
+        # Кнопка настроек в углу полётного экрана (доступ к Settings перенесён
+        # сюда — отдельной навигации-списка больше нет).
+        self._settings_btn = overlay_icon_btn('tune.svg', self)
+        self._settings_btn.setToolTip('Настройки')
+        if self._on_open_settings is not None:
+            self._settings_btn.clicked.connect(self._on_open_settings)
+        else:
+            self._settings_btn.hide()
+
+        # Кнопка ручного сброса груза — дублирует кнопку джойстика на случай,
+        # если она не привязана в калибровке. Шлёт CH8=DROP и помечает
+        # доставку delivered (через тот же __trigger_drop).
+        self._drop_btn = QPushButton('⬇  Сброс груза', self)
+        self._drop_btn.setFixedSize(150, 40)
+        self._drop_btn.setCursor(Qt.PointingHandCursor)
+        self._drop_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: rgba(34,197,94,0.80);
+                color: white;
+                border: 1px solid rgba(255,255,255,0.25);
+                border-radius: {theme.RADIUS_MD}px;
+                font-size: {theme.FONT_SIZE_SM}px;
+                font-weight: 700;
+            }}
+            QPushButton:hover {{ background: rgba(34,197,94,0.95); }}
+            QPushButton:pressed {{ background: rgba(22,163,74,0.95); }}
+        """)
+        self._drop_btn.clicked.connect(self.__trigger_drop)
+        if self._passive:
+            # В passive-режиме (QGC рулит) CRSF-кадры мы не шлём — кнопка
+            # сброса бессмысленна, скрываем её.
+            self._drop_btn.hide()
 
         self._prev_btn = overlay_btn('◀', self)
         self._prev_btn.clicked.connect(self.__prev_cam)
@@ -218,6 +260,26 @@ class FlightWindow(QWidget):
         else:
             self._reboot_btn: QPushButton | None = None
 
+        # Карта в углу экрана управления (видео + маркер дрона + назначение).
+        from mavixdesktop.ui.screens.map_widget import MapWidget
+        self._map = MapWidget(self)
+        self._map.setFixedSize(280, 200)
+
+    #### Карта и телеметрия ################################################################
+    def update_telemetry(self, lat: float, lon: float, heading: float) -> None:
+        """Обновляет позицию дрона на карте и поворот карты по курсу."""
+        try:
+            self._map.update_telemetry(lat, lon, heading)
+        except Exception as exc:
+            logger.debug('[FlightWindow] ошибка обновления карты: %s', exc)
+
+    def set_destination(self, lat: float, lon: float) -> None:
+        """Ставит маркер точки назначения на карте (из принятой заявки)."""
+        try:
+            self._map.set_destination(lat, lon)
+        except Exception as exc:
+            logger.debug('[FlightWindow] ошибка маркера назначения: %s', exc)
+
     #### Геометрия и позиционирование ######################################################
     def resizeEvent(self, event: QResizeEvent) -> None:
         self.__reposition()
@@ -230,10 +292,25 @@ class FlightWindow(QWidget):
 
         self._video_label.setGeometry(0, 0, w, h)
         self._back_btn.move(_PAD, _PAD)
+        # Кнопка настроек — рядом с «назад», правее.
+        self._settings_btn.move(_PAD + theme.OVERLAY_BTN_CORNER + 8, _PAD)
+        self._settings_btn.raise_()
 
         side_sz = theme.OVERLAY_BTN_SIDE
         self._prev_btn.move(_PAD, (h - side_sz) // 2)
         self._next_btn.move(w - side_sz - _PAD, (h - side_sz) // 2)
+
+        # Карта — нижний левый угол, над hint'ом.
+        map_h = self._map.height()
+        self._map.move(_PAD, h - map_h - _PAD)
+        self._map.raise_()
+
+        # Кнопка сброса груза — по центру внизу, над стиками-зоной справа.
+        self._drop_btn.move(
+            (w - self._drop_btn.width()) // 2,
+            _PAD + theme.OVERLAY_BTN_CORNER + 36,
+        )
+        self._drop_btn.raise_()
 
         total_w = 2 * _STICK_SIZE + _STICK_GAP
         x0 = (w - total_w) // 2
@@ -332,6 +409,14 @@ class FlightWindow(QWidget):
         self._arm_label.setText('ARM' if armed else 'DISARM')
         self._arm_label.setStyleSheet(_ARM_STYLE if armed else _DISARM_STYLE)
 
+        # Кнопка сброса груза: на фронте нажатия удерживаем CH8=DROP на
+        # несколько тиков и однократно помечаем доставку delivered.
+        try:
+            if self._js.is_drop_pressed():
+                self.__trigger_drop()
+        except Exception as exc:
+            logger.debug('[FlightWindow] ошибка чтения кнопки сброса: %s', exc)
+
         if self._passive:
             # Видео + UI визуально показываем, никаких MAVLink-фреймов
             # не шлём — это делает параллельно запущенный QGC.
@@ -404,11 +489,30 @@ class FlightWindow(QWidget):
         except Exception as exc:
             logger.debug('[FlightWindow] ошибка аварийной отправки crsf: %s', exc)
 
+    #### Сброс груза #######################################################################
+    def __trigger_drop(self) -> None:
+        """Запускает сброс груза: удержание CH8=DROP на ~15 тиков (RC-кадр
+        уходит дрону) и однократная отметка доставки delivered (сервер
+        уведомит админа). Повторное нажатие посылает DROP ещё раз, но
+        delivered помечаем только один раз."""
+        self._drop_hold_ticks = 15
+        logger.info('[FlightWindow] сброс груза: CH8=DROP, отметка delivered')
+        if not self._delivered_marked:
+            self._delivered_marked = True
+            if self._on_drop is not None:
+                try:
+                    self._on_drop()
+                except Exception as exc:
+                    logger.warning('[FlightWindow] ошибка on_drop: %s', exc)
+
     #### Кодирование команд FC #############################################################
     def __tick_crsf(self, thr: float, yaw: float, pitch: float,
                     roll: float, armed: bool) -> None:
+        drop = self._drop_hold_ticks > 0
+        if self._drop_hold_ticks > 0:
+            self._drop_hold_ticks -= 1
         try:
-            packet = build_rc_frame(thr, roll, pitch, yaw, armed)
+            packet = build_rc_frame(thr, roll, pitch, yaw, armed, drop=drop)
         except Exception as exc:
             logger.debug('[FlightWindow] ошибка кодирования CRSF: %s', exc)
             return

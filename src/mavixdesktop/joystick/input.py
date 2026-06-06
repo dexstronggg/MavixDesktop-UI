@@ -25,6 +25,7 @@ class JoystickInput:
         self._pump_events = pump_events
         self._arm = False
         self._arm_btn_prev = 0
+        self._drop_btn_prev = 0
         # Запоминаем instance_id, чтобы сопоставлять событие device-removed
         # именно с этим joystick (если у пользователя подключено больше
         # одного). Падает в None, если pygame пока не может сообщить.
@@ -81,6 +82,37 @@ class JoystickInput:
             except Exception:
                 return False
         return self._poll_arm_button()
+
+    def is_drop_pressed(self) -> bool:
+        """True на момент НАЖАТИЯ кнопки сброса груза (фронт нажатия).
+
+        Калибровка может задать ``drop_button_index`` (кнопка) или
+        ``drop_axis_index`` (тумблер). Если привязка не задана —
+        возвращает False (сброс недоступен). Для кнопки детектируем фронт
+        0→1 (одно нажатие = один сброс), для оси — переход за порог 0.5.
+        """
+        drop_type = self._cal.get('drop_type')
+        if drop_type == 'axis':
+            idx = self._cal.get('drop_axis_index')
+            if idx is None:
+                return False
+            try:
+                cur = 1 if self._js.get_axis(idx) > 0.5 else 0
+            except Exception:
+                return False
+        elif drop_type == 'button':
+            idx = self._cal.get('drop_button_index')
+            if idx is None:
+                return False
+            try:
+                cur = self._js.get_button(idx)
+            except Exception:
+                return False
+        else:
+            return False
+        pressed = cur == 1 and self._drop_btn_prev == 0
+        self._drop_btn_prev = cur
+        return pressed
 
 #### Внутренние помощники ##############################################################
     def _read_axis(self, name: str) -> float:

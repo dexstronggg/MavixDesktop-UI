@@ -21,6 +21,13 @@ class Bridge(QObject):
     drone_went_offline = Signal(str)         # дрон не вернулся на связь
     connect_failed = Signal(str)             # сессия не поднялась (нет камер и т.п.)
     battery_updated = Signal(int, float)     # percent, voltage
+    telemetry_received = Signal(dict)        # {lat, lon, alt, heading, sats}
+
+    #### Доставки ##########################################################################
+    delivery_offered = Signal(dict)          # новая заявка {delivery_id, drone_id, ...}
+    delivery_taken = Signal(str)             # delivery_id — заявку забрал другой оператор
+    delivery_accepted = Signal(dict)         # наша заявка принята — открыть управление
+    delivery_accept_failed = Signal(str, str)  # delivery_id, причина
 
     #### Peer-to-peer ping #################################################################
     speed_updated = Signal(float)            # rtt_ms (-1 если ещё нет данных)

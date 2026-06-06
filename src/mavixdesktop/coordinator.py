@@ -78,6 +78,10 @@ class SessionCoordinator:
         self._latest_cameras: list[dict] = []
         self._reconnect_drone_id: str | None = None
         self._connect_request_at: float | None = None
+        # Принятая оператором заявка на доставку: дрон, к которому подключаемся,
+        # берётся из неё (delivery.drone_id), а delivery_id нужен для перевода
+        # доставки в in-flight и отметки delivered после сброса груза.
+        self._active_delivery: dict | None = None
         self.on_drones_changed: Callable[[list[dict]], None] | None = None
         self.on_fc_changed: Callable[[str, str], None] | None = None
         self.on_cameras_received: Callable[[list[dict]], None] | None = None
@@ -86,6 +90,12 @@ class SessionCoordinator:
         self.on_error: Callable[[str], None] | None = None
         self.on_session_ended: Callable[[], None] | None = None
         self.on_battery_changed: Callable[[int, float], None] | None = None
+        self.on_telemetry: Callable[[dict], None] | None = None
+        # Доставки (система «такси»).
+        self.on_delivery_offer: Callable[[dict], None] | None = None
+        self.on_delivery_taken: Callable[[str], None] | None = None
+        self.on_delivery_accepted: Callable[[dict], None] | None = None
+        self.on_delivery_accept_failed: Callable[[str, str], None] | None = None
 
     @property
     def fc_kind(self) -> str:
@@ -98,6 +108,10 @@ class SessionCoordinator:
     @property
     def cameras(self) -> list[dict]:
         return list(self._latest_cameras)
+
+    @property
+    def active_delivery(self) -> dict | None:
+        return dict(self._active_delivery) if self._active_delivery is not None else None
 
     async def send_bitrate_update(self, updates: list[dict]) -> None:
         """Отправляет {type:bitrate, updates:[{device_index, bitrate_kbs}, ...]} по config-каналу."""
@@ -132,6 +146,70 @@ class SessionCoordinator:
         if config_ch is None:
             return
         config_ch.send_json({'type': 'calibrate'})
+
+    async def send_reboot(self) -> None:
+        """Отправляет {type:reboot} по config-каналу. Плата инициирует
+        перезагрузку FC (используется панелью управления полётом)."""
+        if self._manager is None or self._manager.channels is None:
+            return
+        config_ch = self._manager.channels.config
+        if config_ch is None:
+            return
+        config_ch.send_json({'type': 'reboot'})
+
+    #### Доставки (оператор) ###############################################################
+    async def accept_delivery(self, delivery: dict) -> None:
+        """Принимает заявку на доставку (гонка «такси»).
+
+        При успехе (200) сохраняем заявку как активную, переводим её в
+        in-flight и инициируем connect к дрону из заявки. При 409 (заявку
+        уже забрали) сообщаем UI через on_delivery_accept_failed.
+        """
+        delivery_id = delivery.get('delivery_id')
+        drone_id = delivery.get('drone_id')
+        if not isinstance(delivery_id, str) or not isinstance(drone_id, str):
+            logger.warning('[coord] заявка без delivery_id/drone_id: %s', delivery)
+            return
+        token = getattr(self._signal_client, '_access_token', '')
+        try:
+            await self._api.accept_delivery(delivery_id, token)
+        except ApiError as exc:
+            logger.info('[coord] не удалось принять заявку %s: %s', delivery_id, exc)
+            if self.on_delivery_accept_failed is not None:
+                try:
+                    self.on_delivery_accept_failed(delivery_id, str(exc))
+                except Exception as cb_exc:
+                    logger.warning('[coord] ошибка on_delivery_accept_failed: %s', cb_exc)
+            return
+        self._active_delivery = dict(delivery)
+        logger.info('[coord] заявка %s принята; подключаемся к дрону %s', delivery_id, drone_id)
+        try:
+            await self._api.set_delivery_in_flight(delivery_id, token)
+        except ApiError as exc:
+            logger.warning('[coord] не удалось перевести заявку %s в in-flight: %s', delivery_id, exc)
+        if self.on_delivery_accepted is not None:
+            try:
+                self.on_delivery_accepted(dict(delivery))
+            except Exception as cb_exc:
+                logger.warning('[coord] ошибка on_delivery_accepted: %s', cb_exc)
+        await self.request_connect(drone_id)
+
+    async def mark_delivered(self) -> None:
+        """Отмечает активную доставку доставленной (после сброса груза).
+        Сервер уведомит админа. Идемпотентна — повторный вызов без активной
+        заявки делает no-op."""
+        delivery = self._active_delivery
+        if delivery is None:
+            return
+        delivery_id = delivery.get('delivery_id')
+        if not isinstance(delivery_id, str):
+            return
+        token = getattr(self._signal_client, '_access_token', '')
+        try:
+            await self._api.mark_delivery_delivered(delivery_id, token)
+            logger.info('[coord] доставка %s помечена delivered', delivery_id)
+        except ApiError as exc:
+            logger.warning('[coord] не удалось пометить доставку %s delivered: %s', delivery_id, exc)
 
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
@@ -246,6 +324,10 @@ class SessionCoordinator:
                 await self._teardown_session()
                 if self._reconnect_drone_id is not None:
                     await self.request_drone_list()
+            case 'delivery_offer':
+                await self._handle_delivery_offer(msg)
+            case 'delivery_taken':
+                await self._handle_delivery_taken(msg)
             case 'auth_warning':
                 await self._handle_auth_warning(msg)
             case 'auth_refreshed':
@@ -305,6 +387,28 @@ class SessionCoordinator:
                         self.on_drone_offline(offline_id)
                     except Exception as exc:
                         logger.warning('[coord] ошибка on_drone_offline: %s', exc)
+
+    async def _handle_delivery_offer(self, msg: dict) -> None:
+        """Сервер предлагает оператору новую заявку на доставку."""
+        delivery = msg.get('delivery')
+        if not isinstance(delivery, dict):
+            return
+        if self.on_delivery_offer is not None:
+            try:
+                self.on_delivery_offer(delivery)
+            except Exception as exc:
+                logger.warning('[coord] ошибка on_delivery_offer: %s', exc)
+
+    async def _handle_delivery_taken(self, msg: dict) -> None:
+        """Заявку уже забрал другой оператор — убираем её карточку из UI."""
+        delivery_id = msg.get('delivery_id')
+        if not isinstance(delivery_id, str):
+            return
+        if self.on_delivery_taken is not None:
+            try:
+                self.on_delivery_taken(delivery_id)
+            except Exception as exc:
+                logger.warning('[coord] ошибка on_delivery_taken: %s', exc)
 
     async def _handle_sdp(self, msg: dict) -> None:
         if self._manager is None:
@@ -394,6 +498,19 @@ class SessionCoordinator:
             hub.config.on_message = self._on_config_message
         if hub.packet is not None:
             hub.packet.on_packet = self._on_packet_from_drone
+        if hub.telemetry is not None:
+            hub.telemetry.on_telemetry = self._on_telemetry_message
+
+    def _on_telemetry_message(self, payload: dict) -> None:
+        """Приёмник GPS/heading-телеметрии с отдельного telemetry-канала.
+        Прокидывает в UI (карта) через on_telemetry."""
+        if not isinstance(payload, dict):
+            return
+        if self.on_telemetry is not None:
+            try:
+                self.on_telemetry(payload)
+            except Exception as exc:
+                logger.warning('[coord] ошибка on_telemetry: %s', exc)
 
     async def _on_config_message_async(self, payload: dict | list) -> None:
         if not isinstance(payload, dict):
@@ -518,6 +635,7 @@ class SessionCoordinator:
             self._mavlink = None
         self._target_drone_id = None
         self._fc_kind = 'none'
+        self._active_delivery = None
         if self.on_session_ended is not None:
             try:
                 self.on_session_ended()
