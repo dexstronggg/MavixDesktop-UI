@@ -48,12 +48,12 @@ class ConnectionManager:
         if self._coord is not None:
             self._coord.on_track = on_track
 
-    def login(self, email: str, password: str) -> None:
-        """Запускает вход в фоновом loop; UI не блокируется."""
+    def login(self, username: str, password: str) -> None:
+        """Запускает вход оператора (username/password) в фоновом loop; UI не блокируется."""
         self._ensure_loop_started()
         assert self._loop is not None
         asyncio.run_coroutine_threadsafe(
-            self._login_and_run(email, password), self._loop,
+            self._login_and_run(username, password), self._loop,
         )
 
     def resume(self) -> bool:
@@ -171,11 +171,15 @@ class ConnectionManager:
         self._thread.start()
         logger.info('[connection] поток event loop запущен')
 
-    async def _login_and_run(self, email: str, password: str) -> None:
+    async def _login_and_run(self, username: str, password: str) -> None:
         self._api = await ApiSession.create()
         try:
-            result = await self._api.login(email, password)
-            token_store.save(email, result['refresh_token'])
+            # Вход оператора в desktop — по username/password (выдаёт админ),
+            # а не по email. token_store хранит идентификатор под ключом email
+            # (исторически), сюда кладём username — это просто метка для
+            # последующего refresh-сохранения.
+            result = await self._api.operator_login(username, password)
+            token_store.save(username, result['refresh_token'])
             await self._start_coordinator(result['access_token'], result['refresh_token'])
         except ApiError as exc:
             logger.error('[connection] вход не удался: %s', exc)
@@ -238,6 +242,11 @@ class ConnectionManager:
         self._coord.on_drone_offline = self._emit_drone_offline
         self._coord.on_connect_failed = self._emit_connect_failed
         self._coord.on_battery_changed = self._emit_battery
+        self._coord.on_telemetry = self._emit_telemetry
+        self._coord.on_delivery_offer = self._emit_delivery_offer
+        self._coord.on_delivery_taken = self._emit_delivery_taken
+        self._coord.on_delivery_accepted = self._emit_delivery_accepted
+        self._coord.on_delivery_accept_failed = self._emit_delivery_accept_failed
         self._coord_task = asyncio.create_task(self._coord.run())
 
     #### События coordinator в сигналы Qt ##################################################
@@ -283,6 +292,45 @@ class ConnectionManager:
             self._bridge.battery_updated.emit(percent, voltage)
         except Exception as exc:
             logger.warning('[connection] ошибка emit в bridge: %s', exc)
+
+    def _emit_telemetry(self, payload: dict) -> None:
+        try:
+            self._bridge.telemetry_received.emit(payload)
+        except Exception as exc:
+            logger.warning('[connection] ошибка emit в bridge: %s', exc)
+
+    def _emit_delivery_offer(self, delivery: dict) -> None:
+        try:
+            self._bridge.delivery_offered.emit(delivery)
+        except Exception as exc:
+            logger.warning('[connection] ошибка emit в bridge: %s', exc)
+
+    def _emit_delivery_taken(self, delivery_id: str) -> None:
+        try:
+            self._bridge.delivery_taken.emit(delivery_id)
+        except Exception as exc:
+            logger.warning('[connection] ошибка emit в bridge: %s', exc)
+
+    def _emit_delivery_accepted(self, delivery: dict) -> None:
+        try:
+            self._bridge.delivery_accepted.emit(delivery)
+        except Exception as exc:
+            logger.warning('[connection] ошибка emit в bridge: %s', exc)
+
+    def _emit_delivery_accept_failed(self, delivery_id: str, reason: str) -> None:
+        try:
+            self._bridge.delivery_accept_failed.emit(delivery_id, reason)
+        except Exception as exc:
+            logger.warning('[connection] ошибка emit в bridge: %s', exc)
+
+    #### Доставки — публичный API #########################################################
+    def accept_delivery(self, delivery: dict) -> None:
+        """Принять заявку (вызывается из UI по кнопке «Принять»)."""
+        self._submit(self._coord.accept_delivery(delivery) if self._coord else None)
+
+    def mark_delivered(self) -> None:
+        """Отметить активную доставку доставленной (после сброса груза)."""
+        self._submit(self._coord.mark_delivered() if self._coord else None)
 
     def _submit(self, coro: Awaitable | None) -> None:
         if coro is None or self._loop is None:

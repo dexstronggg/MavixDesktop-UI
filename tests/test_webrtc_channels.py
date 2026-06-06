@@ -10,6 +10,7 @@ from mavixdesktop.webrtc.channels import (
     DataChannelHub,
     PacketChannel,
     PingChannel,
+    TelemetryChannel,
 )
 
 
@@ -227,7 +228,49 @@ def test_hub_close_clears_all():
     hub.attach(_mock_channel('packet-channel'))
     hub.attach(_mock_channel('ping-channel'))
     hub.attach(_mock_channel('config-channel'))
+    hub.attach(_mock_channel('telemetry-channel'))
     hub.close()
     assert hub.packet is None
     assert hub.ping is None
     assert hub.config is None
+    assert hub.telemetry is None
+
+
+#### TelemetryChannel ##################################################################
+
+def test_hub_attach_telemetry():
+    hub = DataChannelHub()
+    assert hub.attach(_mock_channel('telemetry-channel')) is True
+    assert isinstance(hub.telemetry, TelemetryChannel)
+
+
+def test_telemetry_on_message_dispatches_parsed_json():
+    ch = _mock_channel('telemetry-channel')
+    tc = TelemetryChannel(ch)
+    received: list = []
+    tc.on_telemetry = received.append
+    _fire(ch, 'message', json.dumps({'type': 'telemetry', 'lat': 55.0, 'lon': 37.0, 'heading': 90}))
+    assert received == [{'type': 'telemetry', 'lat': 55.0, 'lon': 37.0, 'heading': 90}]
+
+
+def test_telemetry_accepts_bytes_payload():
+    ch = _mock_channel('telemetry-channel')
+    tc = TelemetryChannel(ch)
+    received: list = []
+    tc.on_telemetry = received.append
+    _fire(ch, 'message', json.dumps({'lat': 1.0, 'lon': 2.0}).encode('utf-8'))
+    assert received == [{'lat': 1.0, 'lon': 2.0}]
+
+
+def test_telemetry_invalid_json_swallowed():
+    ch = _mock_channel('telemetry-channel')
+    tc = TelemetryChannel(ch)
+    tc.on_telemetry = lambda _: pytest.fail('should not fire')
+    _fire(ch, 'message', 'not-json')
+
+
+def test_telemetry_no_handler_is_noop():
+    ch = _mock_channel('telemetry-channel')
+    _tc = TelemetryChannel(ch)
+    _fire(ch, 'message', json.dumps({'lat': 1.0}))  # no exception
+    assert _tc.on_telemetry is None

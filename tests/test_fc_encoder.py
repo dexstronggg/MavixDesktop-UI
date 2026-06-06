@@ -58,8 +58,11 @@ def test_arm_channel_low_when_disarmed():
 def test_unused_channels_centered():
     frame = build_rc_frame(0.7, -0.2, 0.4, 0.0, armed=True)
     channels = _decode_channels(frame)
-    for ch in channels[5:]:
+    # CH6, CH7 (индексы 5,6) и CH9..CH16 (индексы 8..) центрированы;
+    # CH8 (индекс 7) — канал сброса груза, по умолчанию CH_MIN.
+    for ch in channels[5:7] + channels[8:]:
         assert ch == CH_CENTER
+    assert channels[7] == CH_MIN
 
 
 def test_taer_order_roll_is_channel_2():
@@ -94,3 +97,21 @@ def test_clamps_out_of_range_inputs():
     assert channels[0] == CH_MAX  # throttle
     assert CH_MAX - 1 <= channels[1] <= CH_MAX
     assert channels[2] == CH_MIN or channels[2] == CH_MIN + 1
+
+
+def test_drop_channel_high_when_drop_true():
+    frame = build_rc_frame(0, 0, 0, 0, armed=True, drop=True)
+    channels = _decode_channels(frame)
+    assert channels[7] == CH_MAX  # CH8 = drop
+
+
+def test_drop_channel_low_when_drop_false():
+    frame = build_rc_frame(0, 0, 0, 0, armed=True, drop=False)
+    channels = _decode_channels(frame)
+    assert channels[7] == CH_MIN
+
+
+def test_drop_defaults_to_false():
+    frame = build_rc_frame(0, 0, 0, 0, armed=False)
+    channels = _decode_channels(frame)
+    assert channels[7] == CH_MIN
