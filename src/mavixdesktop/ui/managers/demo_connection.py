@@ -52,6 +52,17 @@ _MOCK_CAMERAS = [
 # Mock FC — CRSF чтобы кнопка «Взлёт» оказалась активной и видимой.
 _MOCK_FC = ('crsf', 'Демо-FC (Betaflight)')
 
+# Мок-заявка на доставку для демо-флоу.
+_MOCK_DELIVERY = {
+    'delivery_id': 'demo-delivery-0001',
+    'drone_id': 'demo-online-0001',
+    'drone_name': 'Тестовый дрон',
+    'destination_address': 'Москва, Красная площадь, 1',
+    'destination_lat': 55.753930,
+    'destination_lon': 37.620795,
+    'cargo_description': 'Документы (демо)',
+}
+
 
 class DemoConnectionManager:
     """Drop-in для ConnectionManager в демо-режиме."""
@@ -68,11 +79,15 @@ class DemoConnectionManager:
         # В демо-режиме видеопотока нет — track-колбэки не нужны.
         return None
 
-    def login(self, email: str, password: str) -> None:
-        logger.info('[demo] принимаю вход email=%s (любой пароль подходит)', email)
+    def login(self, username: str, password: str) -> None:
+        logger.info('[demo] принимаю вход оператора username=%s (любой пароль подходит)', username)
         # Небольшая задержка, чтобы login_page успел показать spinner и
         # переход выглядел как настоящий.
         QTimer.singleShot(150, self._bridge.login_succeeded.emit)
+        # Через секунду эмитим демо-заявку, чтобы экран ожидания заполнился.
+        QTimer.singleShot(
+            1000, lambda: self._bridge.delivery_offered.emit(dict(_MOCK_DELIVERY))
+        )
 
     def resume(self) -> bool:
         # В демо-режиме всегда начинаем с экрана входа — так нагляднее.
@@ -90,12 +105,21 @@ class DemoConnectionManager:
     def select_drone(self, drone_id: str) -> None:
         # Видеопотока в демо нет, но всё что НЕ требует реального видео —
         # заполняем mock-данными: дропдауны камеры, кнопку взлёта, статус
-        # FC. Это нужно для визуальной проверки дизайна drone-view экрана
-        # (раньше тут эмитился connect_failed, и пользователя сразу
-        # выкидывало обратно к списку с баннером «Камеры не найдены»).
+        # FC. Это нужно для визуальной проверки дизайна drone-view экрана.
         logger.info('[demo] select_drone(%s) — эмитирую mock-камеры и FC', drone_id)
         QTimer.singleShot(120, lambda: self._bridge.config_received.emit(list(_MOCK_CAMERAS)))
         QTimer.singleShot(140, lambda: self._bridge.fc_info_received.emit(*_MOCK_FC))
+
+    def accept_delivery(self, delivery: dict) -> None:
+        """Демо: «принимаем» заявку и сразу эмитим delivery_accepted +
+        mock-камеры/FC, чтобы открылся drone-view как в реальном флоу."""
+        logger.info('[demo] accept_delivery(%s)', delivery.get('delivery_id'))
+        QTimer.singleShot(120, lambda: self._bridge.delivery_accepted.emit(dict(delivery)))
+        QTimer.singleShot(240, lambda: self._bridge.config_received.emit(list(_MOCK_CAMERAS)))
+        QTimer.singleShot(260, lambda: self._bridge.fc_info_received.emit(*_MOCK_FC))
+
+    def mark_delivered(self) -> None:
+        logger.info('[demo] mark_delivered (no-op)')
 
     def disconnect_drone(self) -> None:
         return None

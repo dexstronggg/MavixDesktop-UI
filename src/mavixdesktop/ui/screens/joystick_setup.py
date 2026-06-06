@@ -78,19 +78,22 @@ _STEP_PITCH_MIN = 6
 _STEP_ROLL_MAX  = 7
 _STEP_ROLL_MIN  = 8
 _STEP_ARM       = 9
-_STEP_DONE      = 10
+_STEP_DROP      = 10
+_STEP_DONE      = 11
 
 _STEPS = [
-    'Шаг 1/10: Установите все стики в ЦЕНТР → Далее',
-    'Шаг 2/10: ТЯГА — потяните вверх (МАКСИМУМ) → Далее',
-    'Шаг 3/10: ТЯГА — потяните вниз (МИНИМУМ) → Далее',
-    'Шаг 4/10: РЫСКАНИЕ — поверните вправо (МАКСИМУМ) → Далее',
-    'Шаг 5/10: РЫСКАНИЕ — поверните влево (МИНИМУМ) → Далее',
-    'Шаг 6/10: ТАНГАЖ — наклоните стик вперёд (МАКСИМУМ) → Далее',
-    'Шаг 7/10: ТАНГАЖ — наклоните стик назад (МИНИМУМ) → Далее',
-    'Шаг 8/10: КРЕН — наклоните стик вправо (МАКСИМУМ) → Далее',
-    'Шаг 9/10: КРЕН — наклоните стик влево (МИНИМУМ) → Далее',
-    'Шаг 10/10: Нажмите кнопку ARM/DISARM на контроллере',
+    'Шаг 1/11: Установите все стики в ЦЕНТР → Далее',
+    'Шаг 2/11: ТЯГА — потяните вверх (МАКСИМУМ) → Далее',
+    'Шаг 3/11: ТЯГА — потяните вниз (МИНИМУМ) → Далее',
+    'Шаг 4/11: РЫСКАНИЕ — поверните вправо (МАКСИМУМ) → Далее',
+    'Шаг 5/11: РЫСКАНИЕ — поверните влево (МИНИМУМ) → Далее',
+    'Шаг 6/11: ТАНГАЖ — наклоните стик вперёд (МАКСИМУМ) → Далее',
+    'Шаг 7/11: ТАНГАЖ — наклоните стик назад (МИНИМУМ) → Далее',
+    'Шаг 8/11: КРЕН — наклоните стик вправо (МАКСИМУМ) → Далее',
+    'Шаг 9/11: КРЕН — наклоните стик влево (МИНИМУМ) → Далее',
+    'Шаг 10/11: Нажмите кнопку ARM/DISARM на контроллере',
+    'Шаг 11/11: Нажмите кнопку СБРОСА ГРУЗА на контроллере\n'
+    '(или нажмите «Далее», чтобы пропустить — сброс будет только кнопкой на экране)',
     'Калибровка завершена!\n\nНажмите «Готово» для сохранения.',
 ]
 
@@ -116,7 +119,7 @@ class _StepProgress(QWidget):
     Высота виджета учитывает halo вокруг current (+6px к диаметру dots).
     """
 
-    _TOTAL = 10
+    _TOTAL = 11
     _DOT_SIZE = 8
     _DOT_GAP = 12
     _HALO_PAD = 4  # сколько px halo выступает за пределы dot со всех сторон
@@ -826,6 +829,8 @@ class JoystickCalibrationDialog(QDialog):
         self.calibration: dict | None = None
         self._arm_btn_states: list | None = None
         self._arm_axis_states: list | None = None
+        self._drop_btn_states: list | None = None
+        self._drop_axis_states: list | None = None
 
         pygame.joystick.init()
         self._js = pygame.joystick.Joystick(joystick_index)
@@ -925,6 +930,42 @@ class JoystickCalibrationDialog(QDialog):
                             self._next_btn.setText(f'Далее (ось {i})')
                             break
 
+        elif self._step == _STEP_DROP:
+            drop_captured = 'drop_button_index' in self._data or 'drop_axis_index' in self._data
+            if not drop_captured:
+                # Кнопку ARM не предлагаем как сброс — исключаем её индекс.
+                arm_btn = self._data.get('arm_button_index')
+                if self._drop_btn_states is not None:
+                    for i in range(self._js.get_numbuttons()):
+                        if i == arm_btn:
+                            continue
+                        if self._js.get_button(i) != self._drop_btn_states[i]:
+                            self._data['drop_type'] = 'button'
+                            self._data['drop_button_index'] = i
+                            self._instruction.setText(
+                                f'Кнопка {i} захвачена как СБРОС ГРУЗА.\n\nНажмите «Далее».'
+                            )
+                            self._next_btn.setText(f'Далее (кнопка {i})')
+                            break
+                if 'drop_button_index' not in self._data and self._drop_axis_states is not None:
+                    excluded = {
+                        self._data.get('axis_thr'), self._data.get('axis_yaw'),
+                        self._data.get('axis_pitch'), self._data.get('axis_roll'),
+                        self._data.get('arm_axis_index'),
+                    }
+                    for i in range(self._js.get_numaxes()):
+                        if i in excluded:
+                            continue
+                        cur_state = self._js.get_axis(i) > 0.5
+                        if cur_state != self._drop_axis_states[i]:
+                            self._data['drop_type'] = 'axis'
+                            self._data['drop_axis_index'] = i
+                            self._instruction.setText(
+                                f'Ось {i} захвачена как СБРОС ГРУЗА (тумблер).\n\nНажмите «Далее».'
+                            )
+                            self._next_btn.setText(f'Далее (ось {i})')
+                            break
+
     #### Шаги калибровки ###################################################################
     def _on_next(self) -> None:
         vals = self._read_axes()
@@ -964,6 +1005,10 @@ class JoystickCalibrationDialog(QDialog):
         elif self._step == _STEP_ARM:
             if 'arm_button_index' not in self._data and 'arm_axis_index' not in self._data:
                 return
+        elif self._step == _STEP_DROP:
+            # Сброс груза — опциональная привязка: можно пропустить (тогда
+            # сброс доступен только кнопкой на экране управления).
+            pass
         elif self._step == _STEP_DONE:
             self._build_calibration()
             path = JoystickCalibration.save(self.calibration, self._joystick_name)
@@ -980,6 +1025,10 @@ class JoystickCalibrationDialog(QDialog):
             pygame.event.pump()
             self._arm_btn_states = [self._js.get_button(i) for i in range(self._js.get_numbuttons())]
             self._arm_axis_states = [self._js.get_axis(i) > 0.5 for i in range(self._js.get_numaxes())]
+        elif self._step == _STEP_DROP:
+            pygame.event.pump()
+            self._drop_btn_states = [self._js.get_button(i) for i in range(self._js.get_numbuttons())]
+            self._drop_axis_states = [self._js.get_axis(i) > 0.5 for i in range(self._js.get_numaxes())]
         self._next_btn.setText('Далее')
         self._update_ui()
 
@@ -1011,6 +1060,10 @@ class JoystickCalibrationDialog(QDialog):
             'arm_button_index': c.get('arm_button_index', 0),
             'arm_type':         c.get('arm_type', 'button'),
             'arm_axis_index':   c.get('arm_axis_index', None),
+            # Привязка сброса груза — опциональна (может отсутствовать).
+            'drop_type':         c.get('drop_type'),
+            'drop_button_index': c.get('drop_button_index'),
+            'drop_axis_index':   c.get('drop_axis_index'),
         }
         try:
             guid = self._js.get_guid()

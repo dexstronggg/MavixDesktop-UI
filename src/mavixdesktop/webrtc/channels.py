@@ -4,9 +4,10 @@
 через pc.on('datachannel'). Hub идентифицирует их по .label и предоставляет
 единообразный API, симметричный channels.py из MavixBoard:
 
-  packet  — бинарные FC-пакеты (двунаправленный мост к MavlinkRelay / CRSF)
-  ping    — round-trip echo для измерения RTT
-  config  — JSON: FC info, camera config, calibrate
+  packet    — бинарные FC-пакеты (двунаправленный мост к MavlinkRelay / CRSF)
+  ping      — round-trip echo для измерения RTT
+  config    — JSON: FC info, camera config, calibrate
+  telemetry — JSON: GPS/heading-телеметрия для карты (только приём)
 """
 from __future__ import annotations
 
@@ -173,10 +174,49 @@ class ConfigChannel(_BaseChannel):
             logger.warning('[dc:config] ошибка обработчика: %s', exc)
 
 
+class TelemetryChannel(_BaseChannel):
+    """Приёмный канал GPS/heading-телеметрии.
+
+    Дрон шлёт по нему JSON-сообщения вида
+    ``{type:'telemetry', lat, lon, alt, heading, sats}`` (heading — градусы
+    0..360). Канал односторонний (только приём): desktop парсит payload и
+    отдаёт его в on_telemetry, откуда обновляется маркер/поворот карты.
+    """
+
+    LABEL = 'telemetry-channel'
+
+    def __init__(self, channel: RTCDataChannel) -> None:
+        super().__init__(channel)
+        self.on_telemetry: JsonHandler | None = None
+
+    def _on_message(self, message: object) -> None:
+        if isinstance(message, (bytes, bytearray, memoryview)):
+            try:
+                text = bytes(message).decode('utf-8')
+            except UnicodeDecodeError:
+                return
+        elif isinstance(message, str):
+            text = message
+        else:
+            return
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
+            logger.warning('[dc:telemetry] ошибка декодирования json: %s', exc)
+            return
+        if self.on_telemetry is None:
+            return
+        try:
+            self.on_telemetry(payload)
+        except Exception as exc:
+            logger.warning('[dc:telemetry] ошибка обработчика: %s', exc)
+
+
 _LABEL_TO_CLASS = {
     PacketChannel.LABEL: PacketChannel,
     PingChannel.LABEL: PingChannel,
     ConfigChannel.LABEL: ConfigChannel,
+    TelemetryChannel.LABEL: TelemetryChannel,
 }
 
 
@@ -190,6 +230,7 @@ class DataChannelHub:
         self.packet: PacketChannel | None = None
         self.ping: PingChannel | None = None
         self.config: ConfigChannel | None = None
+        self.telemetry: TelemetryChannel | None = None
 
     def attach(self, channel: RTCDataChannel) -> bool:
         """Оборачивает только что открытый канал по его label. Возвращает True,
@@ -205,9 +246,12 @@ class DataChannelHub:
             self.ping = wrapped  # type: ignore[assignment]
         elif cls is ConfigChannel:
             self.config = wrapped  # type: ignore[assignment]
+        elif cls is TelemetryChannel:
+            self.telemetry = wrapped  # type: ignore[assignment]
         return True
 
     def close(self) -> None:
         self.packet = None
         self.ping = None
         self.config = None
+        self.telemetry = None

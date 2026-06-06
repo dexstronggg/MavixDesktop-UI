@@ -22,6 +22,9 @@ def _api() -> MagicMock:
     a = MagicMock()
     a.ice_servers = AsyncMock(return_value=[])
     a.refresh = AsyncMock(return_value={'access_token': 'new-access-jwt'})
+    a.accept_delivery = AsyncMock(return_value={'status': 'accepted'})
+    a.set_delivery_in_flight = AsyncMock(return_value={'status': 'in_flight'})
+    a.mark_delivery_delivered = AsyncMock(return_value={'status': 'delivered'})
     return a
 
 
@@ -320,6 +323,106 @@ async def test_send_reboot_no_session_is_noop():
     sc = _signal()
     c = _coord(sc, _api())
     await c.send_reboot()
+
+
+#### deliveries ########################################################################
+
+_DELIVERY = {
+    'delivery_id': 'deliv-1',
+    'drone_id': 'drone-A',
+    'destination_address': 'ул. Тестовая, 1',
+    'destination_lat': 55.0,
+    'destination_lon': 37.0,
+    'cargo_description': 'коробка',
+}
+
+
+async def test_delivery_offer_fires_callback():
+    sc = _signal()
+    c = _coord(sc, _api())
+    received: list = []
+    c.on_delivery_offer = received.append
+    await c._on_message({'type': 'delivery_offer', 'delivery': dict(_DELIVERY)})
+    assert received == [_DELIVERY]
+
+
+async def test_delivery_offer_without_delivery_is_noop():
+    sc = _signal()
+    c = _coord(sc, _api())
+    c.on_delivery_offer = lambda _: pytest.fail('should not fire')
+    await c._on_message({'type': 'delivery_offer'})
+
+
+async def test_delivery_taken_fires_callback():
+    sc = _signal()
+    c = _coord(sc, _api())
+    taken: list = []
+    c.on_delivery_taken = taken.append
+    await c._on_message({'type': 'delivery_taken', 'delivery_id': 'deliv-1'})
+    assert taken == ['deliv-1']
+
+
+async def test_accept_delivery_success_connects_and_sets_in_flight():
+    sc = _signal()
+    sc._access_token = 'op-access'
+    api = _api()
+    c = _coord(sc, api)
+    c._manager = MagicMock()
+    accepted: list = []
+    c.on_delivery_accepted = accepted.append
+
+    await c.accept_delivery(dict(_DELIVERY))
+
+    api.accept_delivery.assert_awaited_once_with('deliv-1', 'op-access')
+    api.set_delivery_in_flight.assert_awaited_once_with('deliv-1', 'op-access')
+    c._manager.start_session.assert_called_once_with('drone-A')
+    sc.send.assert_awaited_with({'type': 'connect', 'drone_id': 'drone-A'})
+    assert accepted == [_DELIVERY]
+    assert c.active_delivery == _DELIVERY
+
+
+async def test_accept_delivery_conflict_fires_failed_and_no_connect():
+    from mavixdesktop.server.api import ApiError
+    sc = _signal()
+    api = _api()
+    api.accept_delivery = AsyncMock(side_effect=ApiError('уже принята'))
+    c = _coord(sc, api)
+    c._manager = MagicMock()
+    failed: list = []
+    c.on_delivery_accept_failed = lambda did, reason: failed.append((did, reason))
+
+    await c.accept_delivery(dict(_DELIVERY))
+
+    assert failed == [('deliv-1', 'уже принята')]
+    c._manager.start_session.assert_not_called()
+    assert c.active_delivery is None
+
+
+async def test_mark_delivered_calls_api():
+    sc = _signal()
+    sc._access_token = 'op-access'
+    api = _api()
+    c = _coord(sc, api)
+    c._active_delivery = dict(_DELIVERY)
+    await c.mark_delivered()
+    api.mark_delivery_delivered.assert_awaited_once_with('deliv-1', 'op-access')
+
+
+async def test_mark_delivered_without_active_is_noop():
+    sc = _signal()
+    api = _api()
+    c = _coord(sc, api)
+    await c.mark_delivered()
+    api.mark_delivery_delivered.assert_not_awaited()
+
+
+async def test_telemetry_message_fires_callback():
+    sc = _signal()
+    c = _coord(sc, _api())
+    received: list = []
+    c.on_telemetry = received.append
+    c._on_telemetry_message({'type': 'telemetry', 'lat': 55.0, 'lon': 37.0, 'heading': 90})
+    assert received == [{'type': 'telemetry', 'lat': 55.0, 'lon': 37.0, 'heading': 90}]
 
 
 #### reconnect on drone_disconnected ###################################################
