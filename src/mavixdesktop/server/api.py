@@ -62,7 +62,7 @@ class ApiSession:
 
     async def refresh(self, refresh_token: str) -> dict:
         async with self._session.post(
-            f'{settings.http_url}/api/v1/auth/refresh',
+            f'{settings.http_url}/api/v1/auth/operator/refresh',
             json={'refresh_token': refresh_token},
         ) as r:
             data = await r.json()
@@ -131,6 +131,22 @@ class ApiSession:
             if r.status != 200:
                 raise ApiError(data.get('detail', f'операция не удалась (HTTP {r.status})'))
             return data
+
+    async def get_my_delivery(self, access_token: str) -> dict | None:
+        """Активная заявка оператора (accepted / in_flight). None если нет."""
+        headers = {'Authorization': f'Bearer {access_token}'}
+        try:
+            async with self._session.get(
+                f'{settings.http_url}/api/v1/deliveries/my', headers=headers,
+            ) as r:
+                if r.status == 404:
+                    return None
+                if r.status != 200:
+                    return None
+                return await r.json()
+        except aiohttp.ClientError as exc:
+            logger.debug('[api] ошибка получения активной заявки: %s', exc)
+            return None
 
     async def list_offered_deliveries(self, access_token: str) -> list[dict]:
         """Заявки со статусом offered для админа этого оператора."""

@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Mavix Map</title>
-  <!-- Leaflet + leaflet-rotate подключаем через unpkg CDN. Карта вращается
-       так, чтобы курс дрона смотрел ВВЕРХ (bearing = -heading). -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+  <!-- Leaflet + leaflet-rotate — локальные ассеты (рядом с map.html).
+       Не CDN: QWebEngineView с file:// блокирует внешние https-запросы. -->
+  <link rel="stylesheet" href="leaflet.css" />
+  <script src="leaflet.js"></script>
+  <script src="leaflet-rotate.js"></script>
   <style>
     html, body { margin: 0; padding: 0; height: 100%; background: #07090E; }
     #map { width: 100%; height: 100%; background: #07090E; }

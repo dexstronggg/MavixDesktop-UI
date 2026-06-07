@@ -48,7 +48,12 @@ class MapWidget(QFrame):
 
         try:
             from PySide6.QtWebEngineWidgets import QWebEngineView
+            from PySide6.QtWebEngineCore import QWebEngineSettings
             self._view = QWebEngineView(self)
+            # Разрешаем file://-странице грузить тайлы с внешних https-адресов
+            # (OSM tile server). Без этого Chromium блокирует cross-origin запросы.
+            settings = self._view.settings()
+            settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
             self._view.loadFinished.connect(self._on_load_finished)
             if _MAP_HTML.exists():
                 self._view.load(QUrl.fromLocalFile(str(_MAP_HTML)))

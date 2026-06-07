@@ -16,6 +16,7 @@ BGR-кадры в DroneViewPage.show_frame).
 
 from __future__ import annotations
 
+import asyncio
 import platform
 from pathlib import Path
 
@@ -108,6 +109,7 @@ class App(QMainWindow):
             on_accept=self._handle_accept_delivery,
             on_logout=self._handle_logout,
             on_open_settings=self._open_settings,
+            on_open_joystick=self._open_joystick_setup,
         )
         self.drone_view_page = DroneViewPage(
             on_back=self._handle_back_to_deliveries,
@@ -562,15 +564,29 @@ class App(QMainWindow):
                 )
                 return
             sdl_config = calibration.get('sdl_gamecontrollerconfig', '')
+            logger.info('[app] MAVLink: запускаем QGC, joystick=%d', joystick_index)
             proc = launch_qgc(sdl_config)
             if proc is None:
                 proc = self._launch_qgc_with_user_pick(sdl_config)
             if proc is None:
                 logger.warning('[app] QGC не найден; полётное окно работает без него')
             else:
+                logger.info('[app] MAVLink: создаём overlay')
                 self._qgc_overlay = QGCLaunchingOverlay(qgc_proc=proc)
+                logger.info('[app] MAVLink: показываем overlay')
                 self._qgc_overlay.show_centered()
-            self._start_arm_listener(joystick_index, calibration)
+                logger.info('[app] MAVLink: overlay показан')
+            logger.info('[app] MAVLink: открываем passive FlightWindow')
+            # Arm listener и joystick guard НЕ запускаем (пассивный режим).
+            # QGC сам управляет arm/disarm и failsafe через MAVLink.
+            #
+            # ВАЖНО: pygame.joystick.quit() здесь НЕ вызываем — он освобождает
+            # SDL_Joystick* пока Python-объекты Joystick ещё живы, что приводит
+            # к use-after-free при их деструкции (SDL_JoystickGetAttached на
+            # freed ptr → SIGSEGV). Вместо этого мы просто не вызываем
+            # pygame.event.pump() (убран из list_joysticks, arm listener не
+            # запускается) — SDL не обрабатывает JOYDEVICEREMOVED, не
+            # освобождает структуры, dangling pointer не возникает.
             self._open_flight_window(joystick_index, calibration, passive=True)
             return
         self._open_flight_window(joystick_index, calibration)
@@ -609,13 +625,45 @@ class App(QMainWindow):
         return proc
 
     def _open_flight_window(self, joystick_index: int, calibration: dict,
-                            passive: bool = False) -> None:
+                            passive: bool = False, js=None) -> None:
         from mavixdesktop.joystick.input import JoystickInput
-        js_input = JoystickInput(joystick_index, calibration)
+        # В passive-режиме (QGC владеет джойстиком через EVIOCGRAB) не создаём
+        # JoystickInput — pygame.event.pump() на захваченном устройстве → SIGSEGV.
+        if passive:
+            js_input = None
+        else:
+            js_input = js if js is not None else JoystickInput(joystick_index, calibration)
 
+        logger.info('[app] flight_window: video.stop()')
         self._video.stop()
+        if passive:
+            # Останавливаем H.264 decoder_worker thread ДО того как QGC
+            # подключится к дрону и вызовет сброс видеопотока (новый SPS/PPS).
+            # Без этого libavcodec падает с SIGSEGV внутри decoder_worker.
+            #
+            # КРИТИЧНО: decoder_worker и _receive-задачи живут на asyncio-loop
+            # координатора (фоновый поток). И aiortc-receiver, и Task.cancel()
+            # НЕ потокобезопасны — вызов напрямую из Qt-потока повреждал
+            # состояние loop и ронял процесс (SIGSEGV сразу после открытия QGC).
+            # Поэтому маршалим остановку НА loop через run_coroutine_threadsafe
+            # и ждём результата (decoder.join() < 10 мс, run_coroutine_threadsafe
+            # внутри decoder_worker не блокирует loop — дедлока нет).
+            coord_for_video = self._conn.coordinator
+            loop = self._conn._loop
+            if loop is not None and loop.is_running():
+                async def _stop_video() -> None:
+                    if coord_for_video is not None:
+                        coord_for_video.stop_video_receivers()
+                    self._video._cancel_receive_tasks()
+                try:
+                    logger.info('[app] flight_window: останавливаем видео на loop-потоке')
+                    asyncio.run_coroutine_threadsafe(_stop_video(), loop).result(timeout=2.0)
+                    logger.info('[app] flight_window: видео остановлено')
+                except Exception as exc:
+                    logger.warning('[app] flight_window: не удалось остановить видео: %s', exc)
         coord = self._conn.coordinator
         fc_kind = coord.fc_kind if coord is not None else 'crsf'
+        logger.info('[app] flight_window: создаём FlightWindow (passive=%s, js=%s)', passive, js_input)
         self._flight_window = FlightWindow(
             joystick_input=js_input,
             signalling=_CoordinatorAdapter(self._conn),
@@ -628,6 +676,7 @@ class App(QMainWindow):
             on_drop=self._conn.mark_delivered,
             on_open_settings=self._open_settings,
         )
+        logger.info('[app] flight_window: FlightWindow создан')
         # Точка назначения из принятой заявки → маркер на карте.
         if self._active_delivery is not None:
             try:
@@ -636,8 +685,16 @@ class App(QMainWindow):
                 self._flight_window.set_destination(lat, lon)
             except (TypeError, ValueError):
                 logger.debug('[app] заявка без координат назначения — маркер не ставим')
+        # Переходим на drone_view чтобы скрыть JoystickSetupPage и остановить
+        # её _auto_refresh_timer: тот каждые 3 с вызывает pygame.event.pump()
+        # через list_joysticks() → SIGSEGV когда QGC уже EVIOCGRAB'ил джойстик.
+        logger.info('[app] flight_window: navigating to drone_view_page')
+        self.stack.setCurrentWidget(self.drone_view_page)
+        logger.info('[app] flight_window: showFullScreen()')
         self._flight_window.showFullScreen()
-        self._start_joystick_guard(joystick_index, calibration, js=js_input)
+        logger.info('[app] flight_window: готово')
+        if not passive:
+            self._start_joystick_guard(joystick_index, calibration, js=js_input)
 
     def _handle_flight_closed(self) -> None:
         self._stop_joystick_guard()

@@ -9,14 +9,32 @@ def list_joysticks() -> list[str]:
 
     Импортирует pygame лениво, чтобы тесты, не трогающие реальное
     устройство, не были обязаны его подтягивать.
+
+    quit()+init() — единственный надёжный способ заставить SDL пере-
+    перечислить устройства после hot-plug: повторный init() при уже поднятой
+    подсистеме НЕ пересканирует, а event.pump() ловит JOYDEVICEADDED только
+    когда SDL/udev успел доставить событие (на практике до ~15 с задержки —
+    джойстик «появлялся» через четверть минуты). Полная переинициализация
+    сканирует /dev/input заново сразу, поэтому устройство видно в пределах
+    одного тика авто-обновления (3 с).
+
+    БЕЗОПАСНОСТЬ: quit() освобождает все SDL_Joystick* — нельзя вызывать,
+    пока живы Python-объекты Joystick (use-after-free → SIGSEGV). Эта функция
+    вызывается только из JoystickSetupPage, чей auto-refresh таймер
+    останавливается (а) на время открытых диалогов калибровки/превью, которые
+    держат живой Joystick, и (б) через hideEvent до запуска QGC (EVIOCGRAB).
+    Поэтому в момент вызова живых Joystick-объектов нет.
     """
     import pygame
+    pygame.joystick.quit()
     pygame.joystick.init()
-    pygame.event.pump()
-    return [
-        pygame.joystick.Joystick(i).get_name()
-        for i in range(pygame.joystick.get_count())
-    ]
+    try:
+        return [
+            pygame.joystick.Joystick(i).get_name()
+            for i in range(pygame.joystick.get_count())
+        ]
+    except Exception:
+        return []
 
 
 def build_sdl_config(cal: dict, name: str, guid: str) -> str:

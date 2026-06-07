@@ -90,6 +90,26 @@ class WebRTCManager:
         assert self._peer is not None
         await self._peer.add_remote_ice(candidate)
 
+    def stop_video_receivers(self) -> None:
+        """Останавливает decoder-поток(и) видео без разрыва WebRTC-соединения.
+
+        Вызывается из Qt-потока перед переходом в passive-режим (QGC+MAVLink),
+        чтобы decoder_worker thread вышел ДО того как QGC вызовет EVIOCGRAB и
+        сбросит H.264-поток на дроне — иначе libavcodec падает с SIGSEGV.
+
+        join() блокирует вызывающий поток на < 10 мс (decoder выходит почти
+        мгновенно, получив None из очереди).
+        """
+        if self._peer is None:
+            return
+        for recv in self._peer.pc.getReceivers():
+            track = getattr(recv, '_track', None)
+            if track is not None and getattr(track, 'kind', '') == 'video':
+                try:
+                    recv._handle_disconnect()
+                except Exception as exc:
+                    logger.debug('[manager] stop_video_receivers: %s', exc)
+
     async def close_async(self) -> None:
         if self._peer is not None:
             await self._peer.close()

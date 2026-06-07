@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import faulthandler
 import sys
 
 from mavixdesktop.coordinator import SessionCoordinator
@@ -232,6 +233,16 @@ def _run_gui(demo: bool = False) -> int:
 
 #### Точка входа #######################################################################
 def main() -> None:
+    # Включаем дамп Python-стека при SIGSEGV/SIGFPE/SIGABRT.
+    # Пишем в stderr И в /tmp/mavix_crash.log — второй вариант
+    # гарантированно переживёт крэш и не теряется при перезапуске.
+    faulthandler.enable()
+    try:
+        _crash_log = open('/tmp/mavix_crash.log', 'w')
+        faulthandler.enable(file=_crash_log, all_threads=True)
+    except OSError:
+        pass
+
     parser = argparse.ArgumentParser(prog='mavixdesktop', description='Mavix GCS')
     parser.add_argument('--headless', action='store_true',
                         help='Запустить координатор без Qt UI')

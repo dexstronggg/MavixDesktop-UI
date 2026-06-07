@@ -109,7 +109,8 @@ class DeliveryCard(QFrame):
 class DeliveryPage(QWidget):
     def __init__(self, on_accept: Callable[[dict], None],
                  on_logout: Callable[[], None],
-                 on_open_settings: Callable[[], None] | None = None) -> None:
+                 on_open_settings: Callable[[], None] | None = None,
+                 on_open_joystick: Callable[[], None] | None = None) -> None:
         super().__init__()
         self._on_accept = on_accept
         self._cards: dict[str, DeliveryCard] = {}
@@ -118,7 +119,7 @@ class DeliveryPage(QWidget):
         root.setSpacing(0)
         root.setContentsMargins(0, 0, 0, 0)
 
-        root.addWidget(self._build_top_bar(on_logout, on_open_settings))
+        root.addWidget(self._build_top_bar(on_logout, on_open_settings, on_open_joystick))
 
         self._container = QWidget()
         self._cards_layout = QVBoxLayout(self._container)
@@ -146,7 +147,8 @@ class DeliveryPage(QWidget):
         self._refresh_empty_state()
 
     def _build_top_bar(self, on_logout: Callable[[], None],
-                       on_open_settings: Callable[[], None] | None) -> QWidget:
+                       on_open_settings: Callable[[], None] | None,
+                       on_open_joystick: Callable[[], None] | None = None) -> QWidget:
         from mavixdesktop.ui.screens.drone_list_page import _brand_widget, _icon_button
 
         top_bar = QWidget()
@@ -178,6 +180,22 @@ class DeliveryPage(QWidget):
         )
         tb.addWidget(title)
         tb.addStretch()
+
+        if on_open_joystick is not None:
+            js_btn = QPushButton(top_bar)
+            js_btn.setFixedSize(40, 38)
+            js_btn.setCursor(Qt.PointingHandCursor)
+            js_btn.setIcon(QIcon(svg_pixmap('joystick.svg', 18, color=theme.TEXT_MUTED)))
+            js_btn.setIconSize(QSize(18, 18))
+            js_btn.setToolTip('Джойстик')
+            js_btn.setStyleSheet(
+                f'QPushButton {{ background-color: transparent; color: {theme.TEXT_MUTED};'
+                f' border: 1px solid {theme.BORDER}; border-radius: {theme.RADIUS_MD}px; }}'
+                f' QPushButton:hover {{ background-color: {theme.ACCENT_SUBTLE};'
+                f' color: {theme.ACCENT}; border-color: {theme.ACCENT}; }}'
+            )
+            js_btn.clicked.connect(on_open_joystick)
+            tb.addWidget(js_btn)
 
         if on_open_settings is not None:
             gear_btn = QPushButton(top_bar)

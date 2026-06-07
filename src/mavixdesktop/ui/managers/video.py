@@ -75,9 +75,20 @@ class VideoManager:
         которые не отменяются при сбросе старого набора треков — они
         продолжают ждать track.recv(), пока aiortc сам не закроет трек, что
         на завершении проявляется предупреждениями «Task was destroyed but
-        it is pending» (и медленной утечкой файловых дескрипторов / памяти)."""
+        it is pending» (и медленной утечкой файловых дескрипторов / памяти).
+
+        Task.cancel() НЕ потокобезопасен, а нас зовут и из Qt-потока
+        (reset/clear_tracks при навигации), и с asyncio-loop. Поэтому всегда
+        планируем отмену на собственном loop задачи через call_soon_threadsafe
+        — прямой cross-thread cancel повреждал состояние loop (SIGSEGV).
+        """
         for task in self._receive_tasks:
-            if not task.done():
+            if task.done():
+                continue
+            try:
+                task.get_loop().call_soon_threadsafe(task.cancel)
+            except RuntimeError:
+                # loop уже закрыт (выключение приложения) — отменяем как есть.
                 task.cancel()
         self._receive_tasks.clear()
 

@@ -211,6 +211,67 @@ class SessionCoordinator:
         except ApiError as exc:
             logger.warning('[coord] не удалось пометить доставку %s delivered: %s', delivery_id, exc)
 
+    def stop_video_receivers(self) -> None:
+        """Останавливает H.264 decoder-потоки (делегирует в WebRTCManager)."""
+        if self._manager is not None:
+            self._manager.stop_video_receivers()
+
+    async def _restore_active_delivery(self) -> None:
+        """После WS-коннекта проверяет, есть ли у оператора принятая заявка.
+
+        Если оператор вышел после принятия заявки (статус accepted/in_flight),
+        восстанавливаем _active_delivery и инициируем повторное подключение к
+        дрону через механизм _reconnect_drone_id, не трогая логику accept.
+        """
+        if self._active_delivery is not None:
+            return
+        token = getattr(self._signal_client, '_access_token', '')
+        try:
+            delivery = await self._api.get_my_delivery(token)
+        except Exception as exc:
+            logger.debug('[coord] ошибка проверки активной заявки: %s', exc)
+            return
+        if delivery is None:
+            return
+        drone_id = delivery.get('drone_id')
+        if not isinstance(drone_id, str):
+            return
+        self._active_delivery = delivery
+        delivery_id = delivery.get('delivery_id', '?')
+        logger.info('[coord] восстановлена активная заявка %s (дрон %s)', delivery_id, drone_id)
+        if self.on_delivery_accepted is not None:
+            try:
+                self.on_delivery_accepted(dict(delivery))
+            except Exception as exc:
+                logger.warning('[coord] ошибка on_delivery_accepted при восстановлении: %s', exc)
+        self._reconnect_drone_id = drone_id
+        await self._signal_client.send({'type': 'list_drones'})
+
+    async def _fetch_offered_deliveries(self) -> None:
+        """При старте WS-сессии подгружает offered-заявки и показывает их в UI.
+
+        Нужно для случая когда broadcast был отправлен пока оператор был
+        офлайн (например, другой оператор освободил заявку).
+        """
+        token = getattr(self._signal_client, '_access_token', '')
+        try:
+            deliveries = await self._api.list_offered_deliveries(token)
+        except Exception as exc:
+            logger.debug('[coord] ошибка загрузки offered-заявок: %s', exc)
+            return
+        if not deliveries:
+            return
+        logger.info('[coord] загружено %d offered-заявок при старте сессии', len(deliveries))
+        if self.on_delivery_offer is None:
+            return
+        for delivery in deliveries:
+            if not isinstance(delivery, dict):
+                continue
+            try:
+                self.on_delivery_offer(delivery)
+            except Exception as exc:
+                logger.warning('[coord] ошибка on_delivery_offer при загрузке: %s', exc)
+
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
@@ -239,6 +300,10 @@ class SessionCoordinator:
                 continue
             logger.info('[coord] подключились к сигнальному серверу')
             self._backoff.reset()
+            await self._restore_active_delivery()
+            if self._active_delivery is None:
+                await self._fetch_offered_deliveries()
+            listen_start = self._loop.time()
             try:
                 await self._signal_client.listen(self._on_message)
             except websockets.exceptions.ConnectionClosed as exc:
@@ -248,6 +313,16 @@ class SessionCoordinator:
             finally:
                 await self._teardown_session()
                 await self._signal_client.disconnect()
+            # Если соединение закрылось быстрее чем за 2 секунды — вероятно,
+            # сервер отверг auth из-за истёкшего токена. Обновляем токен через
+            # REST до следующей попытки, чтобы не зацикливаться в 403-петле.
+            if self._loop.time() - listen_start < 2.0:
+                try:
+                    new_access = await self._refresh_now()
+                    self._signal_client.update_access_token(new_access)
+                    logger.info('[coord] токен обновлён после быстрого дисконнекта')
+                except Exception as exc:
+                    logger.warning('[coord] не удалось обновить токен: %s', exc)
             await asyncio.sleep(self._backoff.next_delay())
 
     def stop(self) -> None:

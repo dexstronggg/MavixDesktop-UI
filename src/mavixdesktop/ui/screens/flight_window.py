@@ -382,6 +382,12 @@ class FlightWindow(QWidget):
             self._battery_lbl.show()
 
     def __update_joystick(self) -> None:
+        # В MAVLink/passive режиме джойстик передан как None: QGC владеет
+        # устройством через EVIOCGRAB, pygame.event.pump() на том же SDL-
+        # объекте вызвал бы SIGSEGV. Пропускаем — QGC сам управляет полётом.
+        if self._js is None:
+            return
+
         # Повторный arm при потере джойстика запрещён: отправив аварийный
         # disarm, продолжаем спамить им (реже), пока оператор не закроет
         # окно. Возврат после выдернутого в полёте джойстика — не то, чем

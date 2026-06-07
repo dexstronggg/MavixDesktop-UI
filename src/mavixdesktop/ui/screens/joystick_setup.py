@@ -482,6 +482,8 @@ class _StickPreviewDialog(QDialog):
         root.addLayout(sticks_row)
 
     def __poll(self) -> None:
+        if self._js is None:
+            return
         try:
             thr, yaw, pitch, roll = self._js.get_stick_positions()
             self._stick_l.set_position(yaw, thr)
@@ -491,12 +493,19 @@ class _StickPreviewDialog(QDialog):
 
     def __takeoff(self) -> None:
         self._timer.stop()
+        # Явно освобождаем JoystickInput до вызова on_takeoff: CPython
+        # немедленно вызывает Joystick.__del__ → SDL_JoystickClose() на
+        # ЖИВОМ SDL_Joystick*. Без этого SDL background thread может
+        # освободить структуру когда QGC вызовет EVIOCGRAB (~2 с спустя),
+        # а отложенный GC диалога позже обращается к freed ptr → SIGSEGV.
+        self._js = None
         self.accept()
         if self._on_takeoff:
             self._on_takeoff(self._joystick_index, self._calibration)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self._timer.stop()
+        self._js = None
         super().closeEvent(event)
 
 
@@ -601,6 +610,7 @@ class JoystickSetupPage(QWidget):
         # при нуле джойстиков (иначе сравнение с пустым списком дало бы
         # равенство и пропустило бы путь перестроения).
         self._joystick_names: list[str] | None = None
+        self._joystick_cal_states: list[bool] = []
         self._on_takeoff = on_takeoff
         self._fc_type: str = 'none'
         self._demo = demo
@@ -698,7 +708,7 @@ class JoystickSetupPage(QWidget):
     def set_fc_type(self, fc_type: str) -> None:
         self._fc_type = fc_type
 
-    def _refresh(self) -> None:
+    def _refresh(self, force: bool = False) -> None:
         # Всегда сначала спрашиваем pygame о реальных джойстиках — даже в
         # демо-режиме: если у оператора есть подключённый USB-контроллер,
         # дизайн экранов калибровки/превью нужно проверять именно на нём.
@@ -708,12 +718,15 @@ class JoystickSetupPage(QWidget):
         if self._demo and not names:
             names = [self.DEMO_JOYSTICK_NAME]
 
-        # Тик авто-обновления: пропускаем перестроение, если список устройств
-        # не изменился, чтобы не пересоздавать дочерние QWidget (и не сносить
-        # открытое меню) 3 раза в секунду.
-        if names == self._joystick_names:
+        # Тик авто-обновления: пропускаем перестроение, если состав устройств
+        # и статусы калибровки не изменились, чтобы не пересоздавать дочерние
+        # QWidget (и не сносить открытое меню) 3 раза в секунду.
+        # force=True используется после сохранения калибровки.
+        cal_states = [bool(JoystickCalibration.load(name)) for name in names]
+        if not force and names == self._joystick_names and cal_states == self._joystick_cal_states:
             return
         self._joystick_names = names
+        self._joystick_cal_states = cal_states
 
         if not self._joystick_names:
             self._empty.show()
@@ -726,14 +739,28 @@ class JoystickSetupPage(QWidget):
 
         cards = []
         for i, name in enumerate(self._joystick_names):
-            cal = JoystickCalibration.load(name)
-            card = JoystickCard(i, name, calibrated=bool(cal))
+            card = JoystickCard(i, name, calibrated=cal_states[i])
             card.clicked.connect(self._on_card_clicked)
             card.action.connect(self._on_card_action)
             cards.append(card)
         self._grid.set_cards(cards)
 
     #### Обработчики карточек ##############################################################
+    def _pause_auto_refresh(self) -> None:
+        """Останавливает авто-обновление на время открытого диалога.
+
+        Диалоги калибровки/превью держат живой pygame.Joystick, а _refresh →
+        list_joysticks() делает pygame.joystick.quit(), который освободил бы
+        этот Joystick из-под диалога (use-after-free → SIGSEGV). Модальный
+        exec() не прячет страницу, поэтому hideEvent не срабатывает —
+        останавливаем таймер вручную вокруг диалога.
+        """
+        self._auto_refresh_timer.stop()
+
+    def _resume_auto_refresh(self) -> None:
+        if self.isVisible():
+            self._auto_refresh_timer.start()
+
     def _on_card_clicked(self, index: int) -> None:
         # Раньше тут стоял if self._demo: QMessageBox → return — теперь
         # пропускаем дальше даже в демо-режиме, чтобы дизайн диалога
@@ -744,17 +771,21 @@ class JoystickSetupPage(QWidget):
         name = self._joystick_names[index]
         takeoff_cb = self._on_takeoff if self._fc_type in ('crsf', 'mavlink') else None
         saved = JoystickCalibration.load(name)
-        if saved:
-            dlg = _StickPreviewDialog(index, name, saved, parent=self,
-                                      on_takeoff=takeoff_cb)
-            dlg.exec()
-        else:
-            cal_dlg = JoystickCalibrationDialog(index, name, parent=self)
-            if cal_dlg.exec() == QDialog.Accepted and cal_dlg.calibration:
-                self._refresh()
-                dlg = _StickPreviewDialog(index, name, cal_dlg.calibration, parent=self,
+        self._pause_auto_refresh()
+        try:
+            if saved:
+                dlg = _StickPreviewDialog(index, name, saved, parent=self,
                                           on_takeoff=takeoff_cb)
                 dlg.exec()
+            else:
+                cal_dlg = JoystickCalibrationDialog(index, name, parent=self)
+                if cal_dlg.exec() == QDialog.Accepted and cal_dlg.calibration:
+                    self._refresh(force=True)
+                    dlg = _StickPreviewDialog(index, name, cal_dlg.calibration, parent=self,
+                                              on_takeoff=takeoff_cb)
+                    dlg.exec()
+        finally:
+            self._resume_auto_refresh()
 
     def _on_card_action(self, index: int, action: str) -> None:
         # Блокер демо-режима убран — см. комментарий в _on_card_clicked.
@@ -762,14 +793,18 @@ class JoystickSetupPage(QWidget):
         # устройства (это работа с JSON), «Калибровать» в демо без
         # подключённого джойстика покажет исключение pygame.
         name = self._joystick_names[index]
-        if action == 'file':
-            self._load_from_file(index, name)
-        elif action == 'calibrate':
-            dlg = JoystickCalibrationDialog(index, name, parent=self)
-            if dlg.exec() == QDialog.Accepted and dlg.calibration:
-                self._refresh()
-        elif action == 'file_save':
-            self._save_to_file(index, name)
+        self._pause_auto_refresh()
+        try:
+            if action == 'file':
+                self._load_from_file(index, name)
+            elif action == 'calibrate':
+                dlg = JoystickCalibrationDialog(index, name, parent=self)
+                if dlg.exec() == QDialog.Accepted and dlg.calibration:
+                    self._refresh(force=True)
+            elif action == 'file_save':
+                self._save_to_file(index, name)
+        finally:
+            self._resume_auto_refresh()
 
     #### Загрузка и сохранение файлов ######################################################
     def _load_from_file(self, index: int, name: str) -> None:
@@ -789,7 +824,7 @@ class JoystickSetupPage(QWidget):
             QMessageBox.critical(self, 'Неверный формат калибровки', msg)
             return
         JoystickCalibration.save(data, name)
-        self._refresh()
+        self._refresh(force=True)
         QMessageBox.information(
             self, 'Калибровка загружена',
             f'Калибровка для «{name}» успешно загружена и сохранена.'
@@ -872,6 +907,8 @@ class JoystickCalibrationDialog(QDialog):
 
     #### Опрос джойстика ###################################################################
     def _read_axes(self) -> list[float]:
+        if self._js is None:
+            return []
         pygame.event.pump()
         return [self._js.get_axis(i) for i in range(self._js.get_numaxes())]
 
@@ -1013,6 +1050,7 @@ class JoystickCalibrationDialog(QDialog):
             self._build_calibration()
             path = JoystickCalibration.save(self.calibration, self._joystick_name)
             self._poll_timer.stop()
+            self._js = None  # освобождаем Joystick до accept
             QMessageBox.information(
                 self, 'Калибровка сохранена',
                 f'Настройки джойстика сохранены:\n{path}'
@@ -1075,4 +1113,5 @@ class JoystickCalibrationDialog(QDialog):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self._poll_timer.stop()
+        self._js = None  # явное закрытие Joystick → SDL_JoystickClose на живом ptr
         super().closeEvent(event)
