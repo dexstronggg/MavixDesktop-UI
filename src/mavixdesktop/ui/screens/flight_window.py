@@ -211,6 +211,13 @@ class FlightWindow(QWidget):
         self._battery_lbl.setStyleSheet(corner_qss)
         self._battery_lbl.hide()
 
+        # Статус груза — виден всегда (и в passive/QGC, и в CRSF): пока не
+        # сброшено — нейтральный, после сброса — зелёный «сброшено».
+        self._drop_status_lbl = QLabel('Груз: не сброшено', self)
+        self._drop_status_lbl.setAlignment(Qt.AlignCenter)
+        self._drop_status_lbl.setFixedSize(160, 26)
+        self._drop_status_lbl.setStyleSheet(corner_qss)
+
         # Dropdown переключения PX4 main_mode. Виден только для MAVLink-FC.
         # При смене мгновенно шлём DO_SET_MODE; PX4 ACK логируется в
         # coordinator'е, так что оператор видит подтверждение.
@@ -303,6 +310,10 @@ class FlightWindow(QWidget):
             w - self._battery_lbl.width() - _PAD,
             h - self._ping_lbl.height() - self._battery_lbl.height() - _PAD - 6,
         )
+
+        # Статус груза — верхний центр, над hint'ом.
+        self._drop_status_lbl.move((w - self._drop_status_lbl.width()) // 2, _PAD)
+        self._drop_status_lbl.raise_()
 
         if self._mode_combo is not None:
             # Верхний правый угол, рядом с joystick-кнопкой.
@@ -478,6 +489,14 @@ class FlightWindow(QWidget):
         delivered помечаем только один раз."""
         self._drop_hold_ticks = 15
         logger.info('[FlightWindow] сброс груза: CH8=DROP, отметка delivered')
+        # Статус груза → «сброшено» (зелёный).
+        self._drop_status_lbl.setText('Груз: сброшено')
+        self._drop_status_lbl.setStyleSheet(
+            f'background: rgba(34,197,94,0.85); color: white;'
+            f'border: 1px solid rgba(255,255,255,0.25);'
+            f'border-radius: {theme.RADIUS_SM}px; font-size: {theme.FONT_SIZE_SM - 2}px;'
+            f'font-family: monospace; padding: 0 8px; font-weight: 700;'
+        )
         if not self._delivered_marked:
             self._delivered_marked = True
             if self._on_drop is not None:

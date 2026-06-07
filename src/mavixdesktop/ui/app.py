@@ -285,6 +285,8 @@ class App(QMainWindow):
             self._flight_window.showFullScreen()
             self._flight_window.raise_()
             self._flight_window.activateWindow()
+            # Снова прячем главное окно — на полёт вернулись, одно окно.
+            self.hide()
             return
         target = self._settings_return_to or self.login_page
         self.stack.setCurrentWidget(target)
@@ -292,6 +294,12 @@ class App(QMainWindow):
     def _handle_back_to_deliveries(self) -> None:
         """Возврат с drone-view на экран ожидания заявок (оператор прервал
         доставку, не сбросив груз). Сессия с дроном разрывается."""
+        # Если полётное окно открыто (например, дрон ушёл в офлайн прямо в
+        # полёте) — закрываем его и возвращаем главное окно из hide().
+        if self._flight_window is not None:
+            self._flight_window.close()  # closeEvent → таймеры/финальный DISARM
+            self._flight_window = None
+        self.showNormal()
         self._video.stop()
         self._ping_timer.stop()
         self._stop_arm_listener()
@@ -571,16 +579,13 @@ class App(QMainWindow):
                 self._qgc_overlay.show_centered()
                 logger.info('[app] MAVLink: overlay показан')
             logger.info('[app] MAVLink: открываем passive FlightWindow')
-            # Arm listener и joystick guard НЕ запускаем (пассивный режим).
-            # QGC сам управляет arm/disarm и failsafe через MAVLink.
-            #
-            # ВАЖНО: pygame.joystick.quit() здесь НЕ вызываем — он освобождает
-            # SDL_Joystick* пока Python-объекты Joystick ещё живы, что приводит
-            # к use-after-free при их деструкции (SDL_JoystickGetAttached на
-            # freed ptr → SIGSEGV). Вместо этого мы просто не вызываем
-            # pygame.event.pump() (убран из list_joysticks, arm listener не
-            # запускается) — SDL не обрабатывает JOYDEVICEREMOVED, не
-            # освобождает структуры, dangling pointer не возникает.
+            # Фоновый слушатель ARM-кнопки джойстика: pygame читает
+            # /dev/input/eventN на 10 Hz (фокус окна не нужен) и шлёт ARM/DISARM
+            # в PX4 через packet-канал параллельно трафику QGC, а при потере
+            # джойстика — AUTO_RTL. QGC не захватывает устройство эксклюзивно,
+            # поэтому читать его одновременно безопасно (проверено на реальном
+            # дроне в remote_control).
+            self._start_arm_listener(joystick_index, calibration)
             self._open_flight_window(joystick_index, calibration, passive=True)
             return
         self._open_flight_window(joystick_index, calibration)
@@ -621,12 +626,15 @@ class App(QMainWindow):
     def _open_flight_window(self, joystick_index: int, calibration: dict,
                             passive: bool = False, js=None) -> None:
         from mavixdesktop.joystick.input import JoystickInput
-        # В passive-режиме (QGC владеет джойстиком через EVIOCGRAB) не создаём
-        # JoystickInput — pygame.event.pump() на захваченном устройстве → SIGSEGV.
-        if passive:
-            js_input = None
-        else:
+        # JoystickInput создаём и в passive: окно показывает реальный
+        # ARM/DISARM с джойстика и читает кнопку сброса груза. В passive окно
+        # НЕ шлёт RC-кадры сам (см. guard в FlightWindow.__update_joystick) —
+        # полётом рулит QGC, ARM/DISARM шлёт фоновый _arm_listener.
+        try:
             js_input = js if js is not None else JoystickInput(joystick_index, calibration)
+        except Exception as exc:
+            logger.warning('[app] не удалось открыть джойстик для окна: %s', exc)
+            js_input = None
 
         logger.info('[app] flight_window: video.stop()')
         # Останавливаем ТОЛЬКО таймер отрисовки видео (как в remote_control).
@@ -662,12 +670,18 @@ class App(QMainWindow):
         self.stack.setCurrentWidget(self.drone_view_page)
         logger.info('[app] flight_window: showFullScreen()')
         self._flight_window.showFullScreen()
+        # Прячем главное окно, пока открыт полётный экран — чтобы у приложения
+        # было ровно ОДНО видимое окно (раньше предпросмотр/настройки и
+        # полётное окно висели в alt-tab одновременно). Возврат показывает его
+        # снова (_handle_flight_closed / _handle_back_to_deliveries).
+        self.hide()
         logger.info('[app] flight_window: готово')
         if not passive:
             self._start_joystick_guard(joystick_index, calibration, js=js_input)
 
     def _handle_flight_closed(self) -> None:
         self._stop_joystick_guard()
+        self._stop_arm_listener()
         self._flight_window = None
         self.showNormal()
         self.stack.setCurrentWidget(self.drone_view_page)
