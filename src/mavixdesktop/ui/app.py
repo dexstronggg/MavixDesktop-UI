@@ -44,7 +44,6 @@ from mavixdesktop.ui.screens.joystick_setup import (
     JoystickSetupPage,
     QGCLaunchingOverlay,
 )
-from mavixdesktop.ui.screens.map_widget import telemetry_to_args
 from mavixdesktop.ui.screens.settings_page import SettingsPage
 from mavixdesktop.ui.state import SessionState
 
@@ -317,17 +316,13 @@ class App(QMainWindow):
                 logger.debug('[app] обновление заряда в полётном окне: %s', exc)
 
     def _on_telemetry(self, payload: dict) -> None:
-        """GPS/heading-телеметрия с борта → карта в полётном окне."""
-        if self._flight_window is None:
-            return
-        args = telemetry_to_args(payload)
-        if args is None:
-            return
-        lat, lon, heading = args
-        try:
-            self._flight_window.update_telemetry(lat, lon, heading)
-        except Exception as exc:
-            logger.debug('[app] ошибка обновления карты телеметрией: %s', exc)
+        """GPS/heading-телеметрия с борта.
+
+        Канал телеметрии board → desktop сохранён (приём идёт), но потребитель
+        (карта) удалён — данные пока никуда не ведут. Логируем на debug, чтобы
+        видеть, что телеметрия доходит.
+        """
+        logger.debug('[app] телеметрия с борта: %s', payload)
 
     def _on_drone_went_offline(self, drone_id: str) -> None:
         """Coordinator подтвердил, что дрон действительно офлайн (а не
@@ -677,14 +672,6 @@ class App(QMainWindow):
             on_open_settings=self._open_settings,
         )
         logger.info('[app] flight_window: FlightWindow создан')
-        # Точка назначения из принятой заявки → маркер на карте.
-        if self._active_delivery is not None:
-            try:
-                lat = float(self._active_delivery.get('destination_lat'))
-                lon = float(self._active_delivery.get('destination_lon'))
-                self._flight_window.set_destination(lat, lon)
-            except (TypeError, ValueError):
-                logger.debug('[app] заявка без координат назначения — маркер не ставим')
         # Переходим на drone_view чтобы скрыть JoystickSetupPage и остановить
         # её _auto_refresh_timer: тот каждые 3 с вызывает pygame.event.pump()
         # через list_joysticks() → SIGSEGV когда QGC уже EVIOCGRAB'ил джойстик.

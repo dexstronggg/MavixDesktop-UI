@@ -10,18 +10,11 @@ hiddenimports = [
     'cv2',
     'PySide6.QtSvg',
     'PySide6.QtSvgWidgets',
-    # QtWebEngine нужен для виджета карты (Leaflet в QWebEngineView).
-    'PySide6.QtWebEngineWidgets',
-    'PySide6.QtWebEngineCore',
-    'PySide6.QtWebChannel',
     'PySide6.QtNetwork',
     'pymavlink.dialects.v20.common',
     'pymavlink.dialects.v20.ardupilotmega',
 ]
 
-# collect_all('PySide6') обычно тянет QtWebEngine, но процесс/ресурсы
-# WebEngine (QtWebEngineProcess, locales, .pak) собираем явно, иначе карта
-# не загрузится в bundled-сборке.
 for pkg in ('PySide6', 'av', 'aiortc', 'cv2', 'pymavlink'):
     _datas, _binaries, _hidden = collect_all(pkg)
     datas += _datas
@@ -29,8 +22,6 @@ for pkg in ('PySide6', 'av', 'aiortc', 'cv2', 'pymavlink'):
     hiddenimports += _hidden
 
 datas += [('src/mavixdesktop/ui/icons', 'mavixdesktop/ui/icons')]
-# Ассеты карты (Leaflet HTML/JS) — нужны рантайму MapWidget.
-datas += [('src/mavixdesktop/ui/assets', 'mavixdesktop/ui/assets')]
 
 a = Analysis(
     ['src/mavixdesktop/__main__.py'],
