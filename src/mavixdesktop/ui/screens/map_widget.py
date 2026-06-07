@@ -63,6 +63,10 @@ _SOURCES = {
 _USER_AGENT = b'MavixDesktop/1.0 (delivery GCS)'
 _MEM_CACHE_MAX = 512
 
+# Демо-точка, пока нет GPS-фикса: центр Ставрополя. Карта всё равно рисуется
+# (видно, что тайлы грузятся), а сверху — надпись «Ожидание GPS…».
+_DEMO_LAT, _DEMO_LON = 45.0445, 41.9690
+
 
 class MapWidget(QFrame):
     """Мини-карта дрона. Публичный API совместим с прежним виджетом:
@@ -195,21 +199,22 @@ class MapWidget(QFrame):
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
         p.fillRect(self.rect(), QColor('#0b0f14'))
 
-        if self._lat is None or self._lon is None:
-            p.setPen(QColor(theme.TEXT_MUTED))
-            p.drawText(self.rect(), Qt.AlignCenter, 'Ожидание GPS…')
-            p.end()
-            return
+        # Пока нет фикса — рисуем карту на демо-точке (Ставрополь), без поворота
+        # и без маркера дрона, а поверх показываем «Ожидание GPS…».
+        has_fix = self._lat is not None and self._lon is not None
+        lat = self._lat if has_fix else _DEMO_LAT
+        lon = self._lon if has_fix else _DEMO_LON
+        heading = self._heading if has_fix else 0.0
 
         z = self._zoom
         w, h = self.width(), self.height()
-        cx, cy = lonlat_to_world_px(self._lat, self._lon, z)
+        cx, cy = lonlat_to_world_px(lat, lon, z)
         max_tile = 2 ** z - 1
 
         p.save()
         p.translate(w / 2.0, h / 2.0)
         if self._rotate:
-            p.rotate(-self._heading)
+            p.rotate(-heading)
 
         # Радиус с запасом, чтобы углы не оголялись при повороте.
         radius = math.hypot(w, h) / 2.0 + TILE_SIZE
@@ -236,21 +241,30 @@ class MapWidget(QFrame):
             p.drawEllipse(dpt, 5, 5)
         p.restore()
 
-        # Маркер дрона — стрелка «носом вверх» в центре (карта повёрнута под него).
-        p.translate(w / 2.0, h / 2.0)
-        arrow = QPolygonF([QPointF(0, -9), QPointF(6, 7), QPointF(0, 3), QPointF(-6, 7)])
-        p.setBrush(QColor(255, 80, 80))
-        p.setPen(QColor('white'))
-        p.drawPolygon(arrow)
-        p.resetTransform()
-
-        # Дистанция до точки назначения.
-        if self._dest is not None:
-            dist = haversine_m(self._lat, self._lon, self._dest[0], self._dest[1])
-            txt = f'{dist:.0f} м' if dist < 1000 else f'{dist / 1000:.1f} км'
+        if has_fix:
+            # Маркер дрона — стрелка «носом вверх» в центре (карта под него повёрнута).
+            p.translate(w / 2.0, h / 2.0)
+            arrow = QPolygonF([QPointF(0, -9), QPointF(6, 7), QPointF(0, 3), QPointF(-6, 7)])
+            p.setBrush(QColor(255, 80, 80))
             p.setPen(QColor('white'))
-            p.fillRect(6, h - 22, 86, 18, QColor(0, 0, 0, 140))
-            p.drawText(8, h - 9, f'до точки: {txt}')
+            p.drawPolygon(arrow)
+            p.resetTransform()
+            # Дистанция до точки назначения.
+            if self._dest is not None:
+                dist = haversine_m(lat, lon, self._dest[0], self._dest[1])
+                txt = f'{dist:.0f} м' if dist < 1000 else f'{dist / 1000:.1f} км'
+                p.setPen(QColor('white'))
+                p.fillRect(6, h - 22, 86, 18, QColor(0, 0, 0, 140))
+                p.drawText(8, h - 9, f'до точки: {txt}')
+        else:
+            # Нет GPS — плашка «Ожидание GPS…» поверх демо-карты.
+            p.resetTransform()
+            bw, bh = 170, 30
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(0, 0, 0, 165))
+            p.drawRoundedRect((w - bw) // 2, (h - bh) // 2, bw, bh, 6, 6)
+            p.setPen(QColor('white'))
+            p.drawText(self.rect(), Qt.AlignCenter, 'Ожидание GPS…')
         p.end()
 
 
