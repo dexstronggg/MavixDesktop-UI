@@ -267,6 +267,27 @@ class FlightWindow(QWidget):
         else:
             self._reboot_btn: QPushButton | None = None
 
+        # Карта в углу экрана управления (нативный QPainter-виджет, без
+        # QtWebEngine): позиция дрона, поворот по курсу, точка назначения.
+        from mavixdesktop.ui.screens.map_widget import MapWidget
+        self._map = MapWidget(self)
+        self._map.setFixedSize(280, 200)
+
+    #### Карта и телеметрия ################################################################
+    def update_telemetry(self, lat: float, lon: float, heading: float) -> None:
+        """Обновляет позицию дрона на карте и поворот карты по курсу."""
+        try:
+            self._map.update_telemetry(lat, lon, heading)
+        except Exception as exc:
+            logger.debug('[FlightWindow] ошибка обновления карты: %s', exc)
+
+    def set_destination(self, lat: float, lon: float) -> None:
+        """Ставит маркер точки назначения на карте (из принятой заявки)."""
+        try:
+            self._map.set_destination(lat, lon)
+        except Exception as exc:
+            logger.debug('[FlightWindow] ошибка маркера назначения: %s', exc)
+
     #### Геометрия и позиционирование ######################################################
     def resizeEvent(self, event: QResizeEvent) -> None:
         self.__reposition()
@@ -286,6 +307,10 @@ class FlightWindow(QWidget):
         side_sz = theme.OVERLAY_BTN_SIDE
         self._prev_btn.move(_PAD, (h - side_sz) // 2)
         self._next_btn.move(w - side_sz - _PAD, (h - side_sz) // 2)
+
+        # Карта — нижний левый угол.
+        self._map.move(_PAD, h - self._map.height() - _PAD)
+        self._map.raise_()
 
         # Кнопка сброса груза — по центру внизу, над стиками-зоной справа.
         self._drop_btn.move(
