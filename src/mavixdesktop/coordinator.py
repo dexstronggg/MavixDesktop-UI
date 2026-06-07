@@ -211,11 +211,6 @@ class SessionCoordinator:
         except ApiError as exc:
             logger.warning('[coord] не удалось пометить доставку %s delivered: %s', delivery_id, exc)
 
-    def stop_video_receivers(self) -> None:
-        """Останавливает H.264 decoder-потоки (делегирует в WebRTCManager)."""
-        if self._manager is not None:
-            self._manager.stop_video_receivers()
-
     async def _restore_active_delivery(self) -> None:
         """После WS-коннекта проверяет, есть ли у оператора принятая заявка.
 

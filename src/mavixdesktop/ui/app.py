@@ -16,7 +16,6 @@ BGR-кадры в DroneViewPage.show_frame).
 
 from __future__ import annotations
 
-import asyncio
 import platform
 from pathlib import Path
 
@@ -630,32 +629,16 @@ class App(QMainWindow):
             js_input = js if js is not None else JoystickInput(joystick_index, calibration)
 
         logger.info('[app] flight_window: video.stop()')
+        # Останавливаем ТОЛЬКО таймер отрисовки видео (как в remote_control).
+        # Раньше здесь была остановка decoder-приёмников через приватные методы
+        # aiortc (recv._handle_disconnect) + cross-thread cancel задач —
+        # «защита» от мнимого сброса H.264 при открытии QGC. Премиса ошибочна:
+        # QGC общается с полётником по MAVLink/UDP и НЕ трогает наш WebRTC-
+        # видеопоток с борта. Эта возня с внутренностями aiortc повреждала
+        # состояние loop/декодера и приводила к зависанию окна. Убрано —
+        # поведение приведено к рабочему remote_control: декодер живёт дальше,
+        # просто не рисуем.
         self._video.stop()
-        if passive:
-            # Останавливаем H.264 decoder_worker thread ДО того как QGC
-            # подключится к дрону и вызовет сброс видеопотока (новый SPS/PPS).
-            # Без этого libavcodec падает с SIGSEGV внутри decoder_worker.
-            #
-            # КРИТИЧНО: decoder_worker и _receive-задачи живут на asyncio-loop
-            # координатора (фоновый поток). И aiortc-receiver, и Task.cancel()
-            # НЕ потокобезопасны — вызов напрямую из Qt-потока повреждал
-            # состояние loop и ронял процесс (SIGSEGV сразу после открытия QGC).
-            # Поэтому маршалим остановку НА loop через run_coroutine_threadsafe
-            # и ждём результата (decoder.join() < 10 мс, run_coroutine_threadsafe
-            # внутри decoder_worker не блокирует loop — дедлока нет).
-            coord_for_video = self._conn.coordinator
-            loop = self._conn._loop
-            if loop is not None and loop.is_running():
-                async def _stop_video() -> None:
-                    if coord_for_video is not None:
-                        coord_for_video.stop_video_receivers()
-                    self._video._cancel_receive_tasks()
-                try:
-                    logger.info('[app] flight_window: останавливаем видео на loop-потоке')
-                    asyncio.run_coroutine_threadsafe(_stop_video(), loop).result(timeout=2.0)
-                    logger.info('[app] flight_window: видео остановлено')
-                except Exception as exc:
-                    logger.warning('[app] flight_window: не удалось остановить видео: %s', exc)
         coord = self._conn.coordinator
         fc_kind = coord.fc_kind if coord is not None else 'crsf'
         logger.info('[app] flight_window: создаём FlightWindow (passive=%s, js=%s)', passive, js_input)

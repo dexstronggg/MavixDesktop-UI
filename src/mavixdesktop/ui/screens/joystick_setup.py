@@ -556,42 +556,13 @@ class QGCLaunchingOverlay(QDialog):
         self.activateWindow()
 
     def __check(self) -> None:
-        if self._qgc_proc.poll() is not None:
+        # НИКАКИХ блокирующих subprocess (wmctrl/pgrep) на Qt-потоке: пока QGC
+        # грузится и/или захватывает дисплей в fullscreen, wmctrl мог зависать,
+        # подвешивая весь UI. Закрываемся либо когда процесс QGC сразу умер
+        # (неудачный запуск), либо по таймауту — этого достаточно, чтобы
+        # показать «Открываю QGroundControl…» на пару секунд.
+        if self._qgc_proc.poll() is not None or time.monotonic() > self._deadline:
             self.close()
-            return
-        if self.__qgc_window_visible() or time.monotonic() > self._deadline:
-            self.close()
-
-    def __qgc_window_visible(self) -> bool:
-        try:
-            result = subprocess.run(
-                ['wmctrl', '-lp'], capture_output=True, text=True, timeout=1,
-            )
-            if result.returncode != 0:
-                return False
-            if 'qgroundcontrol' in result.stdout.lower():
-                return True
-            pids = self.__qgc_pid_tree()
-            for line in result.stdout.splitlines():
-                parts = line.split(None, 4)
-                if len(parts) >= 3 and parts[2] in pids:
-                    return True
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-        return False
-
-    def __qgc_pid_tree(self) -> set[str]:
-        pids = {str(self._qgc_proc.pid)}
-        try:
-            result = subprocess.run(
-                ['pgrep', '-P', str(self._qgc_proc.pid)],
-                capture_output=True, text=True, timeout=1,
-            )
-            if result.returncode == 0:
-                pids.update(result.stdout.split())
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-        return pids
 
     def closeEvent(self, event):
         self._timer.stop()
@@ -645,7 +616,11 @@ class JoystickSetupPage(QWidget):
         # пользователем. _refresh идемпотентен (пропускает перестроение,
         # если список устройств идентичен), так что polling дешёвый.
         self._auto_refresh_timer = QTimer(self)
-        self._auto_refresh_timer.setInterval(3000)
+        # 1 с (а не 3): event.pump() в list_joysticks дёшев, а оператор видит
+        # подключённый/отключённый контроллер быстрее. Остаточная задержка
+        # появления — это латентность доставки JOYDEVICEADDED от udev/SDL,
+        # она от частоты нашего опроса не зависит.
+        self._auto_refresh_timer.setInterval(1000)
         self._auto_refresh_timer.timeout.connect(self._refresh)
 
         self._refresh()
