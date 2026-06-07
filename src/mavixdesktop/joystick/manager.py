@@ -10,24 +10,27 @@ def list_joysticks() -> list[str]:
     Импортирует pygame лениво, чтобы тесты, не трогающие реальное
     устройство, не были обязаны его подтягивать.
 
-    quit()+init() — единственный надёжный способ заставить SDL пере-
-    перечислить устройства после hot-plug: повторный init() при уже поднятой
-    подсистеме НЕ пересканирует, а event.pump() ловит JOYDEVICEADDED только
-    когда SDL/udev успел доставить событие (на практике до ~15 с задержки —
-    джойстик «появлялся» через четверть минуты). Полная переинициализация
-    сканирует /dev/input заново сразу, поэтому устройство видно в пределах
-    одного тика авто-обновления (3 с).
+    HOT-PLUG: SDL на Linux отслеживает подключение/отключение через udev-
+    монитор, который обновляет внутренний список устройств только когда
+    прокачивается очередь событий SDL. Поэтому делаем `event.pump()` — udev
+    доставляет JOYDEVICEADDED/REMOVED, и `get_count()` сразу видит новое
+    устройство (в пределах тика авто-обновления 3 с). Прежний приём
+    quit()+init() под Qt НЕ пересканировал надёжно (подсистемы SDL ref-counted,
+    повторный init() мог быть no-op) и сваливал обнаружение в медленный
+    fallback ~15 с.
 
-    БЕЗОПАСНОСТЬ: quit() освобождает все SDL_Joystick* — нельзя вызывать,
-    пока живы Python-объекты Joystick (use-after-free → SIGSEGV). Эта функция
-    вызывается только из JoystickSetupPage, чей auto-refresh таймер
-    останавливается (а) на время открытых диалогов калибровки/превью, которые
-    держат живой Joystick, и (б) через hideEvent до запуска QGC (EVIOCGRAB).
+    БЕЗОПАСНОСТЬ: pump() обрабатывает JOYDEVICEREMOVED и освобождает
+    SDL_Joystick* — нельзя вызывать, пока жив Python-объект Joystick
+    (use-after-free → SIGSEGV). Эта функция зовётся только из
+    JoystickSetupPage, чей auto-refresh таймер останавливается (а) на время
+    диалогов калибровки/превью, которые держат живой Joystick
+    (_pause_auto_refresh), и (б) через hideEvent до запуска QGC (EVIOCGRAB).
     Поэтому в момент вызова живых Joystick-объектов нет.
     """
     import pygame
-    pygame.joystick.quit()
-    pygame.joystick.init()
+    if not pygame.joystick.get_init():
+        pygame.joystick.init()
+    pygame.event.pump()
     try:
         return [
             pygame.joystick.Joystick(i).get_name()
