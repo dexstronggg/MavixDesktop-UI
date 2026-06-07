@@ -77,12 +77,25 @@ _MAPPING = {
 # этого модуля), в это множество НЕ попадает и остаётся нетронутым.
 _MANAGED_KEYS: set[str] = set()
 
+# Ключи, существовавшие в ОС ДО загрузки .env через dotenv.
+# Только они защищены от перезаписи через Settings UI.
+# Инициализируется через init() из config.py до вызова load_dotenv.
+_REAL_OS_KEYS: frozenset[str] = frozenset()
+
+
+def init(real_os_keys: frozenset[str]) -> None:
+    """Запоминает ключи настоящего окружения ОС (до dotenv).
+    Вызывается один раз из config.py перед apply_to_env."""
+    global _REAL_OS_KEYS
+    _REAL_OS_KEYS = real_os_keys
+
 
 def apply_to_env() -> None:
     """Проецирует JSON-конфиг в os.environ, чтобы pydantic-settings его
-    подхватил. Реальные env-переменные ОС, выставленные до первого вызова,
-    всегда имеют приоритет. Последующие вызовы сбрасывают ранее управляемые
-    ключи, чтобы очистка поля в Settings UI реально снимала значение."""
+    подхватил. Только ключи из _REAL_OS_KEYS (настоящая env ОС, до dotenv)
+    защищены от перезаписи. .env-значения и дефолты перекрываются.
+    Последующие вызовы сбрасывают ранее управляемые ключи, чтобы очистка
+    поля в Settings UI реально снимала значение."""
     # Удаляем всё, что выставили на прошлом проходе, чтобы пустое JSON-значение
     # реально опустошало env, а не оставляло устаревшее.
     for env_key in list(_MANAGED_KEYS):
@@ -93,8 +106,8 @@ def apply_to_env() -> None:
     if not data:
         return
     for json_key, env_key in _MAPPING.items():
-        if env_key in os.environ:
-            # Реальная env-переменная ОС выставлена снаружи — не трогаем.
+        if env_key in _REAL_OS_KEYS:
+            # Настоящая переменная ОС (выставлена до dotenv) — не трогаем.
             continue
         value = data.get(json_key)
         if value is None or value == '':
