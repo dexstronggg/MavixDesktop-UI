@@ -1,361 +1,101 @@
 # MavixDesktop — Техническое описание
 
-Документ составлен в соответствии с ГОСТ 19.402-78 «Описание программы» и
-ГОСТ 19.503-79 «Руководство системного программиста».
-
----
+Документ составлен по ГОСТ 19.402-78 «Описание программы» (ЕСПД).
 
 ## 1. Аннотация
 
-Документ содержит техническое описание программы «MavixDesktop» —
-наземной станции (Ground Control Station, GCS) системы дистанционного
-управления БПЛА «Mavix». Программа устанавливается на персональный
-компьютер пилота под управлением Linux. Документ предназначен для
-разработчиков и системных администраторов.
-
----
+MavixDesktop — приложение оператора системы доставки грузов дронами Mavix.
+Оператор входит под выданными учётными данными, видит заявки на доставку,
+принимает их, подключается к дрону по WebRTC (видео + телеметрия + карта),
+управляет полётом (джойстик → CRSF, либо MAVLink через QGroundControl) и
+выполняет сброс груза.
 
 ## 2. Общие сведения
 
-### 2.1. Наименование
-
-Полное наименование: «Наземная станция Mavix» (MavixDesktop).
-Условное обозначение: `mavixdesktop`.
-Версия: 0.1.0.
-
-### 2.2. Программное обеспечение
-
-| Компонент | Версия |
-|---|---|
-| Язык программирования | Python ≥ 3.11 |
-| GUI-фреймворк | PySide6 ≥ 6.6 |
-| WebRTC | aiortc ≥ 1.13 |
-| HTTP/WebSocket клиенты | aiohttp, websockets |
-| Хранение учётных данных | keyring (с резервом — файл JSON) |
-| Видео | PyAV, OpenCV-Python, NumPy |
-| Джойстик | pygame |
-
-### 2.3. Назначение
-
-Программа выполняет роль наземной станции пилота:
-
-- проводит аутентификацию пилота на сервере «MavixServer»;
-- отображает список собственных БПЛА с указанием состояния (онлайн /
-  оффлайн);
-- устанавливает WebRTC-сессию с выбранным дроном;
-- отображает видеопоток с бортовых камер;
-- передаёт команды управления (CRSF) и/или сообщения MAVLink в
-  направлении полётного контроллера;
-- запускает QGroundControl при наличии и взаимодействует с ним через
-  UDP-сокет.
-
----
+- **Наименование:** MavixDesktop.
+- **Стек:** Python 3.12, PySide6 (Qt), aiortc (WebRTC), pygame (джойстик),
+  PyAV (H.264), QtNetwork (тайлы карты). Сборка — PyInstaller (.exe/.AppImage).
+- **Связь:** REST + WS-сигналинг с MavixServer; WebRTC P2P с MavixBoard;
+  локально — QGroundControl (MAVLink-полёт).
 
 ## 3. Функциональное назначение
 
-### 3.1. Класс решаемых задач
-
-Программа реализует роль отвечающего (answerer) в WebRTC-сессии:
-получает SDP-оффер от дрона через сервер сигнализации, формирует
-SDP-ответ, принимает медиа-поток и data-каналы. Дополнительно
-осуществляет тестирование скорости канала связи и относительной
-задержки.
-
-### 3.2. Ограничения
-
-- В каждый момент времени отображается видео не более одного дрона.
-- Программа предназначена для работы под GNU/Linux. Запуск под
-  Windows и macOS не поддерживается официально, но возможен (за
-  исключением функции автозапуска QGroundControl).
-
----
+- Вход оператора, получение и приём заявок (первый принявший — ведёт).
+- Приём видео (несколько камер) и телеметрии (GPS/курс/батарея) по WebRTC.
+- Карта (нативный QPainter-виджет: спутник/улицы, поворот по курсу, маркеры).
+- Управление: CRSF-кадры с джойстика → борт; либо запуск QGroundControl и
+  фоновый проброс ARM/DISARM и AUTO-RTL по packet-каналу.
+- Сброс груза (кнопка джойстика/экрана) с отметкой доставки `delivered`.
 
 ## 4. Описание логической структуры
 
-### 4.1. Структура каталогов
+`App` (QMainWindow) управляет экранами; `SessionCoordinator` (фоновый asyncio-
+поток) ведёт REST/WS/WebRTC через `WebRTCManager` и `PeerSession`; `VideoManager`
+принимает треки и отдаёт кадры; `FlightWindow` — экран управления (видео, стики,
+карта `MapWidget`, кнопка сброса); `JoystickInput` — чтение джойстика.
 
-```
-src/mavixdesktop/
-├── core/
-│   ├── config.py        # Pydantic-Settings, переменные окружения
-│   ├── logger.py        # Журналирование
-│   └── backoff.py       # Экспоненциальная задержка
-├── server/
-│   ├── api.py           # ApiSession — REST-клиент (login, refresh, ice-servers)
-│   ├── signal_client.py # WebSocket-клиент к /ws/gcs
-│   └── token_store.py   # Хранение refresh-токена в keyring/JSON
-├── webrtc/
-│   ├── peer.py          # PeerSession — WebRTC-сессия (answerer)
-│   ├── manager.py       # WebRTCManager — управление сессией
-│   └── channels.py      # PacketChannel, PingChannel, ConfigChannel
-├── fc/
-│   ├── crsf.py          # Кодирование CRSF
-│   ├── encoder.py       # Преобразование положения стиков в CRSF-кадр
-│   └── mavlink_relay.py # UDP-мост между data-каналом и QGroundControl
-├── joystick/
-│   ├── manager.py       # Перечисление джойстиков
-│   ├── input.py         # Чтение положений стиков и кнопок
-│   └── calibration.py   # Сохранение/загрузка калибровки
-├── speedtester/
-│   ├── tester.py        # WebSocket-тест полосы пропускания
-│   └── units.py         # Преобразование единиц измерения
-├── ui/
-│   ├── app.py           # Главное окно (QMainWindow)
-│   ├── login_page.py    # Экран входа
-│   ├── video_widget.py  # Виджет для отображения видео
-│   ├── state.py         # SessionState — состояние сессии
-│   ├── managers/        # Адаптеры: ConnectionManager, VideoManager
-│   ├── screens/         # Экраны: список дронов, просмотр, настройка джойстика, полёт
-│   └── style/           # Темы оформления
-├── qgc/
-│   └── launcher.py      # Поиск и запуск QGroundControl
-├── coordinator.py       # SessionCoordinator — связь UI/network/WebRTC/FC
-└── __main__.py          # Точка входа: GUI / --headless
-```
+Сценарии оператора (Use Case):
 
-### 4.2. Описание основных модулей
+![Use Case](assets/diagrams/use_case.png)
 
-#### 4.2.1. Модуль координатора (`coordinator.py`)
+Установление WebRTC-сессии:
 
-Реализует основной цикл:
-
-1. Подключение к серверу сигнализации с экспоненциальной задержкой.
-2. Маршрутизация входящих сообщений по типам:
-   - `drones` → обновление списка;
-   - `sdp` (оффер от дрона) → `WebRTCManager.handle_offer`;
-   - `ice` → `WebRTCManager.handle_ice`;
-   - `drone_disconnected` → запоминание `drone_id` для авто-переподключения;
-   - `auth_warning` → автоматический REST-refresh JWT;
-   - `auth_refreshed` → обновление токена в `SignalClient`;
-   - `shutdown` → разрыв сессии без остановки цикла (для последующего
-     переподключения).
-3. Передача пакетов FC и обработка сообщений `config-channel`
-   (`fc`, `cameras`, `cameras_changed`, `error`).
-4. Запуск/останов `MavlinkRelay` в зависимости от типа FC.
-
-#### 4.2.2. Модуль WebRTC-сессии (`webrtc/`)
-
-`PeerSession` обёртка над `aiortc.RTCPeerConnection`. В роли отвечающего:
-
-1. Получает оффер: `await pc.setRemoteDescription(offer)`.
-2. Создаёт ответ: `answer = await pc.createAnswer()`.
-3. Применяет ответ: `await pc.setLocalDescription(answer)`.
-4. Возвращает SDP-ответа координатору для отправки.
-
-Data-каналы создаются дроном, передаются клиенту через событие
-`pc.on('datachannel')`. По метке (`label`) идентифицируются как
-`packet`, `ping`, `config` и оборачиваются соответствующими классами
-из `channels.py`.
-
-#### 4.2.3. Модуль пользовательского интерфейса (`ui/`)
-
-Реализован на PySide6. Структура экранов:
-
-| Экран | Файл | Назначение |
-|---|---|---|
-| Вход | `login_page.py` | Аутентификация по адресу электронной почты и паролю |
-| Список дронов | `screens/drone_list_page.py` | Карточки доступных дронов |
-| Просмотр дрона | `screens/drone_view/page.py` | Видео + панель управления |
-| Настройка джойстика | `screens/joystick_setup.py` | Калибровка осей и кнопок |
-| Полётный режим | `screens/flight_window.py` | Полноэкранный режим с отображением стиков |
-
-Связь UI с асинхронной частью программы выполняется через
-`Bridge` — объект-носитель сигналов PySide6:
-
-- `client_list_updated(list)` — изменён список дронов;
-- `config_received(list)` — получен список камер от дрона;
-- `fc_info_received(str, str)` — получена информация о полётном
-  контроллере;
-- `speed_updated(float, float, float, float)` — обновлены показания
-  спид-теста.
-
-#### 4.2.4. Модуль связи с FC (`fc/`)
-
-`encoder.build_rc_frame(throttle, roll, pitch, yaw, armed)` —
-преобразует положения стиков (в диапазоне [-1; 1]) в кадр CRSF
-(тип 0x16, 16 каналов, порядок TAER).
-
-`MavlinkRelay` обеспечивает двунаправленный мост:
-
-- от дрона: получаемые байты записываются в локальный UDP-сокет
-  (по адресу `QGC_HOST:QGC_PORT`, по умолчанию `127.0.0.1:14550`);
-- от QGroundControl: получаемые байты отправляются в `packet-channel`
-  WebRTC.
-
-Реализован на `asyncio.DatagramProtocol` через
-`loop.create_datagram_endpoint`, что исключает использование
-дополнительных потоков.
-
-#### 4.2.5. Модуль хранения учётных данных (`server/token_store.py`)
-
-При первом входе пилота refresh-токен сохраняется в системном
-хранилище секретов (gnome-keyring / KWallet / Windows Credential
-Manager / macOS Keychain). При недоступности хранилища используется
-резервный JSON-файл `~/.config/mavixdesktop/tokens.json`. Access-токен
-не сохраняется (выпускается заново при каждом запуске).
-
-### 4.3. Расширение протокола сигнализации
-
-Программа использует следующие специфичные сообщения сервера:
-
-- `auth_warning` — запускается процедура REST-refresh;
-- `auth_refreshed` — обновляет `SignalClient.access_token`.
-
----
+![Sequence: WebRTC-сессия](assets/diagrams/sequence_webrtc.png)
 
 ## 5. Используемые технические средства
 
-### 5.1. Минимальные требования
+ОС: Linux (x64) / Windows 10+. PySide6 (Qt6) с QtNetwork; aiortc, PyAV, pygame.
+Для MAVLink-полёта — внешняя программа QGroundControl. Джойстик — USB.
 
-| Параметр | Значение |
-|---|---|
-| Процессор | 64-bit, 2 ядра 2 ГГц |
-| ОЗУ | 2 ГБ свободной памяти |
-| Видеокарта | Поддержка OpenGL 2.0 |
-| Разрешение экрана | не менее 1280×720 |
-| ОС | Ubuntu 22.04+, Debian 12+, Raspberry Pi OS Bookworm |
-| Сеть | Стабильное интернет-соединение со скоростью ≥ 5 Мбит/с |
-| Джойстик | Любой устройство, видимое pygame |
-
-### 5.2. Зависимости системного уровня
-
-```
-python3 ≥ 3.11, python3-venv, python3-pip
-libxcb-cursor0
-libgl1
-```
-
-Полный перечень содержится в поле `Depends:` файла `DEBIAN/control`
-пакета `.deb`.
-
----
-
-## 6. Установка
-
-### 6.1. Установка через `.deb`-пакет (рекомендуется)
+## 6. Установка и запуск
 
 ```bash
-sudo apt update
-sudo apt install ./mavixdesktop.deb
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+python -m mavixdesktop
 ```
-
-Установщик:
-
-- создаёт виртуальное окружение `/opt/mavixdesktop/.venv`;
-- устанавливает Python-зависимости из PyPI (PySide6, aiortc,
-  numpy и др.);
-- регистрирует ярлык приложения в меню рабочего стола.
-
-Запуск из меню: «Network → Mavix Desktop» или командой:
-
-```bash
-/opt/mavixdesktop/.venv/bin/python -m mavixdesktop
-```
-
-### 6.2. Установка для разработки
-
-```bash
-git clone https://github.com/AurunChill/MavixDesktop.git
-cd MavixDesktop
-python3 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
-cp .env-example .env
-# Отредактировать .env
-.venv/bin/python -m mavixdesktop
-```
-
-### 6.3. Параметры конфигурации
-
-| Переменная | Назначение | Значение по умолчанию |
-|---|---|---|
-| `SIGNAL_URL` | Базовый URL сервера | `http://localhost:8000` |
-| `SIGNAL_WS_URL` | Полный URL WebSocket (если задан, переопределяет) | пусто |
-| `STUN_SERVER`, `TURN_SERVER`, `TURN_USERNAME`, `TURN_PASSWORD` | WebRTC ICE-серверы | пусто (берутся с сервера) |
-| `QGC_HOST`, `QGC_PORT` | Адрес и порт UDP-сокета QGroundControl | `127.0.0.1`, `14550` |
-| `QGC_BIND_PORT` | Локальный порт для приёма от QGC | `0` (выбирается ОС) |
-| `KEYRING_SERVICE` | Имя сервиса в системном хранилище секретов | `mavixdesktop` |
-
-#### Порядок приоритета источников конфигурации
-
-При запуске значения берутся из перечисленных источников; более высокий
-в списке источник переопределяет более низкий:
-
-1. Переменные окружения операционной системы.
-2. Файл `~/.config/mavixdesktop/.env` (пользовательский конфиг).
-3. Файл `.env` в корне репозитория (dev-fallback; в prod-сборке
-   PyInstaller отсутствует).
-4. Значения по умолчанию, заданные в коде (`core/config.py`).
-
-Для production-сборки достаточно одного из двух способов задания
-адреса сервера сигнализации:
-
-- пользователь прописывает `SIGNAL_URL` в `~/.config/mavixdesktop/.env`
-  после установки бинарника;
-- значение по умолчанию `signal_url` правится прямо в
-  `core/config.py` перед сборкой single-file binary через
-  `pyinstaller mavixdesktop.spec`.
-
----
+Готовые сборки (.exe/.AppImage) отдаёт сайт MavixWeb; сборка — `StartUp/build/`.
+Настройки (адрес сервера, STUN/TURN, force-relay) — через `.env`/config; адрес
+WS можно переопределить. Регистрация не нужна — логин/пароль выдаёт администратор.
 
 ## 7. Проверка работы
 
-### 7.1. Автоматизированные тесты
-
 ```bash
-.venv/bin/pytest
-# Ожидаемый результат: 238 passed
+QT_QPA_PLATFORM=offscreen python -m pytest -q   # полный набор — зелёный
 ```
-
-Тесты выполняются с параметрами `QT_QPA_PLATFORM=offscreen` и
-`SDL_VIDEODRIVER=dummy`, что позволяет проводить их без графической
-оболочки.
-
-### 7.2. Запуск в режиме без графического интерфейса
-
-Для проверки серверной части без запуска UI:
-
-```bash
-.venv/bin/python -m mavixdesktop --headless \
-    --email me@example.com --password '...'
-```
-
-Программа выполнит вход, подключится к серверу сигнализации и будет
-ожидать запросов от пилота. Полезно для диагностики на стороне
-сервера.
-
----
 
 ## 8. Сообщения системному программисту
 
-| Сообщение | Причина | Действия |
-|---|---|---|
-| `signal server unreachable` | Невозможно достичь сервера | Проверить URL и сетевое соединение |
-| `login failed: invalid credentials` | Неверные данные | Проверить ввод; при необходимости — сбросить пароль через сервер |
-| `[connection] refresh failed` | Просроченный refresh-токен | Программа автоматически переходит на экран входа |
-| `[coord] auto-reconnecting to drone ...` | Дрон, который только что отключился, снова доступен | Штатная ситуация |
-| `[app] QGroundControl not found` | Не найден исполняемый файл QGC | Установить QGroundControl или продолжить работу без него |
-| `[mavlink-relay] sendto error` | UDP-сокет QGC недоступен | Запустить QGroundControl |
-
----
+- `libGL.so.1: cannot open` → доустановить `libgl1 libegl1 libxkbcommon0`.
+- Джойстик не виден сразу → задержка доставки `JOYDEVICEADDED` от udev/SDL
+  (опрос на странице джойстиков идёт каждую секунду).
+- ICE failed / нет видео → STUN/TURN, см. [MavixBoard/WEBRTC_TURN_NOTES.md](../MavixBoard/WEBRTC_TURN_NOTES.md).
 
 ## 9. Журналирование
 
-Журнал ведётся в:
-
-- стандартный поток вывода (видим при запуске из терминала);
-- файл `~/.config/mavixdesktop/logs/mavixdesktop_<дата>.log`.
-
-Уровни сообщений: `INFO`, `WARNING`, `ERROR`. По умолчанию — `INFO`.
-
----
+Логи с префиксом `[app]`/`[coord]`/`[ice]`. При сбое — Python-стек через
+`faulthandler` в `/tmp/mavix_crash.log`. Текст — на русском.
 
 ## 10. Безопасность учётных данных
 
-- Refresh-токен хранится в системном хранилище секретов (gnome-keyring
-  / KWallet / Keychain). Доступ к токену имеет только пользователь,
-  под которым выполняется программа.
-- При отсутствии хранилища секретов используется JSON-файл
-  `~/.config/mavixdesktop/tokens.json` с правами `0600`.
-- Access-токен живёт в оперативной памяти процесса и не сохраняется
-  на диск.
-- При нажатии «Выйти» (logout) токен из хранилища удаляется.
+Токены оператора хранятся локально (`server/token_store.py`); refresh при
+истечении. Регистрация в приложении отсутствует — доступ выдаёт администратор.
+
+## 11. Сложности и принятые решения
+
+- **Карта без QtWebEngine.** Chromium-движок (`QWebEngineView`) ронял приложение
+  при открытии QGC на машинах с самосборной libGL. Карта переписана на нативный
+  `QPainter` (`ui/screens/map_widget.py`): растровые тайлы (Esri/OSM),
+  асинхронная загрузка через `QNetworkAccessManager`, кэш, поворот по курсу.
+- **Совместимость aiortc ↔ webrtcbin.** Borт-сторона — GStreamer `webrtcbin`;
+  потребовались разбор trickle-ICE-кандидатов штатным `candidate_from_sdp`,
+  нативный relay-only через `relay_patch.py` (подмена `aioice.Connection`),
+  приоритет локального TURN-конфига. Подробно —
+  [MavixBoard/WEBRTC_TURN_NOTES.md](../MavixBoard/WEBRTC_TURN_NOTES.md).
+- **Джойстик и QGroundControl.** В passive-режиме (MAVLink) QGC и приложение
+  читают один джойстик; ARM/DISARM шлём отдельной командой по packet-каналу
+  параллельно QGC. Hot-plug — через `pygame.event.pump()` (а не хрупкий
+  `quit()+init()`). Зависание при открытии QGC устранено откатом ошибочной
+  «защиты» декодера (приведено к рабочему поведению ветки `remote_control`).
+- **Одно окно.** Полётное окно открывается с прятанием главного окна — у
+  приложения остаётся одно видимое окно (не два в alt-tab).
