@@ -159,3 +159,86 @@ async def test_mark_delivered_returns_delivery():
     api = ApiSession(session)
     data = await api.mark_delivery_delivered('d1', 'tok')
     assert data['status'] == 'delivered'
+
+
+# --- дополнительные методы ApiSession (повышение покрытия) ---
+async def test_operator_login_ok():
+    session = _session_with('post', _FakeResponse(200, {'access_token': 'A', 'refresh_token': 'R'}))
+    api = ApiSession(session)
+    res = await api.operator_login('op', 'pw')
+    assert res['access_token'] == 'A'
+
+
+async def test_refresh_ok():
+    session = _session_with('post', _FakeResponse(200, {'access_token': 'A2'}))
+    api = ApiSession(session)
+    assert (await api.refresh('R'))['access_token'] == 'A2'
+
+
+async def test_password_reset_request_ok():
+    session = _session_with('post', _FakeResponse(200, {'status': 'sent'}))
+    api = ApiSession(session)
+    await api.password_reset_request('op@example.com')
+
+
+async def test_ice_servers_ok():
+    session = _session_with('get', _FakeResponse(200, {'ice_servers': [{'urls': 'stun:x'}]}))
+    api = ApiSession(session)
+    res = await api.ice_servers()
+    assert isinstance(res, list)
+
+
+async def test_list_offered_and_my_delivery():
+    session = _session_with('get', _FakeResponse(200, [{'delivery_id': 'd1'}]))
+    api = ApiSession(session)
+    assert isinstance(await api.list_offered_deliveries('A'), list)
+    session2 = _session_with('get', _FakeResponse(200, {'delivery_id': 'd1'}))
+    api2 = ApiSession(session2)
+    assert (await api2.get_my_delivery('A')) is not None
+
+
+async def test_delivery_status_transitions():
+    session = _session_with('post', _FakeResponse(200, {'delivery_id': 'd1', 'status': 'accepted'}))
+    api = ApiSession(session)
+    assert (await api.accept_delivery('d1', 'A'))['status'] == 'accepted'
+    session2 = _session_with('post', _FakeResponse(200, {'status': 'in_flight'}))
+    api2 = ApiSession(session2)
+    await api2.set_delivery_in_flight('d1', 'A')
+    session3 = _session_with('post', _FakeResponse(200, {'status': 'delivered'}))
+    api3 = ApiSession(session3)
+    await api3.mark_delivery_delivered('d1', 'A')
+
+
+async def test_delete_drone_and_close():
+    session = _session_with('delete', _FakeResponse(204, {}))
+    api = ApiSession(session)
+    await api.delete_drone('dr1', 'A')
+
+
+# --- error-пути (запас покрытия) ---
+async def test_login_raises_on_401():
+    session = _session_with('post', _FakeResponse(401, {'detail': 'bad creds'}))
+    api = ApiSession(session)
+    with pytest.raises(ApiError):
+        await api.login('e@x.com', 'wrong')
+
+
+async def test_refresh_raises_on_401():
+    session = _session_with('post', _FakeResponse(401, {'detail': 'expired'}))
+    api = ApiSession(session)
+    with pytest.raises(ApiError):
+        await api.refresh('bad-token')
+
+
+async def test_operator_login_raises_on_500():
+    session = _session_with('post', _FakeResponse(500, {}))
+    api = ApiSession(session)
+    with pytest.raises(ApiError):
+        await api.operator_login('op', 'pw')
+
+
+async def test_accept_delivery_raises_on_409():
+    session = _session_with('post', _FakeResponse(409, {'detail': 'занята'}))
+    api = ApiSession(session)
+    with pytest.raises(ApiError):
+        await api.accept_delivery('d1', 'A')
