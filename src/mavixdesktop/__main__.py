@@ -9,7 +9,18 @@ from __future__ import annotations
 import argparse
 import asyncio
 import faulthandler
+import os
 import sys
+
+# В windowed-сборке PyInstaller (console=False) консоли нет, поэтому
+# sys.stdout / sys.stderr == None — и faulthandler.enable(), logging
+# StreamHandler или print падают с «RuntimeError: sys.stderr is None».
+# Подменяем пустые потоки на devnull ДО импорта логгера и faulthandler.
+# Реальные логи всё равно пишутся в файл (см. setup_file_logging).
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, 'w')
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, 'w')
 
 from mavixdesktop.coordinator import SessionCoordinator
 from mavixdesktop.core.config import settings
@@ -234,11 +245,14 @@ def _run_gui(demo: bool = False) -> int:
 #### Точка входа #######################################################################
 def main() -> None:
     # Включаем дамп Python-стека при SIGSEGV/SIGFPE/SIGABRT.
-    # Пишем в stderr И в /tmp/mavix_crash.log — второй вариант
-    # гарантированно переживёт крэш и не теряется при перезапуске.
+    # Пишем в stderr И в mavix_crash.log во временном каталоге — второй
+    # вариант гарантированно переживёт крэш и не теряется при перезапуске.
+    # (stderr к этому моменту уже не None — подменён на devnull выше, если
+    # консоли нет; путь через tempfile, чтобы работало и на Windows.)
     faulthandler.enable()
     try:
-        _crash_log = open('/tmp/mavix_crash.log', 'w')
+        import tempfile
+        _crash_log = open(os.path.join(tempfile.gettempdir(), 'mavix_crash.log'), 'w')
         faulthandler.enable(file=_crash_log, all_threads=True)
     except OSError:
         pass

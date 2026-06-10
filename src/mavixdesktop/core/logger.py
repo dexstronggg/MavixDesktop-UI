@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 
 
 def _build_logger() -> logging.Logger:
@@ -11,9 +12,13 @@ def _build_logger() -> logging.Logger:
     if log.handlers:
         return log
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - %(message)s')
-    stream = logging.StreamHandler()
-    stream.setFormatter(formatter)
-    log.addHandler(stream)
+    # В windowed-сборке PyInstaller (console=False) sys.stderr может быть None —
+    # StreamHandler тогда падал бы при первом логе. Привязываемся к stderr,
+    # только если поток есть; файловый лог настраивается отдельно (setup_file_logging).
+    stream = logging.StreamHandler() if sys.stderr is not None else None
+    if stream is not None:
+        stream.setFormatter(formatter)
+        log.addHandler(stream)
 
     # ICE_DEBUG=1 включает DEBUG-логирование aioice/aiortc — каждую кандидат-пару,
     # connectivity-проверку и TURN-запрос. Используется для диагностики, почему
@@ -22,7 +27,8 @@ def _build_logger() -> logging.Logger:
         for name in ('aioice', 'aiortc'):
             dbg = logging.getLogger(name)
             dbg.setLevel(logging.DEBUG)
-            dbg.addHandler(stream)
+            if stream is not None:
+                dbg.addHandler(stream)
         log.info('[ice] ICE_DEBUG включён — aioice/aiortc на DEBUG')
     return log
 
