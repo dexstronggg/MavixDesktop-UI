@@ -86,19 +86,42 @@ cat >"$SPEC_FILE" <<'PYSPEC'
 # of a single-file EXE. Used only by the AppImage build pipeline.
 from PyInstaller.utils.hooks import collect_all
 
+# Зеркалит фильтр из mavixdesktop.spec: выкидываем неиспользуемые тяжёлые
+# модули Qt (QtWebEngine/Quick/QML/3D/Designer/Pdf/Charts/Multimedia + их ffmpeg).
+_QT_DROP = (
+    'webengine', 'webview', 'icudtl',
+    'quick', 'qml',
+    '3d', 'shadertools',
+    'designer', 'pdf',
+    'charts', 'graphs', 'datavisualization',
+    'multimedia', 'spatialaudio',
+    'libavcodec', 'libavformat', 'libavutil',
+    'libavfilter', 'libavdevice', 'libswscale', 'libswresample',
+)
+
+
+def _is_unwanted_qt(name):
+    low = name.lower()
+    return any(token in low for token in _QT_DROP)
+
+
 datas = []
 binaries = []
 hiddenimports = [
     'aiortc',
     'av',
-    'cv2',
     'PySide6.QtSvg',
     'PySide6.QtSvgWidgets',
     'pymavlink.dialects.v20.common',
     'pymavlink.dialects.v20.ardupilotmega',
 ]
 
-for pkg in ('PySide6', 'av', 'aiortc', 'cv2', 'pymavlink'):
+_p_datas, _p_binaries, _p_hidden = collect_all('PySide6')
+datas += [(src, dest) for (src, dest) in _p_datas if not _is_unwanted_qt(dest)]
+binaries += [(src, dest) for (src, dest) in _p_binaries if not _is_unwanted_qt(dest)]
+hiddenimports += [mod for mod in _p_hidden if not _is_unwanted_qt(mod)]
+
+for pkg in ('av', 'aiortc', 'pymavlink'):
     _datas, _binaries, _hidden = collect_all(pkg)
     datas += _datas
     binaries += _binaries
@@ -114,7 +137,17 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        'cv2',
+        'PySide6.QtWebEngineCore', 'PySide6.QtWebEngineWidgets', 'PySide6.QtWebEngineQuick',
+        'PySide6.QtQuick', 'PySide6.QtQuick3D', 'PySide6.QtQuickWidgets', 'PySide6.QtQuickControls2',
+        'PySide6.QtQml',
+        'PySide6.Qt3DCore', 'PySide6.Qt3DRender', 'PySide6.Qt3DExtras',
+        'PySide6.Qt3DInput', 'PySide6.Qt3DLogic', 'PySide6.Qt3DAnimation',
+        'PySide6.QtDesigner', 'PySide6.QtPdf', 'PySide6.QtPdfWidgets',
+        'PySide6.QtCharts', 'PySide6.QtGraphs', 'PySide6.QtDataVisualization',
+        'PySide6.QtMultimedia', 'PySide6.QtMultimediaWidgets', 'PySide6.QtSpatialAudio',
+    ],
 )
 pyz = PYZ(a.pure)
 exe = EXE(
