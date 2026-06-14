@@ -65,19 +65,20 @@ TODO below.
 
 ## Сборка дистрибутивов
 
-Готовые `.exe` (Windows) и `.deb` (Linux) для раздачи через [MavixWeb](https://github.com/dexstronggg/MavixWeb)
-собираются скриптами в `scripts/`:
+Готовые `.exe` (Windows) и `.AppImage` (Linux) собираются скриптами в `scripts/`:
 
 ```bash
-./scripts/build_linux.sh        # → dist/mavix-desktop-linux.deb
-.\scripts\build_windows.ps1     # → dist\mavix-desktop-windows.exe
+./scripts/build_appimage.sh     # → dist/Mavix-Desktop-x86_64.AppImage
+.\scripts\build_windows.ps1     # → dist\mavixdesktop.exe
 ```
 
-Имена выходных файлов точно совпадают с whitelist-маршрутами MavixWeb
-(`/downloads/mavix-desktop-{windows.exe,linux.deb}`) — копирование в
-`MavixWeb/public/downloads/` работает 1-в-1.
+Дистрибутивы раздаёт **MavixServer** по `/api/v1/builds/desktop?build_type=exe|deb`
+из каталога `BUILDS_PREBUILT_DIR` (дефолт `/srv/mavix/prebuilt`). Бинарники
+кладутся туда под строго фиксированными именами: `mavixdesktop.exe` и
+`mavixdesktop-linux` (**AppImage без расширения**). `MavixWeb` бинарники не
+раздаёт.
 
-Подробности (требования, troubleshooting, что внутри `.deb`) — см.
+Подробности (требования, troubleshooting) — см.
 [`scripts/README.md`](scripts/README.md).
 
 ## Tests

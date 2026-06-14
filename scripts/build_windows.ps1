@@ -47,7 +47,8 @@ try {
 
     Write-Host ''
     Write-Host "OK Build ready: $OutExe" -ForegroundColor Green
-    Write-Host "   Передайте файл оператору сервера, он положит его в MavixServer\prebuilt\mavixdesktop.exe."
+    Write-Host "   Передайте файл оператору сервера: положить в BUILDS_PREBUILT_DIR (дефолт /srv/mavix/prebuilt) как mavixdesktop.exe."
+    Write-Host "   Раздаётся MavixServer по /api/v1/builds/desktop?build_type=exe."
 }
 finally {
     Pop-Location

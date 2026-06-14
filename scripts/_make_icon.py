@@ -1,6 +1,6 @@
 """Генератор иконок Mavix для сборки дистрибутивов.
 
-Вызывается из ``scripts/build_windows.ps1`` и ``scripts/build_linux.sh``
+Вызывается из ``scripts/build_windows.ps1`` и ``scripts/build_appimage.sh``
 для создания .ico (Windows) и .png (Linux). Без этого скрипта пришлось
 бы держать бинарные .ico/.png в репозитории.
 
