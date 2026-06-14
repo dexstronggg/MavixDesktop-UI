@@ -4,8 +4,6 @@ from __future__ import annotations
 import sys
 from unittest.mock import MagicMock
 
-import pytest
-
 
 def _install_pygame_mock(monkeypatch, axes_by_idx: dict[int, float], buttons_by_idx: dict[int, int] | None = None):
     pg = MagicMock()
@@ -111,6 +109,32 @@ def test_arm_axis_mode(monkeypatch):
 
     j = JoystickInput(0, cal)
     assert j.is_armed() is False
+    axis_state[5] = 1.0
+    assert j.is_armed() is True
+
+
+def test_arm_axis_in_arm_on_entry_requires_disarm_first(monkeypatch):
+    """Вход в полёт с тумблером, оставленным в ARM, НЕ должен армировать сразу:
+    is_armed() держит DISARM, пока тумблер не пройдёт через DISARM."""
+    cal = _full_cal()
+    cal['arm_type'] = 'axis'
+    cal['arm_axis_index'] = 5
+    pg = MagicMock()
+    js = MagicMock()
+    axis_state = {5: 1.0}  # тумблер УЖЕ в ARM в момент входа
+    js.get_axis.side_effect = lambda idx: axis_state.get(idx, 0.0)
+    pg.joystick.Joystick.return_value = js
+    monkeypatch.setitem(sys.modules, 'pygame', pg)
+    from mavixdesktop.joystick.input import JoystickInput
+
+    j = JoystickInput(0, cal)
+    # защёлка держит DISARM, сколько бы ни опрашивали
+    assert j.is_armed() is False
+    assert j.is_armed() is False
+    # оператор перевёл тумблер в DISARM
+    axis_state[5] = -1.0
+    assert j.is_armed() is False
+    # после этого ARM снова работает как обычно
     axis_state[5] = 1.0
     assert j.is_armed() is True
 

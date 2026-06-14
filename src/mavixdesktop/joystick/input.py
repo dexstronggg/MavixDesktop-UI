@@ -25,6 +25,11 @@ class JoystickInput:
         self._pump_events = pump_events
         self._arm = False
         self._arm_btn_prev = 0
+        # Защита от «вошёл в полёт с тумблером в ARM»: пока с момента создания
+        # input не увидели DISARM хотя бы раз, is_armed() возвращает False,
+        # чтобы вход в полёт не приводил к мгновенному армированию. После
+        # первого DISARM — обычная логика (DISARM→ARM работает как всегда).
+        self._disarm_seen = False
         # Запоминаем instance_id, чтобы сопоставлять событие device-removed
         # именно с этим joystick (если у пользователя подключено больше
         # одного). Падает в None, если pygame пока не может сообщить.
@@ -72,7 +77,19 @@ class JoystickInput:
         )
 
     def is_armed(self) -> bool:
-        """Возвращает текущее состояние ARM, при необходимости опрашивая переходы кнопки."""
+        """Возвращает текущее состояние ARM, при необходимости опрашивая переходы кнопки.
+
+        Пока с момента создания input не зафиксирован DISARM, всегда отдаёт
+        False — иначе вход в полёт с тумблером, оставленным в ARM, мгновенно
+        армировал бы дрон. После первого DISARM работает обычная логика."""
+        raw = self._read_arm_raw()
+        if not self._disarm_seen:
+            if not raw:
+                self._disarm_seen = True
+            return False
+        return raw
+
+    def _read_arm_raw(self) -> bool:
         arm_type = self._cal.get('arm_type', 'button')
         if arm_type == 'axis':
             idx = self._cal.get('arm_axis_index', 0)
