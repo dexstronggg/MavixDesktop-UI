@@ -654,6 +654,10 @@ class JoystickSetupPage(QWidget):
         # при нуле джойстиков (иначе сравнение с пустым списком дало бы
         # равенство и пропустило бы путь перестроения).
         self._joystick_names: list[str] | None = None
+        # Статусы калибровки устройств — часть «снимка» для _refresh, чтобы
+        # карточка обновлялась не только при подключении/отключении джойстика,
+        # но и после калибровки или удаления файла конфигурации.
+        self._joystick_cal_states: list[bool] = []
         self._on_takeoff = on_takeoff
         self._fc_type: str = 'none'
         self._demo = demo
@@ -751,7 +755,7 @@ class JoystickSetupPage(QWidget):
     def set_fc_type(self, fc_type: str) -> None:
         self._fc_type = fc_type
 
-    def _refresh(self) -> None:
+    def _refresh(self, force: bool = False) -> None:
         # Всегда сначала спрашиваем pygame о реальных джойстиках — даже в
         # демо-режиме: если у оператора есть подключённый USB-контроллер,
         # дизайн экранов калибровки/превью нужно проверять именно на нём.
@@ -761,12 +765,17 @@ class JoystickSetupPage(QWidget):
         if self._demo and not names:
             names = [self.DEMO_JOYSTICK_NAME]
 
-        # Тик авто-обновления: пропускаем перестроение, если список устройств
-        # не изменился, чтобы не пересоздавать дочерние QWidget (и не сносить
-        # открытое меню) 3 раза в секунду.
-        if names == self._joystick_names:
+        # Тик авто-обновления: пропускаем перестроение, если состав устройств
+        # и статусы калибровки не изменились, чтобы не пересоздавать дочерние
+        # QWidget (и не сносить открытое меню) 3 раза в секунду. Статус
+        # калибровки в снимке нужен, чтобы карточка реагировала на калибровку
+        # и на удаление файла конфигурации. force=True — после сохранения
+        # калибровки, чтобы гарантированно перерисовать.
+        cal_states = [bool(JoystickCalibration.load(name)) for name in names]
+        if not force and names == self._joystick_names and cal_states == self._joystick_cal_states:
             return
         self._joystick_names = names
+        self._joystick_cal_states = cal_states
 
         if not self._joystick_names:
             self._empty.show()
@@ -779,8 +788,7 @@ class JoystickSetupPage(QWidget):
 
         cards = []
         for i, name in enumerate(self._joystick_names):
-            cal = JoystickCalibration.load(name)
-            card = JoystickCard(i, name, calibrated=bool(cal))
+            card = JoystickCard(i, name, calibrated=cal_states[i])
             card.clicked.connect(self._on_card_clicked)
             card.action.connect(self._on_card_action)
             cards.append(card)
@@ -804,7 +812,7 @@ class JoystickSetupPage(QWidget):
         else:
             cal_dlg = JoystickCalibrationDialog(index, name, parent=self)
             if cal_dlg.exec() == QDialog.Accepted and cal_dlg.calibration:
-                self._refresh()
+                self._refresh(force=True)
                 dlg = _StickPreviewDialog(index, name, cal_dlg.calibration, parent=self,
                                           on_takeoff=takeoff_cb)
                 dlg.exec()
@@ -820,7 +828,7 @@ class JoystickSetupPage(QWidget):
         elif action == 'calibrate':
             dlg = JoystickCalibrationDialog(index, name, parent=self)
             if dlg.exec() == QDialog.Accepted and dlg.calibration:
-                self._refresh()
+                self._refresh(force=True)
         elif action == 'file_save':
             self._save_to_file(index, name)
 
@@ -842,7 +850,7 @@ class JoystickSetupPage(QWidget):
             QMessageBox.critical(self, 'Неверный формат калибровки', msg)
             return
         JoystickCalibration.save(data, name)
-        self._refresh()
+        self._refresh(force=True)
         QMessageBox.information(
             self, 'Калибровка загружена',
             f'Калибровка для «{name}» успешно загружена и сохранена.'
