@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import sys
 
 from mavixdesktop.coordinator import SessionCoordinator
 from mavixdesktop.core.config import settings
-from mavixdesktop.core.logger import logger, setup_file_logging
+from mavixdesktop.core.logger import enable_debug_logging, logger, setup_file_logging
 from mavixdesktop.server import token_store
 from mavixdesktop.server.api import ApiError, ApiSession
 from mavixdesktop.server.signal_client import SignalClient
@@ -179,10 +180,14 @@ def _run_gui(demo: bool = False) -> int:
     from mavixdesktop.ui.screens.utils import mavix_logo_pixmap
     from mavixdesktop.ui.style import theme
 
+    if settings.debug:
+        enable_debug_logging()
+        logger.info('[bootstrap] DEBUG-режим включён — старт на debug-странице')
+
     # Авто-фолбэк: если пользователь не указал --demo, но сервер не
     # отвечает на /health за 2 с — поднимаем демо-режим автоматически,
     # чтобы можно было хотя бы посмотреть/потрогать UI.
-    if not demo and not _server_reachable():
+    if not demo and not settings.debug and not _server_reachable():
         logger.warning(
             '[bootstrap] сигнальный сервер недоступен, переключаемся в демо-режим'
         )
@@ -225,7 +230,7 @@ def _run_gui(demo: bool = False) -> int:
     tooltip_filter.attach_to(app)
     app._mavix_tooltip_filter = tooltip_filter  # type: ignore[attr-defined]
 
-    window = App(demo=demo)
+    window = App(demo=demo, debug=settings.debug)
     window.show()
     return app.exec()
 
@@ -245,10 +250,8 @@ def main() -> None:
 
     _init_dirs()
     if args.headless:
-        try:
+        with contextlib.suppress(KeyboardInterrupt):
             asyncio.run(_run_headless(args.email, args.password))
-        except KeyboardInterrupt:
-            pass
         return
 
     sys.exit(_run_gui(demo=args.demo))

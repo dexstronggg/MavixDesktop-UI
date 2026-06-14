@@ -36,6 +36,7 @@ from mavixdesktop.ui.managers.connection import ConnectionManager
 from mavixdesktop.ui.managers.demo_connection import DemoConnectionManager
 from mavixdesktop.ui.managers.video import VideoManager
 from mavixdesktop.ui.screens.bridge import Bridge
+from mavixdesktop.ui.screens.debug_page import DebugPage
 from mavixdesktop.ui.screens.drone_list_page import DroneListPage
 from mavixdesktop.ui.screens.drone_view import DroneViewPage
 from mavixdesktop.ui.screens.flight_window import FlightWindow
@@ -64,9 +65,10 @@ class _QgcFindWorker(QThread):
 
 
 class App(QMainWindow):
-    def __init__(self, demo: bool = False) -> None:
+    def __init__(self, demo: bool = False, debug: bool = False) -> None:
         super().__init__()
         self._demo = demo
+        self._debug = debug
         title = 'Mavix · ДЕМО-РЕЖИМ' if demo else 'Mavix'
         self.setWindowTitle(title)
         self.setMinimumSize(1300, 600)
@@ -137,6 +139,10 @@ class App(QMainWindow):
             demo=demo,
         )
         self.settings_page = SettingsPage(on_close=self._close_settings)
+        # Debug-страница нужна только при DEBUG-режиме (см. core.config).
+        self.debug_page = (
+            DebugPage(on_launch_qgc=self._debug_launch_qgc) if debug else None
+        )
 
         self.stack = QStackedWidget()
         self.stack.addWidget(self.login_page)
@@ -144,6 +150,8 @@ class App(QMainWindow):
         self.stack.addWidget(self.drone_view_page)
         self.stack.addWidget(self.joystick_setup_page)
         self.stack.addWidget(self.settings_page)
+        if self.debug_page is not None:
+            self.stack.addWidget(self.debug_page)
         self.setCentralWidget(self.stack)
         # Куда возвращаться при закрытии Settings (открыта из login/list).
         self._settings_return_to = self.login_page
@@ -179,6 +187,11 @@ class App(QMainWindow):
         # Периодически обновляем список дронов, пока виден экран списка.
         self._drone_list_refresh_timer = QTimer(interval=5000)
         self._drone_list_refresh_timer.timeout.connect(self._tick_drone_list_refresh)
+
+        # В DEBUG-режиме сразу показываем debug-страницу, минуя логин.
+        if self.debug_page is not None:
+            self.stack.setCurrentWidget(self.debug_page)
+            return
 
         # Старт: тихое восстановление при наличии refresh-токена, иначе вход.
         if self._conn.resume():
@@ -586,9 +599,27 @@ class App(QMainWindow):
             proc = self._launch_qgc_with_user_pick(sdl_config)
         if proc is None:
             logger.warning('[app] QGC не найден; полётное окно работает без него')
+            self._set_debug_status('QGroundControl не найден и не запущен')
         else:
             self._qgc_overlay = QGCLaunchingOverlay(qgc_proc=proc)
             self._qgc_overlay.show_centered()
+            self._set_debug_status(f'QGroundControl запущен (pid={proc.pid})')
+
+    def _debug_launch_qgc(self) -> None:
+        """Кнопка debug-страницы: проверяет запуск QGC тем же путём, что и
+        полётный режим (фоновый поиск → запуск или диалог выбора пути)."""
+        if is_qgc_running():
+            QMessageBox.warning(
+                self, 'Закройте QGroundControl',
+                'QGroundControl уже запущен. Закройте его и попробуйте снова.',
+            )
+            return
+        self._set_debug_status('Ищу QGroundControl…')
+        self._begin_qgc_search('')
+
+    def _set_debug_status(self, text: str) -> None:
+        if self.debug_page is not None:
+            self.debug_page.set_status(text)
 
     def _launch_qgc_with_user_pick(self, sdl_config: str):
         """Открыть диалог выбора файла, сохранить путь и повторить запуск."""
