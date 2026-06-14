@@ -497,6 +497,62 @@ class _StickPreviewDialog(QDialog):
         super().closeEvent(event)
 
 
+class QGCSearchOverlay(QDialog):
+    """Статус «Ищу QGroundControl…» на время фонового поиска исполняемого файла.
+
+    Сам ничего не ищет — поиск идёт в отдельном потоке, а вызывающий закрывает
+    оверлей через close(), когда поток вернул результат. Анимирует многоточие,
+    чтобы было видно, что приложение не зависло."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowFlags(
+            Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+        )
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setModal(False)
+        self.setFixedSize(360, 80)
+        self.setStyleSheet(f"""
+            QDialog {{
+                background: {theme.BG_SURFACE};
+                border: 1px solid {theme.BORDER};
+                border-radius: {theme.RADIUS_LG}px;
+            }}
+        """)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(20, 18, 20, 18)
+        self._label = QLabel('Ищу QGroundControl')
+        self._label.setAlignment(Qt.AlignCenter)
+        self._label.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; font-size: {theme.FONT_SIZE_BASE}px;'
+            'font-weight: 600; background: transparent;'
+        )
+        lay.addWidget(self._label)
+
+        self._dots = 0
+        self._timer = QTimer(interval=350)
+        self._timer.timeout.connect(self.__tick)
+        self._timer.start()
+
+    def show_centered(self) -> None:
+        screen = QGuiApplication.primaryScreen().geometry()
+        x = screen.x() + (screen.width() - self.width()) // 2
+        y = screen.y() + (screen.height() - self.height()) // 2
+        self.move(x, y)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def __tick(self) -> None:
+        self._dots = (self._dots + 1) % 4
+        self._label.setText('Ищу QGroundControl' + '.' * self._dots)
+
+    def closeEvent(self, event):
+        self._timer.stop()
+        super().closeEvent(event)
+
+
 class QGCLaunchingOverlay(QDialog):
     """Статус «Открываю QGroundControl…»; закрывается когда окно QGC появилось."""
 
