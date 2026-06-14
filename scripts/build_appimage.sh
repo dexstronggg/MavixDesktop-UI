@@ -257,5 +257,6 @@ chmod +x "$OUT"
 echo
 echo "Build done: $OUT ($(du -h "$OUT" | cut -f1))"
 echo
-echo "Copy to MavixWeb static downloads:"
-echo "    cp \"$OUT\" ../MavixWeb/public/downloads/mavix-desktop-linux.AppImage"
+echo "Положить в каталог раздачи MavixServer (BUILDS_PREBUILT_DIR, дефолт /srv/mavix/prebuilt)"
+echo "под именем mavixdesktop-linux БЕЗ расширения — раздаётся по /api/v1/builds/desktop?build_type=deb:"
+echo "    cp \"$OUT\" \"\${BUILDS_PREBUILT_DIR:-/srv/mavix/prebuilt}/mavixdesktop-linux\""
