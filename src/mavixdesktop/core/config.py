@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     # не выходя из домашней сети.
     force_relay: bool = Field(default=False, alias='FORCE_RELAY')
 
+#### Отладка: debug-режим ##############################################################
+    # Если True, приложение стартует на debug-странице (кнопки ручной проверки
+    # функций без борта и сервера) и пишет лог на уровне DEBUG. Имеет смысл
+    # только при запуске из исходников: .env в PyInstaller-бандле не читается.
+    debug: bool = Field(default=False, alias='DEBUG')
+
 #### Пути ##############################################################################
     data_path: Path = _USER_BASE / 'data'
     log_path: Path = Field(default_factory=lambda: _USER_BASE / 'logs' / f'mavixdesktop_{date.today()}.log')

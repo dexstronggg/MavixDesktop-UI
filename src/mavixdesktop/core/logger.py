@@ -30,6 +30,14 @@ def _build_logger() -> logging.Logger:
 logger = _build_logger()
 
 
+def enable_debug_logging() -> None:
+    """Поднимает уровень логгера приложения до DEBUG, чтобы были видны
+    logger.debug(...) (например, диагностика поиска QGC). Вызывается при
+    включённом DEBUG-режиме."""
+    logger.setLevel(logging.DEBUG)
+    logger.debug('[log] debug-режим включён — уровень логирования DEBUG')
+
+
 def setup_file_logging() -> None:
     # Импорт settings отложен внутрь функции, чтобы не создавать цикл
     # импорта: core.config импортирует user_config, который пользуется

@@ -34,3 +34,16 @@ def test_qgc_explicit_values():
     assert s.qgc_host == '10.0.0.1'
     assert s.qgc_port == 5555
     assert s.qgc_bind_port == 7777
+
+
+def test_debug_defaults_false():
+    assert Settings(debug=False).debug is False
+
+
+def test_debug_explicit_true():
+    assert Settings(debug=True).debug is True
+
+
+def test_debug_from_env(monkeypatch):
+    monkeypatch.setenv('DEBUG', '1')
+    assert Settings().debug is True
