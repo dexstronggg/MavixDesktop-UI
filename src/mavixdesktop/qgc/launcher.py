@@ -89,13 +89,21 @@ def _migrate_legacy_path() -> Path | None:
 
 
 #### Поиск установленного QGC ##########################################################
-def _looks_like_qgc(name: str) -> bool:
+def _is_qgc_windows_exe(name: str) -> bool:
+    """Совпадает только с установленным QGroundControl.exe.
+
+    Сознательно НЕ startswith('qgroundcontrol'), иначе под совпадение попадает
+    инсталлятор QGroundControl-installer-AMD64.exe (обычно лежит в Downloads) и
+    прочие сопутствующие .exe. Деинсталлятор Inno Setup называется unins000.exe
+    и под точное имя тоже не подходит."""
+    return name.lower() == 'qgroundcontrol.exe'
+
+
+def _is_qgc_linux_file(name: str) -> bool:
+    """Бинарь QGroundControl или его AppImage (QGroundControl-x86_64.AppImage,
+    QGroundControl-aarch64.AppImage и т.п.)."""
     n = name.lower()
-    return (
-        n.startswith('qgroundcontrol')
-        or n.startswith('qground_control')
-        or n.startswith('qground-control')
-    )
+    return n == 'qgroundcontrol' or (n.startswith('qgroundcontrol') and n.endswith('.appimage'))
 
 
 def _bounded_find(
@@ -165,7 +173,7 @@ def _find_qgc_linux(deadline_s: float) -> Path | None:
         Path('/usr/bin'),
     ]
     roots = [r for r in roots if r.is_dir()]
-    return _bounded_find(roots, _looks_like_qgc, deadline_s)
+    return _bounded_find(roots, _is_qgc_linux_file, deadline_s)
 
 
 def _find_qgc_windows(deadline_s: float) -> Path | None:
@@ -173,9 +181,6 @@ def _find_qgc_windows(deadline_s: float) -> Path | None:
         which = shutil.which(cmd)
         if which:
             return Path(which)
-
-    def is_qgc_exe(name: str) -> bool:
-        return name.lower().endswith('.exe') and _looks_like_qgc(name)
 
     home = Path.home()
     prog = Path(os.environ.get('PROGRAMFILES') or r'C:\Program Files')
@@ -192,7 +197,7 @@ def _find_qgc_windows(deadline_s: float) -> Path | None:
         home,
     ]
     roots = [r for r in roots if str(r) not in ('', '.') and r.is_dir()]
-    return _bounded_find(roots, is_qgc_exe, deadline_s)
+    return _bounded_find(roots, _is_qgc_windows_exe, deadline_s)
 
 
 def find_qgc(deadline_s: float = _SEARCH_DEADLINE_S) -> Path | None:
