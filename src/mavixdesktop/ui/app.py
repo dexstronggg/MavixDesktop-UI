@@ -14,7 +14,7 @@ from __future__ import annotations
 import platform
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
@@ -25,7 +25,12 @@ from PySide6.QtWidgets import (
 
 from mavixdesktop.core.logger import logger
 from mavixdesktop.joystick.guard import JoystickGuard
-from mavixdesktop.qgc.launcher import is_qgc_running, launch_qgc, save_qgc_path
+from mavixdesktop.qgc.launcher import (
+    find_qgc,
+    is_qgc_running,
+    launch_qgc,
+    save_qgc_path,
+)
 from mavixdesktop.ui.login_page import LoginPage
 from mavixdesktop.ui.managers.connection import ConnectionManager
 from mavixdesktop.ui.managers.demo_connection import DemoConnectionManager
@@ -37,9 +42,25 @@ from mavixdesktop.ui.screens.flight_window import FlightWindow
 from mavixdesktop.ui.screens.joystick_setup import (
     JoystickSetupPage,
     QGCLaunchingOverlay,
+    QGCSearchOverlay,
 )
 from mavixdesktop.ui.screens.settings_page import SettingsPage
 from mavixdesktop.ui.state import SessionState
+
+
+class _QgcFindWorker(QThread):
+    """Ищет QGroundControl в фоновом потоке, чтобы поиск (до ~5 с) не морозил
+    GUI. По завершении эмитит found с Path или None."""
+
+    found = Signal(object)  # Path | None
+
+    def run(self) -> None:
+        try:
+            result = find_qgc()
+        except Exception as exc:
+            logger.warning('[app] фоновый поиск QGC упал: %s', exc)
+            result = None
+        self.found.emit(result)
 
 
 class App(QMainWindow):
@@ -129,6 +150,8 @@ class App(QMainWindow):
 
         self._flight_window: FlightWindow | None = None
         self._qgc_overlay: QGCLaunchingOverlay | None = None
+        self._qgc_search_overlay: QGCSearchOverlay | None = None
+        self._qgc_search_thread: _QgcFindWorker | None = None
         # Следит за активным джойстиком, пока идёт полётная сессия; если
         # стик пропадает в полёте — шлёт дрону один disarm-фрейм.
         self._joystick_guard: JoystickGuard | None = None
@@ -531,18 +554,41 @@ class App(QMainWindow):
                 )
                 return
             sdl_config = calibration.get('sdl_gamecontrollerconfig', '')
-            proc = launch_qgc(sdl_config)
-            if proc is None:
-                proc = self._launch_qgc_with_user_pick(sdl_config)
-            if proc is None:
-                logger.warning('[app] QGC не найден; полётное окно работает без него')
-            else:
-                self._qgc_overlay = QGCLaunchingOverlay(qgc_proc=proc)
-                self._qgc_overlay.show_centered()
+            # Полётное окно и arm-listener от QGC не зависят — открываем их
+            # сразу, а QGC ищем в фоне со спиннером, чтобы поиск (до ~5 с) не
+            # морозил интерфейс. Результат обрабатывает _on_qgc_found.
             self._start_arm_listener(joystick_index, calibration)
             self._open_flight_window(joystick_index, calibration, passive=True)
+            self._begin_qgc_search(sdl_config)
             return
         self._open_flight_window(joystick_index, calibration)
+
+    def _begin_qgc_search(self, sdl_config: str) -> None:
+        """Запускает фоновый поиск QGC со спиннером; результат уходит в
+        _on_qgc_found (на GUI-потоке через очередь сигналов)."""
+        self._qgc_search_overlay = QGCSearchOverlay()
+        self._qgc_search_overlay.show_centered()
+        worker = _QgcFindWorker()
+        worker.found.connect(lambda path: self._on_qgc_found(path, sdl_config))
+        self._qgc_search_thread = worker
+        worker.start()
+
+    def _on_qgc_found(self, qgc_path: Path | None, sdl_config: str) -> None:
+        """Завершение фонового поиска: запускает найденный QGC, иначе просит
+        пользователя указать путь вручную."""
+        if self._qgc_search_overlay is not None:
+            self._qgc_search_overlay.close()
+            self._qgc_search_overlay = None
+        proc = None
+        if qgc_path is not None:
+            proc = launch_qgc(sdl_config, qgc_path=qgc_path)
+        if proc is None:
+            proc = self._launch_qgc_with_user_pick(sdl_config)
+        if proc is None:
+            logger.warning('[app] QGC не найден; полётное окно работает без него')
+        else:
+            self._qgc_overlay = QGCLaunchingOverlay(qgc_proc=proc)
+            self._qgc_overlay.show_centered()
 
     def _launch_qgc_with_user_pick(self, sdl_config: str):
         """Открыть диалог выбора файла, сохранить путь и повторить запуск."""
@@ -569,7 +615,7 @@ class App(QMainWindow):
             QMessageBox.warning(self, 'QGroundControl', 'Указанный файл не существует.')
             return None
         save_qgc_path(path)
-        proc = launch_qgc(sdl_config)
+        proc = launch_qgc(sdl_config, qgc_path=path)
         if proc is None:
             QMessageBox.warning(
                 self, 'QGroundControl',
