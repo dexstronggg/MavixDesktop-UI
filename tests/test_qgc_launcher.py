@@ -84,12 +84,39 @@ def test_find_qgc_uses_path_on_linux_and_saves(monkeypatch, tmp_path) -> None:
     assert user_config.load()['qgc_path'] == str(fake)
 
 
+#### Предикаты совпадения ##############################################################
+def test_windows_predicate_matches_only_app_exe() -> None:
+    assert launcher._is_qgc_windows_exe('QGroundControl.exe')
+    assert launcher._is_qgc_windows_exe('qgroundcontrol.exe')
+    # инсталлятор/деинсталлятор/сопутствующее — не QGC
+    assert not launcher._is_qgc_windows_exe('QGroundControl-installer-AMD64.exe')
+    assert not launcher._is_qgc_windows_exe('unins000.exe')
+    assert not launcher._is_qgc_windows_exe('QGroundControl.AppImage')
+
+
+def test_linux_predicate_matches_binary_and_appimage() -> None:
+    assert launcher._is_qgc_linux_file('QGroundControl')
+    assert launcher._is_qgc_linux_file('QGroundControl-x86_64.AppImage')
+    assert launcher._is_qgc_linux_file('QGroundControl-aarch64.AppImage')
+    # инсталлятор-подобное имя без .AppImage — мимо
+    assert not launcher._is_qgc_linux_file('QGroundControl-installer.run')
+    assert not launcher._is_qgc_linux_file('something-else')
+
+
 #### Ограниченный поиск (глубина/дедлайн) ##############################################
+def test_bounded_find_ignores_installer_picks_app(tmp_path) -> None:
+    # рядом лежат инсталлятор и сам QGroundControl.exe — выбрать надо app
+    (tmp_path / 'QGroundControl-installer-AMD64.exe').write_text('x')
+    (tmp_path / 'QGroundControl.exe').write_text('x')
+    found = launcher._bounded_find([tmp_path], launcher._is_qgc_windows_exe, 5.0)
+    assert found == tmp_path / 'QGroundControl.exe'
+
+
 def test_bounded_find_respects_depth(tmp_path) -> None:
     shallow = tmp_path / 'sub'
     shallow.mkdir()
     (shallow / 'QGroundControl').write_text('x')
-    found = launcher._bounded_find([tmp_path], launcher._looks_like_qgc, 5.0)
+    found = launcher._bounded_find([tmp_path], launcher._is_qgc_linux_file, 5.0)
     assert found == shallow / 'QGroundControl'
 
 
@@ -97,7 +124,7 @@ def test_bounded_find_skips_too_deep(tmp_path) -> None:
     deep = tmp_path / 'd1' / 'd2' / 'd3'
     deep.mkdir(parents=True)
     (deep / 'QGroundControl').write_text('x')
-    found = launcher._bounded_find([tmp_path], launcher._looks_like_qgc, 5.0)
+    found = launcher._bounded_find([tmp_path], launcher._is_qgc_linux_file, 5.0)
     assert found is None
 
 
@@ -105,7 +132,7 @@ def test_bounded_find_stops_on_deadline(tmp_path, monkeypatch) -> None:
     (tmp_path / 'sub').mkdir()
     (tmp_path / 'sub' / 'QGroundControl').write_text('x')
     # дедлайн уже истёк → поиск сразу прерывается, ничего не найдено
-    found = launcher._bounded_find([tmp_path], launcher._looks_like_qgc, -1.0)
+    found = launcher._bounded_find([tmp_path], launcher._is_qgc_linux_file, -1.0)
     assert found is None
 
 
