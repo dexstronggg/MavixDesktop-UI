@@ -8,7 +8,6 @@ dnspython==2.8.0
 google-crc32c==1.8.0
 ifaddr==0.2.0
 numpy==2.4.2
-opencv-python==4.13.0.92
 pycparser==3.0
 pydantic==2.12.5
 pydantic_core==2.41.5
