@@ -673,12 +673,20 @@ class App(QMainWindow):
             passive=passive,
         )
         self._flight_window.showFullScreen()
+        self._flight_window.raise_()
+        self._flight_window.activateWindow()
+        # Прячем главное окно на время полёта, чтобы не висело два окна
+        # (главное с выбором джойстика + полётное). Возвращаем в
+        # _handle_flight_closed.
+        self.hide()
         self._start_joystick_guard(joystick_index, calibration, js=js_input)
 
     def _handle_flight_closed(self) -> None:
         self._stop_joystick_guard()
         self._flight_window = None
         self.showNormal()
+        self.raise_()
+        self.activateWindow()
         self.stack.setCurrentWidget(self.drone_view_page)
         self._video.start()
 
