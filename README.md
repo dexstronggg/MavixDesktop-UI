@@ -4,6 +4,19 @@
 дронами **Mavix**. Приём заявок, видео и телеметрия с борта по WebRTC, карта,
 управление дроном (джойстик/QGroundControl), сброс груза.
 
+## Скриншоты
+
+| | |
+|---|---|
+| ![Вход в систему](assets/screenshots/login.png) | ![Заявки на доставку](assets/screenshots/delivery.png) |
+| Окно «Вход в систему» | Окно «Заявки на доставку» |
+| ![Полётное окно](assets/screenshots/flight.png) | ![Полётное окно с картой](assets/screenshots/flight_map.png) |
+| Полётное окно: видео, телеметрия, индикатор ФК | Полётное окно: видео с картой и стиками |
+
+![Калибровка джойстика](assets/screenshots/joystick.png)
+
+Окно «Калибровка джойстика».
+
 ## Стек
 Python 3.12 · PySide6 (Qt6) · aiortc · PyAV · pygame · QtNetwork. Сборка — PyInstaller.
 
