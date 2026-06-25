@@ -26,6 +26,15 @@ class JoystickInput:
         self._arm = False
         self._arm_btn_prev = 0
         self._drop_btn_prev = 0
+        # Защита «вошёл в полёт с управлением уже в активном положении»: пока
+        # с момента создания input не увидели безопасное состояние хотя бы раз
+        # — для арма это DISARM, для сброса груза отпущенная кнопка/тумблер —
+        # is_armed() и is_drop_pressed() подавляются и возвращают False. Иначе
+        # вход в окно полёта с зажатой кнопкой ARM мгновенно армировал бы дрон,
+        # а зажатый сброс — сбросил бы груз. После первого безопасного
+        # состояния обе работают как обычно.
+        self._disarm_seen = False
+        self._drop_safe_seen = False
         # Запоминаем instance_id, чтобы сопоставлять событие device-removed
         # именно с этим joystick (если у пользователя подключено больше
         # одного). Падает в None, если pygame пока не может сообщить.
@@ -73,7 +82,46 @@ class JoystickInput:
         )
 
     def is_armed(self) -> bool:
-        """Возвращает текущее состояние ARM, при необходимости опрашивая переходы кнопки."""
+        """Возвращает текущее состояние ARM, при необходимости опрашивая переходы кнопки.
+
+        Пока с момента создания input не зафиксирован DISARM, всегда отдаёт
+        False — иначе вход в полёт с тумблером, оставленным в ARM, мгновенно
+        армировал бы дрон. После первого DISARM работает обычная логика.
+        """
+        raw = self._read_arm_raw()
+        if not self._disarm_seen:
+            if not raw:
+                self._disarm_seen = True
+            return False
+        return raw
+
+    def is_drop_pressed(self) -> bool:
+        """True на момент НАЖАТИЯ кнопки сброса груза (фронт нажатия).
+
+        Калибровка может задать ``drop_button_index`` (кнопка) или
+        ``drop_axis_index`` (тумблер). Если привязка не задана —
+        возвращает False (сброс недоступен). Для кнопки детектируем фронт
+        0→1 (одно нажатие = один сброс), для оси — переход за порог 0.5.
+
+        Пока с момента создания input не увидели безопасное (отпущенное)
+        состояние, всегда отдаёт False — иначе вход в полёт с уже зажатой
+        кнопкой/тумблером сброса мгновенно сбросил бы груз. После первого
+        отпускания работает обычная фронтовая логика.
+        """
+        cur = self._read_drop_raw()
+        if cur is None:
+            return False
+        if not self._drop_safe_seen:
+            if cur == 0:
+                self._drop_safe_seen = True
+            self._drop_btn_prev = cur
+            return False
+        pressed = cur == 1 and self._drop_btn_prev == 0
+        self._drop_btn_prev = cur
+        return pressed
+
+#### Внутренние помощники ##############################################################
+    def _read_arm_raw(self) -> bool:
         arm_type = self._cal.get('arm_type', 'button')
         if arm_type == 'axis':
             idx = self._cal.get('arm_axis_index', 0)
@@ -83,38 +131,27 @@ class JoystickInput:
                 return False
         return self._poll_arm_button()
 
-    def is_drop_pressed(self) -> bool:
-        """True на момент НАЖАТИЯ кнопки сброса груза (фронт нажатия).
-
-        Калибровка может задать ``drop_button_index`` (кнопка) или
-        ``drop_axis_index`` (тумблер). Если привязка не задана —
-        возвращает False (сброс недоступен). Для кнопки детектируем фронт
-        0→1 (одно нажатие = один сброс), для оси — переход за порог 0.5.
-        """
+    def _read_drop_raw(self) -> int | None:
+        """Сырое состояние органа сброса: 1 — активен, 0 — нет, None — не привязан/ошибка."""
         drop_type = self._cal.get('drop_type')
         if drop_type == 'axis':
             idx = self._cal.get('drop_axis_index')
             if idx is None:
-                return False
+                return None
             try:
-                cur = 1 if self._js.get_axis(idx) > 0.5 else 0
+                return 1 if self._js.get_axis(idx) > 0.5 else 0
             except Exception:
-                return False
-        elif drop_type == 'button':
+                return None
+        if drop_type == 'button':
             idx = self._cal.get('drop_button_index')
             if idx is None:
-                return False
+                return None
             try:
-                cur = self._js.get_button(idx)
+                return self._js.get_button(idx)
             except Exception:
-                return False
-        else:
-            return False
-        pressed = cur == 1 and self._drop_btn_prev == 0
-        self._drop_btn_prev = cur
-        return pressed
+                return None
+        return None
 
-#### Внутренние помощники ##############################################################
     def _read_axis(self, name: str) -> float:
         idx = self._cal.get(f'axis_{name}', 0)
         try:
