@@ -183,7 +183,7 @@ class _BoundedToolTipFilter:
         app.installEventFilter(self._filter)
 
 
-def _run_gui(demo: bool = False) -> int:
+def _run_gui(demo: bool = False, debug: bool = False) -> int:
     from PySide6.QtGui import QFont, QIcon
     from PySide6.QtWidgets import QApplication
 
@@ -237,7 +237,7 @@ def _run_gui(demo: bool = False) -> int:
     tooltip_filter.attach_to(app)
     app._mavix_tooltip_filter = tooltip_filter  # type: ignore[attr-defined]
 
-    window = App(demo=demo)
+    window = App(demo=demo, debug=debug)
     window.show()
     return app.exec()
 
@@ -264,6 +264,9 @@ def main() -> None:
                         help='Запустить UI с мок-данными (без сервера). '
                              'Принимает любые email/пароль, показывает '
                              'тестовых дронов и один мок-джойстик.')
+    parser.add_argument('--debug', action='store_true',
+                        help='Открыть debug-страницу (ручная проверка функций, '
+                             'напр. запуск QGroundControl) минуя логин.')
     parser.add_argument('--email', help='email для входа (первый запуск, headless или GUI)')
     parser.add_argument('--password', help='пароль для входа (первый запуск, только headless)')
     args = parser.parse_args()
@@ -276,7 +279,7 @@ def main() -> None:
             pass
         return
 
-    sys.exit(_run_gui(demo=args.demo))
+    sys.exit(_run_gui(demo=args.demo, debug=args.debug))
 
 
 if __name__ == '__main__':
