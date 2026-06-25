@@ -5,11 +5,20 @@ import os
 import platform
 import shutil
 import subprocess
+import time
+from collections.abc import Callable
 from pathlib import Path
 
 from mavixdesktop.core.logger import logger
 
 _QGC_PATH_FILE = Path.home() / '.config' / 'mavixdesktop' / 'qgc_path.txt'
+
+# Параметры ограниченного поиска. Полный рекурсивный обход дисков на Windows
+# (rglob по C:/ D:/ E:/) подвешивал GUI на минуты, поэтому поиск жёстко
+# ограничен по времени, глубине и числу просмотренных записей.
+_SEARCH_DEADLINE_S = 5.0
+_SEARCH_MAX_DEPTH = 2
+_SEARCH_BUDGET = 20_000
 
 
 #### Сохранённый путь к QGC ############################################################
@@ -43,68 +52,125 @@ def clear_saved_qgc_path() -> None:
 
 
 #### Поиск установленного QGC ##########################################################
-def _looks_like_qgc(name: str) -> bool:
+def _is_qgc_windows_exe(name: str) -> bool:
+    """Совпадает только с установленным QGroundControl.exe.
+
+    Сознательно НЕ startswith('qgroundcontrol'), иначе под совпадение попадает
+    инсталлятор QGroundControl-installer-AMD64.exe (обычно лежит в Downloads) и
+    прочие сопутствующие .exe. Деинсталлятор Inno Setup называется unins000.exe
+    и под точное имя тоже не подходит."""
+    return name.lower() == 'qgroundcontrol.exe'
+
+
+def _is_qgc_linux_file(name: str) -> bool:
+    """Бинарь QGroundControl или его AppImage (QGroundControl-x86_64.AppImage,
+    QGroundControl-aarch64.AppImage и т.п.)."""
     n = name.lower()
-    return n.startswith('qgroundcontrol') or n.startswith('qground_control') or n.startswith('qground-control')
+    return n == 'qgroundcontrol' or (n.startswith('qgroundcontrol') and n.endswith('.appimage'))
 
 
-def _find_qgc_linux() -> Path | None:
+def _bounded_find(
+    roots: list[Path],
+    predicate: Callable[[str], bool],
+    deadline_s: float,
+) -> Path | None:
+    """Итеративный поиск файла по predicate в нескольких корнях.
+
+    Глубина, число просмотренных записей и время жёстко ограничены, поэтому
+    в худшем случае функция возвращается за ~deadline_s секунд независимо от
+    размера диска. В каталоги-симлинки/junction не заходим (только реальные
+    подкаталоги), что исключает зацикливание.
+    """
+    start = time.monotonic()
+    scanned = 0
+    visited: set[str] = set()
+    stack: list[tuple[Path, int]] = [(r, 0) for r in roots]
+    while stack:
+        if time.monotonic() - start > deadline_s:
+            logger.debug('[qgc] поиск прерван по дедлайну (%.1fs)', deadline_s)
+            return None
+        if scanned > _SEARCH_BUDGET:
+            logger.debug('[qgc] поиск прерван по бюджету (%d записей)', scanned)
+            return None
+        current, depth = stack.pop()
+        try:
+            real = os.path.realpath(current)
+        except OSError:
+            continue
+        if real in visited:
+            continue
+        visited.add(real)
+        try:
+            with os.scandir(current) as it:
+                for entry in it:
+                    scanned += 1
+                    try:
+                        if entry.is_file() and predicate(entry.name):
+                            return Path(entry.path)
+                        if (
+                            depth < _SEARCH_MAX_DEPTH
+                            and entry.is_dir(follow_symlinks=False)
+                        ):
+                            stack.append((Path(entry.path), depth + 1))
+                    except OSError:
+                        continue
+        except (NotADirectoryError, PermissionError, OSError):
+            continue
+    return None
+
+
+def _find_qgc_linux(deadline_s: float) -> Path | None:
     for cmd in ('QGroundControl', 'qgroundcontrol'):
         which = shutil.which(cmd)
         if which:
             return Path(which)
     home = Path.home()
-    try:
-        for f in home.rglob('*'):
-            if f.is_file() and _looks_like_qgc(f.name) and f.name.endswith('.AppImage'):
-                return f
-    except PermissionError:
-        pass
-    for sys_dir in (Path('/opt'), Path('/usr/local'), Path('/usr/bin')):
-        try:
-            for f in sys_dir.rglob('*'):
-                if f.is_file() and 'qgroundcontrol' in f.name.lower():
-                    return f
-        except PermissionError:
-            pass
-    return None
+    roots = [
+        home / 'Downloads',
+        home / 'Applications',
+        home / 'Desktop',
+        home / '.local' / 'bin',
+        home / 'Apps',
+        Path('/opt'),
+        Path('/usr/local/bin'),
+        Path('/usr/bin'),
+    ]
+    roots = [r for r in roots if r.is_dir()]
+    return _bounded_find(roots, _is_qgc_linux_file, deadline_s)
 
 
-def _find_qgc_windows() -> Path | None:
+def _find_qgc_windows(deadline_s: float) -> Path | None:
     for cmd in ('QGroundControl', 'QGroundControl.exe'):
         which = shutil.which(cmd)
         if which:
             return Path(which)
-    candidate_roots = [
-        Path.home(),
-        Path(os.environ.get('PROGRAMFILES') or r'C:\Program Files'),
-        Path(os.environ.get('PROGRAMFILES(X86)') or r'C:\Program Files (x86)'),
-        Path(os.environ.get('LOCALAPPDATA') or ''),
-        Path(os.environ.get('APPDATA') or ''),
-        Path(os.environ.get('PROGRAMDATA') or r'C:\ProgramData'),
-        Path('C:/'), Path('D:/'), Path('E:/'),
+
+    home = Path.home()
+    prog = Path(os.environ.get('PROGRAMFILES') or r'C:\Program Files')
+    prog_x86 = Path(os.environ.get('PROGRAMFILES(X86)') or r'C:\Program Files (x86)')
+    local = Path(os.environ.get('LOCALAPPDATA') or '')
+    roots = [
+        prog / 'QGroundControl',
+        prog_x86 / 'QGroundControl',
+        prog,
+        prog_x86,
+        local / 'Programs',
+        home / 'Downloads',
+        home / 'Desktop',
+        home,
     ]
-    seen: set[Path] = set()
-    for root in candidate_roots:
-        if str(root) in ('', '.'):
-            continue
-        try:
-            resolved = root.resolve()
-        except OSError:
-            continue
-        if resolved in seen or not resolved.is_dir():
-            continue
-        seen.add(resolved)
-        try:
-            for f in resolved.rglob('*.exe'):
-                if _looks_like_qgc(f.name):
-                    return f
-        except (PermissionError, OSError):
-            pass
-    return None
+    roots = [r for r in roots if str(r) not in ('', '.') and r.is_dir()]
+    return _bounded_find(roots, _is_qgc_windows_exe, deadline_s)
 
 
-def find_qgc() -> Path | None:
+def find_qgc(deadline_s: float = _SEARCH_DEADLINE_S) -> Path | None:
+    """Возвращает путь к QGroundControl: сначала сохранённый, иначе ищет в системе.
+
+    Авто-найденный путь сразу сохраняется, чтобы при следующем запуске не
+    искать заново. Поиск ограничен по времени (deadline_s) и глубине, поэтому
+    в худшем случае возвращается за ~deadline_s секунд независимо от размера
+    диска (раньше rglob по дискам подвешивал GUI на минуты).
+    """
     saved = get_saved_qgc_path()
     if saved is not None:
         return saved
@@ -113,10 +179,14 @@ def find_qgc() -> Path | None:
         clear_saved_qgc_path()
     system = platform.system()
     if system == 'Linux':
-        return _find_qgc_linux()
-    if system == 'Windows':
-        return _find_qgc_windows()
-    return None
+        found = _find_qgc_linux(deadline_s)
+    elif system == 'Windows':
+        found = _find_qgc_windows(deadline_s)
+    else:
+        return None
+    if found is not None:
+        save_qgc_path(found)
+    return found
 
 
 #### Запуск и контроль процесса ########################################################
@@ -146,8 +216,11 @@ def is_qgc_running() -> bool:
     return False
 
 
-def launch_qgc(sdl_config: str = '') -> subprocess.Popen | None:
-    qgc_path = find_qgc()
+def launch_qgc(sdl_config: str = '', qgc_path: Path | None = None) -> subprocess.Popen | None:
+    """Запускает QGC. Путь можно передать явно (например, найденный в фоне);
+    иначе ищется через find_qgc()."""
+    if qgc_path is None:
+        qgc_path = find_qgc()
     if not qgc_path:
         logger.warning('[qgc] QGroundControl не найден')
         return None
