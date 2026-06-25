@@ -569,8 +569,10 @@ def test_joystick_input_mocked(monkeypatch):
     assert js.is_connected() is True
     pos = js.get_stick_positions()
     assert len(pos) == 4
-    assert js.is_armed() is True            # ось 4 = 0.6 > 0.5
-    js.is_drop_pressed()                    # фронт нажатия кнопки 2
+    # ось 4 = 0.6 (ARM), но при входе latch подавляет арм, пока не увидим
+    # DISARM хотя бы раз — иначе вход в полёт сразу армировал бы дрон
+    assert js.is_armed() is False
+    js.is_drop_pressed()                    # под latch'ом подавлено
     js.is_drop_pressed()
 
     # вариант arm по кнопке + drop по оси
