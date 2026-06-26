@@ -293,8 +293,8 @@ def test_app_demo_handlers(qapp, monkeypatch):
 # ---------------------------------------------------------------- qgc/launcher
 def test_qgc_launcher_pure(monkeypatch, tmp_path):
     from mavixdesktop.qgc import launcher
-    assert launcher._looks_like_qgc('QGroundControl.AppImage') is True
-    assert launcher._looks_like_qgc('notepad.exe') is False
+    assert launcher._is_qgc_linux_file('QGroundControl.AppImage') is True
+    assert launcher._is_qgc_linux_file('notepad.exe') is False
     # сохранение/чтение/очистка пути
     p = tmp_path / 'QGroundControl.AppImage'
     p.write_text('x')
