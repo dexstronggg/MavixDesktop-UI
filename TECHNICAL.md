@@ -14,7 +14,7 @@ MavixDesktop — приложение оператора системы дост
 
 - **Наименование:** MavixDesktop.
 - **Стек:** Python 3.12, PySide6 (Qt), aiortc (WebRTC), pygame (джойстик),
-  PyAV (H.264), QtNetwork (тайлы карты). Сборка — PyInstaller (.exe/.AppImage).
+  PyAV (H.264), QtNetwork (тайлы карты). Сборка — PyInstaller (`.exe` + Linux-бинарь, `--onefile`).
 - **Связь:** REST + WS-сигналинг с MavixServer; WebRTC P2P с MavixBoard;
   локально — QGroundControl (MAVLink-полёт).
 
@@ -54,7 +54,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e .
 python -m mavixdesktop
 ```
-Готовые сборки (.exe/.AppImage) отдаёт сайт MavixWeb; сборка — `StartUp/build/`.
+Готовые сборки (`.exe` + Linux-бинарь) отдаёт сайт MavixWeb; сборка — `StartUp/build/`.
 Настройки (адрес сервера, STUN/TURN, force-relay) — через `.env`/config; адрес
 WS можно переопределить. Регистрация не нужна — логин/пароль выдаёт администратор.
 
