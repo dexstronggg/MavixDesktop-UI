@@ -26,7 +26,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e .
 python -m mavixdesktop
 ```
-Готовые сборки (.exe / .AppImage) можно скачать с сайта MavixWeb. Регистрация не
+Готовые сборки (Windows `.exe` / Linux-бинарь) можно скачать с сайта MavixWeb. Регистрация не
 нужна — логин и пароль оператору выдаёт администратор.
 
 ## Тесты
