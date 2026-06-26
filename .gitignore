@@ -12,7 +12,7 @@ __pycache__/
 # Logs
 src/_logs/
 
-# Build artifacts (PyInstaller + dpkg-deb + AppImage)
+# Build artifacts (PyInstaller --onefile)
 build/
 dist/
 .build-cache/

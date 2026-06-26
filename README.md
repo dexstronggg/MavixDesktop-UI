@@ -65,17 +65,17 @@ TODO below.
 
 ## Сборка дистрибутивов
 
-Готовые `.exe` (Windows) и `.AppImage` (Linux) собираются скриптами в `scripts/`:
+Готовые `.exe` (Windows) и Linux-бинарь собираются скриптами в `scripts/`:
 
 ```bash
-./scripts/build_appimage.sh     # → dist/Mavix-Desktop-x86_64.AppImage
+./scripts/build_binary.sh       # → dist/mavixdesktop-linux  (single-file ELF)
 .\scripts\build_windows.ps1     # → dist\mavixdesktop.exe
 ```
 
 Дистрибутивы раздаёт **MavixServer** по `/api/v1/builds/desktop?build_type=exe|deb`
 из каталога `BUILDS_PREBUILT_DIR` (дефолт `/srv/mavix/prebuilt`). Бинарники
 кладутся туда под строго фиксированными именами: `mavixdesktop.exe` и
-`mavixdesktop-linux` (**AppImage без расширения**). `MavixWeb` бинарники не
+`mavixdesktop-linux` (Linux-бинарь без расширения). `MavixWeb` бинарники не
 раздаёт.
 
 Подробности (требования, troubleshooting) — см.
