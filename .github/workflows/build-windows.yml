@@ -1,0 +1,55 @@
+name: Build Windows EXE
+
+# Запускается ТОЛЬКО вручную (кнопка «Run workflow» во вкладке Actions)
+# или по тегу версии vX.Y. На обычные push НЕ срабатывает — ждать сборку
+# на каждый коммит не нужно.
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Ветка для сборки .exe'
+        default: 'remote_control'
+        required: true
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # при ручном запуске — выбранная ветка; по тегу — сам тег
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+          # opencv нужен только если ветка тянет collect_all('cv2') (delivery);
+          # на remote он в excludes и просто не используется — ставим для надёжности.
+          pip install opencv-python-headless
+
+      - name: Build (.exe)
+        run: python -m PyInstaller mavixdesktop.spec --clean --noconfirm
+
+      - name: Show result
+        run: |
+          Get-ChildItem dist
+          if (-not (Test-Path dist/mavixdesktop.exe)) { throw 'mavixdesktop.exe не собрался' }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mavixdesktop-exe
+          path: dist/mavixdesktop.exe
+          if-no-files-found: error
+          retention-days: 30
