@@ -40,8 +40,6 @@ def _fire(ch: MagicMock, event: str, *args) -> None:
     handler(*args)
 
 
-#### PacketChannel #####################################################################
-
 def test_packet_send_when_closed_is_noop():
     ch = _mock_channel('packet-channel', ready_state='connecting')
     pc = PacketChannel(ch)
@@ -60,7 +58,7 @@ def test_packet_send_swallows_errors():
     ch = _mock_channel('packet-channel', ready_state='open')
     ch.send.side_effect = RuntimeError('boom')
     pc = PacketChannel(ch)
-    pc.send_bytes(b'X')  # no exception
+    pc.send_bytes(b'X')
 
 
 def test_packet_on_message_dispatches_to_handler():
@@ -75,7 +73,7 @@ def test_packet_on_message_dispatches_to_handler():
 def test_packet_on_message_no_handler():
     ch = _mock_channel('packet-channel')
     pc = PacketChannel(ch)
-    _fire(ch, 'message', b'\x01')  # no exception
+    _fire(ch, 'message', b'\x01')
 
 
 def test_packet_ignores_non_bytes_messages():
@@ -94,8 +92,6 @@ def test_packet_handler_errors_swallowed():
     _fire(ch, 'message', b'\x00')
 
 
-#### PingChannel #######################################################################
-
 def test_ping_send_when_closed_is_noop():
     ch = _mock_channel('ping-channel')
     pc = PingChannel(ch)
@@ -108,30 +104,28 @@ def test_ping_send_records_inflight():
     pc = PingChannel(ch)
     pc.send_ping()
     ch.send.assert_called_once()
-    sent_payload = json.loads(ch.send.call_args.args[0].decode('utf-8'))
-    assert sent_payload['nonce'] == 1
-    assert pc.last_rtt_ms is None  # no reply yet
+    sent_payload = ch.send.call_args.args[0]
+    assert isinstance(sent_payload, (bytes, bytearray))
+    assert len(sent_payload) == PingChannel._PAYLOAD_SIZE
+    assert pc.last_rtt_ms is None
 
 
 def test_ping_echo_records_rtt():
     ch = _mock_channel('ping-channel', ready_state='open')
     pc = PingChannel(ch)
     pc.send_ping()
-    nonce = json.loads(ch.send.call_args.args[0].decode('utf-8'))['nonce']
-    echoed = json.dumps({'nonce': nonce, 't': 0}).encode('utf-8')
-    _fire(ch, 'message', echoed)
+    echoed = ch.send.call_args.args[0]
+    _fire(ch, 'message', bytes(echoed))
     assert pc.last_rtt_ms is not None
     assert pc.last_rtt_ms >= 0
 
 
-def test_ping_ignores_unknown_nonce():
+def test_ping_ignores_wrong_size_payload():
     ch = _mock_channel('ping-channel', ready_state='open')
     pc = PingChannel(ch)
-    _fire(ch, 'message', json.dumps({'nonce': 999, 't': 0}).encode('utf-8'))
+    _fire(ch, 'message', b'\x00\x01\x02')
     assert pc.last_rtt_ms is None
 
-
-#### ConfigChannel #####################################################################
 
 def test_config_send_when_closed_is_noop():
     ch = _mock_channel('config-channel')
@@ -192,8 +186,6 @@ def test_config_on_message_skips_invalid_json():
     _fire(ch, 'message', b'not-json{{')
     assert received == []
 
-
-#### DataChannelHub ####################################################################
 
 def test_hub_attach_packet():
     hub = DataChannelHub()

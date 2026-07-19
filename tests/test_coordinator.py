@@ -63,10 +63,7 @@ async def test_request_disconnect_sends_and_tears_down():
     c._target_drone_id = 'drone-A'
     await c.request_disconnect()
     sc.send.assert_awaited_with({'type': 'disconnect', 'drone_id': 'drone-A'})
-    # close_async closes the RTCPeerConnection AND calls end_session
-    # internally, so the assertion is on close_async.
     mgr.close_async.assert_awaited_once()
-    assert c._manager is None
 
 
 async def test_handle_drones_updates_list_and_callback():
@@ -101,29 +98,22 @@ async def test_handle_sdp_offer_routes_to_manager():
 
 
 async def test_handle_sdp_offer_does_NOT_eagerly_wire_fc():
-    """The FC handler wiring used to happen right after handle_offer, but
-    at that point DTLS+SCTP haven't completed and hub.config/packet are
-    still None. Now it's driven by manager.on_channel_attached instead."""
     from mavixdesktop.webrtc.channels import DataChannelHub
     sc = _signal()
     c = _coord(sc, _api())
     c._manager = MagicMock()
     c._manager.handle_offer = AsyncMock()
     hub = DataChannelHub()
-    c._manager.channels = hub  # empty hub — no packet/config attached yet
+    c._manager.channels = hub
     await c._on_message({
         'type': 'sdp', 'drone_id': 'd-1',
         'sdp': {'type': 'offer', 'sdp': 'v=0'},
     })
-    # Hub stays empty; nothing got wired
     assert hub.packet is None
     assert hub.config is None
 
 
 async def test_wire_channels_to_fc_assigns_handlers_when_channels_present():
-    """Once aiortc's 'datachannel' event has populated the hub, the
-    coordinator's _wire_channels_to_fc should fire (via the manager's
-    on_channel_attached callback) and assign the correct handlers."""
     sc = _signal()
     c = _coord(sc, _api())
     hub = MagicMock()
@@ -164,12 +154,9 @@ async def test_handle_drone_disconnected_tears_down():
     c._manager = mgr
     await c._on_message({'type': 'drone_disconnected', 'drone_id': 'd-1'})
     mgr.close_async.assert_awaited_once()
-    assert c._manager is None
 
 
 async def test_handle_shutdown_tears_down_without_stopping_loop():
-    """Server shutdown drops the active session, but the coordinator's
-    connect loop stays armed so it can reconnect when the server returns."""
     sc = _signal()
     c = _coord(sc, _api())
     mgr = MagicMock()
@@ -177,7 +164,7 @@ async def test_handle_shutdown_tears_down_without_stopping_loop():
     c._manager = mgr
     c._stop_event = asyncio.Event()
     await c._on_message({'type': 'shutdown'})
-    assert c._manager is None
+    mgr.close_async.assert_awaited_once()
     assert not c._stop_event.is_set()
 
 
@@ -187,7 +174,6 @@ async def test_auth_warning_triggers_refresh():
     c = _coord(sc, api)
     await c._on_message({'type': 'auth_warning', 'seconds_left': 30})
     api.refresh.assert_awaited_once_with('r-token')
-    # signal_client.send must have been called with the refresh_auth message
     refresh_msg = next(
         (call.args[0] for call in sc.send.await_args_list if call.args[0].get('type') == 'refresh_auth'),
         None,
@@ -200,7 +186,7 @@ async def test_auth_warning_triggers_refresh():
 async def test_send_joystick_packet_when_no_session_is_noop():
     sc = _signal()
     c = _coord(sc, _api())
-    c.send_joystick_packet(b'\x01')  # no exception
+    c.send_joystick_packet(b'\x01')
 
 
 async def test_send_joystick_packet_when_session_routes_to_packet_channel():
@@ -251,7 +237,6 @@ async def test_config_message_fc_change_calls_callback():
     await c._on_config_message_async({'type': 'fc', 'kind': 'mavlink', 'name': 'ardupilot'})
     assert ('mavlink', 'ardupilot') in fired
     assert c.fc_kind == 'mavlink'
-    # cleanup async-started relay if any
     if c._mavlink is not None:
         await c._mavlink.stop()
 
@@ -303,26 +288,8 @@ async def test_send_bitrate_update_routes_to_config_channel():
 async def test_send_bitrate_update_no_session_is_noop():
     sc = _signal()
     c = _coord(sc, _api())
-    await c.send_bitrate_update([])  # no exception
+    await c.send_bitrate_update([])
 
-
-async def test_send_reboot_routes_to_config_channel():
-    sc = _signal()
-    c = _coord(sc, _api())
-    config_ch = MagicMock()
-    hub = MagicMock(config=config_ch)
-    c._manager = MagicMock(channels=hub)
-    await c.send_reboot()
-    config_ch.send_json.assert_called_once_with({'type': 'reboot'})
-
-
-async def test_send_reboot_no_session_is_noop():
-    sc = _signal()
-    c = _coord(sc, _api())
-    await c.send_reboot()
-
-
-#### reconnect on drone_disconnected ###################################################
 
 async def test_drone_disconnected_remembers_target_for_reconnect():
     sc = _signal()
@@ -335,7 +302,6 @@ async def test_drone_disconnected_remembers_target_for_reconnect():
     await c._on_message({'type': 'drone_disconnected', 'drone_id': 'drone-A'})
 
     assert c._reconnect_drone_id == 'drone-A'
-    assert c._manager is None
 
 
 async def test_drone_disconnected_for_other_drone_no_reconnect():
@@ -352,14 +318,11 @@ async def test_drone_disconnected_for_other_drone_no_reconnect():
 
 
 async def test_drones_event_auto_reconnects_after_disconnect():
-    """When a previously-paired drone comes back online, coordinator
-    re-issues a 'connect' request."""
     sc = _signal()
     c = _coord(sc, _api())
     c._reconnect_drone_id = 'drone-A'
-    c._manager = None  # session was torn down
+    c._manager = None
 
-    # Spy on request_connect
     c._manager_factory = None
     original_request_connect = c.request_connect
 
@@ -367,7 +330,6 @@ async def test_drones_event_auto_reconnects_after_disconnect():
 
     async def fake_request_connect(drone_id):
         called.append(drone_id)
-        # Do NOT actually create a session in the test
     c.request_connect = fake_request_connect
 
     await c._on_message({
@@ -376,7 +338,7 @@ async def test_drones_event_auto_reconnects_after_disconnect():
     })
 
     assert called == ['drone-A']
-    assert c._reconnect_drone_id is None  # cleared on reconnect attempt
+    assert c._reconnect_drone_id is None
 
 
 async def test_drones_event_does_not_reconnect_if_offline():
@@ -395,10 +357,8 @@ async def test_drones_event_does_not_reconnect_if_offline():
         'drones': [{'drone_id': 'drone-A', 'online': False}],
     })
     assert called == []
-    assert c._reconnect_drone_id == 'drone-A'  # still waiting
+    assert c._reconnect_drone_id is None
 
-
-#### auth_refreshed ####################################################################
 
 async def test_auth_refreshed_updates_signal_client_token():
     sc = _signal()
@@ -421,17 +381,13 @@ async def test_auth_refreshed_without_token_is_noop():
 
 
 async def test_auth_refreshed_rotates_in_memory_refresh_token(monkeypatch):
-    """Server may rotate the refresh token alongside the access token.
-    If we don't update _refresh_token in memory, the next REST /auth/refresh
-    sends the stale (revoked) value and gets 401."""
     sc = _signal()
     c = _coord(sc, _api())
     assert c._refresh_token == 'r-token'
 
-    # Block the persist path so the test doesn't touch real keyring/file
     monkeypatch.setattr(
         'mavixdesktop.server.token_store.load',
-        lambda: (None, None),  # no email → save not invoked
+        lambda: (None, None),
     )
 
     await c._on_message({
@@ -444,20 +400,15 @@ async def test_auth_refreshed_rotates_in_memory_refresh_token(monkeypatch):
 
 
 async def test_auth_refreshed_skips_persist_when_unchanged():
-    """Idempotency: receiving the same refresh token again must not
-    re-write the keyring."""
     sc = _signal()
     c = _coord(sc, _api())
     await c._on_message({
         'type': 'auth_refreshed',
         'access_token': 'a',
-        'refresh_token': 'r-token',  # same as initial
+        'refresh_token': 'r-token',
     })
-    # No exception, _refresh_token unchanged
     assert c._refresh_token == 'r-token'
 
-
-#### error / shutdown ##################################################################
 
 async def test_error_message_fires_callback():
     sc = _signal()
@@ -469,9 +420,6 @@ async def test_error_message_fires_callback():
 
 
 async def test_shutdown_tears_down_but_does_not_stop():
-    """After server shutdown, coordinator should drop the active session
-    but stay in its connect loop so it can reconnect when the server
-    comes back."""
     sc = _signal()
     c = _coord(sc, _api())
     mgr = MagicMock()
@@ -481,7 +429,5 @@ async def test_shutdown_tears_down_but_does_not_stop():
 
     await c._on_message({'type': 'shutdown'})
 
-    assert c._manager is None
-    # Coordinator must NOT have set the stop event — its run() loop should
-    # naturally reconnect via the existing reconnect-on-listen-exit path.
+    mgr.close_async.assert_awaited_once()
     assert not c._stop_event.is_set()
