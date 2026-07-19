@@ -11,13 +11,10 @@ from mavixdesktop.qgc import launcher
 
 @pytest.fixture(autouse=True)
 def _isolate_config(monkeypatch, tmp_path):
-    """Изолирует конфиг и домашний каталог, чтобы тесты не трогали реальный
-    ~/.config и не зависели от него."""
     monkeypatch.setattr(user_config, 'USER_CONFIG_PATH', tmp_path / 'config.json')
     monkeypatch.setattr(Path, 'home', lambda: tmp_path)
 
 
-#### Хранение пути в config.json #######################################################
 def test_save_and_get_qgc_path_roundtrip(tmp_path) -> None:
     fake = tmp_path / 'QGroundControl'
     fake.write_text('binary')
@@ -30,7 +27,6 @@ def test_get_saved_qgc_path_clears_stale_path(tmp_path) -> None:
     missing = tmp_path / 'gone' / 'QGroundControl'
     user_config.save({'qgc_path': str(missing)})
     assert launcher.get_saved_qgc_path() is None
-    # протухший путь должен быть вычищен из конфига
     assert 'qgc_path' not in user_config.load()
 
 
@@ -50,12 +46,10 @@ def test_migrates_legacy_txt_path(tmp_path) -> None:
     legacy.write_text(str(fake), encoding='utf-8')
 
     assert launcher.get_saved_qgc_path() == fake
-    # после миграции путь лежит в config.json, а txt удалён
     assert user_config.load()['qgc_path'] == str(fake)
     assert not legacy.exists()
 
 
-#### find_qgc ##########################################################################
 def test_find_qgc_returns_none_on_unsupported_platform(monkeypatch) -> None:
     monkeypatch.setattr('mavixdesktop.qgc.launcher.platform.system', lambda: 'FreeBSD')
     assert launcher.find_qgc() is None
@@ -66,9 +60,8 @@ def test_find_qgc_prefers_saved_path(tmp_path, monkeypatch) -> None:
     fake.write_text('binary')
     launcher.save_qgc_path(fake)
     monkeypatch.setattr('mavixdesktop.qgc.launcher.platform.system', lambda: 'Linux')
-    # _find_qgc_linux не должен вызываться — путь уже сохранён
     monkeypatch.setattr('mavixdesktop.qgc.launcher._find_qgc_linux',
-                        lambda *a: pytest.fail('поиск не должен запускаться'))
+                        lambda *a: pytest.fail('search should not run'))
     assert launcher.find_qgc() == fake
 
 
@@ -80,15 +73,12 @@ def test_find_qgc_uses_path_on_linux_and_saves(monkeypatch, tmp_path) -> None:
                         lambda name: str(fake) if name == 'QGroundControl' else None)
     result = launcher.find_qgc()
     assert result == fake
-    # авто-найденный путь должен сразу попасть в конфиг
     assert user_config.load()['qgc_path'] == str(fake)
 
 
-#### Предикаты совпадения ##############################################################
 def test_windows_predicate_matches_only_app_exe() -> None:
     assert launcher._is_qgc_windows_exe('QGroundControl.exe')
     assert launcher._is_qgc_windows_exe('qgroundcontrol.exe')
-    # инсталлятор/деинсталлятор/сопутствующее — не QGC
     assert not launcher._is_qgc_windows_exe('QGroundControl-installer-AMD64.exe')
     assert not launcher._is_qgc_windows_exe('unins000.exe')
     assert not launcher._is_qgc_windows_exe('QGroundControl.AppImage')
@@ -98,14 +88,11 @@ def test_linux_predicate_matches_binary_and_appimage() -> None:
     assert launcher._is_qgc_linux_file('QGroundControl')
     assert launcher._is_qgc_linux_file('QGroundControl-x86_64.AppImage')
     assert launcher._is_qgc_linux_file('QGroundControl-aarch64.AppImage')
-    # инсталлятор-подобное имя без .AppImage — мимо
     assert not launcher._is_qgc_linux_file('QGroundControl-installer.run')
     assert not launcher._is_qgc_linux_file('something-else')
 
 
-#### Ограниченный поиск (глубина/дедлайн) ##############################################
 def test_bounded_find_ignores_installer_picks_app(tmp_path) -> None:
-    # рядом лежат инсталлятор и сам QGroundControl.exe — выбрать надо app
     (tmp_path / 'QGroundControl-installer-AMD64.exe').write_text('x')
     (tmp_path / 'QGroundControl.exe').write_text('x')
     found = launcher._bounded_find([tmp_path], launcher._is_qgc_windows_exe, 5.0)
@@ -131,12 +118,10 @@ def test_bounded_find_skips_too_deep(tmp_path) -> None:
 def test_bounded_find_stops_on_deadline(tmp_path, monkeypatch) -> None:
     (tmp_path / 'sub').mkdir()
     (tmp_path / 'sub' / 'QGroundControl').write_text('x')
-    # дедлайн уже истёк → поиск сразу прерывается, ничего не найдено
     found = launcher._bounded_find([tmp_path], launcher._is_qgc_linux_file, -1.0)
     assert found is None
 
 
-#### is_qgc_running / launch_qgc #######################################################
 def test_is_qgc_running_true_when_shm_attached(monkeypatch) -> None:
     fake_shm = MagicMock()
     fake_shm.attach.return_value = True
@@ -161,9 +146,8 @@ def test_launch_qgc_uses_explicit_path(monkeypatch, tmp_path) -> None:
     fake = tmp_path / 'qgc'
     fake.write_text('#!/bin/sh\necho ok\n')
     fake.chmod(0o755)
-    # явный путь → find_qgc вызываться не должен
     monkeypatch.setattr('mavixdesktop.qgc.launcher.find_qgc',
-                        lambda *a: pytest.fail('find_qgc не должен вызываться'))
+                        lambda *a: pytest.fail('find_qgc should not be called'))
 
     popen_seen = {}
 

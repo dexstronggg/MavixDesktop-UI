@@ -1,13 +1,4 @@
-"""Обёртки над aiortc RTCDataChannel — по одной на label.
-
-В отличие от дрона (который создаёт каналы), GCS получает их уже открытыми
-через pc.on('datachannel'). Hub идентифицирует их по .label и предоставляет
-единообразный API, симметричный channels.py из MavixBoard:
-
-  packet  — бинарные FC-пакеты (двунаправленный мост к MavlinkRelay / CRSF)
-  ping    — round-trip echo для измерения RTT
-  config  — JSON: FC info, camera config, calibrate
-"""
+"""Wrappers around aiortc RTCDataChannel — one per label."""
 from __future__ import annotations
 
 import json
@@ -25,7 +16,6 @@ PacketHandler = Callable[[bytes], None]
 JsonHandler = Callable[[dict | list], None]
 
 
-#### Обёртки data-каналов ##############################################################
 class _BaseChannel:
     LABEL: str = ''
 
@@ -83,7 +73,6 @@ class PacketChannel(_BaseChannel):
 class PingChannel(_BaseChannel):
     LABEL = 'ping-channel'
 
-    # 8 байт: big-endian double (monotonic-секунды).
     _PAYLOAD_FMT = '!d'
     _PAYLOAD_SIZE = struct.calcsize(_PAYLOAD_FMT)
 
@@ -96,9 +85,6 @@ class PingChannel(_BaseChannel):
         return self._last_rtt_ms
 
     def send_ping(self) -> None:
-        """Отправляет текущий monotonic-таймстамп как 8 сырых байт; плата
-        эхом возвращает тот же payload. Без состояния — нет inflight-словаря,
-        нет nonce — таймстамп путешествует прямо в пакете."""
         if not self.is_open:
             return
         payload = struct.pack(self._PAYLOAD_FMT, time.monotonic())
@@ -180,31 +166,24 @@ _LABEL_TO_CLASS = {
 }
 
 
-#### Реестр data-каналов ###############################################################
 class DataChannelHub:
-    """Владеет максимум одним каналом каждого известного label. По мере того
-    как дрон открывает каналы в WebRTC-сессии, менеджер вызывает .attach(),
-    чтобы зарегистрировать их по label."""
-
     def __init__(self) -> None:
         self.packet: PacketChannel | None = None
         self.ping: PingChannel | None = None
         self.config: ConfigChannel | None = None
 
     def attach(self, channel: RTCDataChannel) -> bool:
-        """Оборачивает только что открытый канал по его label. Возвращает True,
-        если label распознан."""
         cls = _LABEL_TO_CLASS.get(channel.label)
         if cls is None:
             logger.warning('[hub] неизвестный label data-канала: %s', channel.label)
             return False
         wrapped = cls(channel)
         if cls is PacketChannel:
-            self.packet = wrapped  # type: ignore[assignment]
+            self.packet = wrapped
         elif cls is PingChannel:
-            self.ping = wrapped  # type: ignore[assignment]
+            self.ping = wrapped
         elif cls is ConfigChannel:
-            self.config = wrapped  # type: ignore[assignment]
+            self.config = wrapped
         return True
 
     def close(self) -> None:

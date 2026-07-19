@@ -17,7 +17,6 @@ def isolated_config_dir(tmp_path, monkeypatch):
 
 @pytest.fixture
 def no_keyring(monkeypatch):
-    """Force the fallback file path by making keyring import fail."""
     monkeypatch.setattr('mavixdesktop.server.token_store._keyring', lambda: None)
 
 
@@ -86,17 +85,11 @@ def test_save_falls_back_to_file_if_keyring_raises(isolated_config_dir, monkeypa
     kr.set_password.side_effect = RuntimeError('locked')
     monkeypatch.setattr('mavixdesktop.server.token_store._keyring', lambda: kr)
     token_store.save('a@b.c', 'r-xyz')
-    # And reading back without keyring (because we fell back) should still work
     monkeypatch.setattr('mavixdesktop.server.token_store._keyring', lambda: None)
     email, refresh = token_store.load()
     assert email == 'a@b.c'
     assert refresh == 'r-xyz'
 
-
-#### file-mode tests ###################################################################
-# The refresh token is a long-lived credential; the fallback file must
-# be owner-only readable. These tests guard against regressions in the
-# permission-setting logic.
 
 def test_fallback_file_has_mode_0600(isolated_config_dir, no_keyring):
     token_store.save('a@b.c', 'r-xyz')
@@ -106,7 +99,6 @@ def test_fallback_file_has_mode_0600(isolated_config_dir, no_keyring):
 
 
 def test_fallback_overwrites_loose_permissions(isolated_config_dir, no_keyring):
-    """A pre-existing file at 0644 must be tightened on the next save."""
     p = isolated_config_dir / 'tokens.json'
     p.write_text('{}')
     os.chmod(p, 0o644)

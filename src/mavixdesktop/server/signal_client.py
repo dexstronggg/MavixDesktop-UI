@@ -13,14 +13,7 @@ if TYPE_CHECKING:
     from websockets.asyncio.client import ClientConnection
 
 
-#### Сигнальный WebSocket-клиент #######################################################
 class SignalClient:
-    """Тонкий WebSocket-клиент для /ws/gcs.
-
-    Авторизация идёт через первое сообщение {type:auth, token:<access_jwt>}
-    после accept (паттерн сервера, а не кастомный заголовок).
-    """
-
     def __init__(self, url: str, access_token: str) -> None:
         self._url = url
         self._access_token = access_token
@@ -31,7 +24,6 @@ class SignalClient:
         return self._conn is not None
 
     def update_access_token(self, new_token: str) -> None:
-        """Используется координатором после round-trip refresh_auth."""
         self._access_token = new_token
 
     async def connect(self) -> bool:
@@ -59,7 +51,6 @@ class SignalClient:
         finally:
             self._conn = None
 
-#### Обмен сообщениями #################################################################
     async def send(self, payload: dict) -> None:
         if self._conn is None:
             raise RuntimeError('signal-клиент не подключён')

@@ -1,9 +1,4 @@
-"""Точка входа: python -m mavixdesktop.
-
-По умолчанию открывает PySide6 UI (страница логина → список дронов → видео).
-Флаг --headless оставляет legacy-режим без GUI (авторизация + цикл
-координатора), удобный для длительного прогона против живого сервера.
-"""
+"""Entry point: python -m mavixdesktop."""
 from __future__ import annotations
 
 import argparse
@@ -26,7 +21,6 @@ def _init_dirs() -> None:
     setup_file_logging()
 
 
-#### Headless-режим ####################################################################
 async def _authenticate_headless(api: ApiSession, email: str | None, password: str | None) -> tuple[str, str]:
     stored_email, stored_refresh = token_store.load()
     if stored_refresh:
@@ -71,13 +65,7 @@ async def _run_headless(email: str | None, password: str | None) -> None:
         await api.close()
 
 
-#### GUI-режим #########################################################################
 def _server_reachable(timeout_sec: float = 2.0) -> bool:
-    """Быстрый sync-пинг сервера на /api/v1/health. True = жив, иначе False.
-
-    Используется только как сигнал «включать ли авто-демо-режим» при
-    старте GUI — на интерактивный логин не влияет.
-    """
     import urllib.error
     import urllib.request
     url = settings.http_url.rstrip('/') + '/api/v1/health'
@@ -90,12 +78,6 @@ def _server_reachable(timeout_sec: float = 2.0) -> bool:
 
 
 class _PointingCursorFilter:
-    """Event-filter, ставит PointingHandCursor на каждый QPushButton при
-    его первом polish-событии. Так не нужно вручную дёргать setCursor
-    на каждом сайте создания кнопки — в том числе на сторонних виджетах
-    из библиотек.
-    """
-
     def __init__(self) -> None:
         from PySide6.QtCore import QObject
         from PySide6.QtWidgets import QPushButton
@@ -114,15 +96,6 @@ class _PointingCursorFilter:
 
 
 class _BoundedToolTipFilter:
-    """Event-filter, удерживающий QToolTip внутри application window.
-
-    Qt позиционирует тултип относительно курсора — если виджет с длинной
-    подсказкой стоит у нижнего края окна (как кнопка калибровки в
-    SettingsBar), тултип уходит ПОД нижнюю границу и обрезается. Здесь
-    перехватываем QEvent.ToolTip и при необходимости сами вызываем
-    QToolTip.showText с поднятой позицией.
-    """
-
     def __init__(self) -> None:
         from PySide6.QtCore import QEvent, QObject, QPoint
         from PySide6.QtWidgets import QToolTip, QWidget
@@ -139,10 +112,6 @@ class _BoundedToolTipFilter:
                 win = obj.window()
                 if win is None:
                     return False
-                # globalPos() / globalPosition() — координаты курсора при
-                # ToolTip-событии. Для PySide6 берём globalPos (deprecated
-                # в Qt6 но всё ещё работает) — globalPosition() возвращает
-                # QPointF, дальше требует .toPoint().
                 try:
                     cursor_global = event.globalPos()
                 except AttributeError:
@@ -150,21 +119,15 @@ class _BoundedToolTipFilter:
 
                 win_top_left = win.mapToGlobal(QPoint(0, 0))
                 win_bottom_y = win_top_left.y() + win.height()
-                # Эмпирическая высота однострочного тултипа в Qt ≈ 28-30 px.
-                # Для двухстрочных будет ~50 — берём с запасом 56 чтобы
-                # не упереться в нижнюю границу при многострочном тексте.
                 tooltip_h = 56
-                # Тултип отрисовывается чуть ниже курсора (~24 px смещение).
                 tooltip_bottom_if_default = cursor_global.y() + 24 + tooltip_h
                 if tooltip_bottom_if_default <= win_bottom_y:
-                    return False  # Помещается стандартно — не мешаем Qt
-                # Не помещается: ставим тултип НАД курсором так, чтобы его
-                # нижний край пришёлся на ~16 px выше курсора.
+                    return False
                 adjusted_y = cursor_global.y() - tooltip_h - 8
                 adjusted_y = max(adjusted_y, win_top_left.y() + 8)
                 adjusted = QPoint(cursor_global.x(), adjusted_y)
                 QToolTip.showText(adjusted, tip, obj)
-                return True  # Подавляем дефолтное позиционирование Qt
+                return True
 
         self._filter = _Filter()
 
@@ -184,9 +147,6 @@ def _run_gui(demo: bool = False) -> int:
         enable_debug_logging()
         logger.info('[bootstrap] DEBUG-режим включён — старт на debug-странице')
 
-    # Авто-фолбэк: если пользователь не указал --demo, но сервер не
-    # отвечает на /health за 2 с — поднимаем демо-режим автоматически,
-    # чтобы можно было хотя бы посмотреть/потрогать UI.
     if not demo and not settings.debug and not _server_reachable():
         logger.warning(
             '[bootstrap] сигнальный сервер недоступен, переключаемся в демо-режим'
@@ -194,58 +154,38 @@ def _run_gui(demo: bool = False) -> int:
         demo = True
 
     app = QApplication(sys.argv)
-    # Иконка приложения для title-bar, Alt-Tab, taskbar. Генерируем M-логотип
-    # в нескольких размерах через mavix_logo_pixmap — Qt сам выбирает лучший
-    # для каждого контекста. Без этого Windows показывает дефолтный «pythonw»
-    # иконку (excel-подобную), что сразу выдаёт «это скрипт, а не продукт».
     app_icon = QIcon()
     for size in (16, 24, 32, 48, 64, 96, 128, 256):
         app_icon.addPixmap(mavix_logo_pixmap(size))
     app.setWindowIcon(app_icon)
-    # Fusion — кроссплатформенный стиль Qt, который корректно отрисовывает
-    # border-radius/padding из QSS на всех ОС (нативные стили Windows /
-    # macOS их часто игнорируют, и кнопки оставались бы прямоугольными).
     app.setStyle('Fusion')
-    # Inter — основной интерфейсный шрифт, как на сайте Mavix. Если он
-    # не установлен в системе, Qt автоматически подставит следующий
-    # из цепочки fallback (через FONT_FAMILY в QSS-правилах).
     font = QFont('Inter')
     font.setStyleStrategy(QFont.PreferAntialias)
     font.setPixelSize(theme.FONT_SIZE_BASE)
     app.setFont(font)
-    # Глобальные QSS-правила: тёмная палитра + cyan-акцент,
-    # выровнено со стилем сайта.
     app.setStyleSheet(theme.QSS_GLOBAL)
-    # Глобальный pointing-hand cursor для всех QPushButton.
-    # QSS-свойство cursor Qt не поддерживает, ставим через
-    # event-filter на Polish (срабатывает один раз для каждой
-    # кнопки до первого show).
     cursor_filter = _PointingCursorFilter()
     cursor_filter.attach_to(app)
-    app._mavix_cursor_filter = cursor_filter  # type: ignore[attr-defined]
-    # Удержание тултипов внутри окна — у виджетов в нижней части
-    # SettingsBar/flight-окна Qt по умолчанию ставил тултип под
-    # курсором, и длинные подписи уходили за нижнюю границу.
+    app._mavix_cursor_filter = cursor_filter
     tooltip_filter = _BoundedToolTipFilter()
     tooltip_filter.attach_to(app)
-    app._mavix_tooltip_filter = tooltip_filter  # type: ignore[attr-defined]
+    app._mavix_tooltip_filter = tooltip_filter
 
     window = App(demo=demo, debug=settings.debug)
     window.show()
     return app.exec()
 
 
-#### Точка входа #######################################################################
 def main() -> None:
     parser = argparse.ArgumentParser(prog='mavixdesktop', description='Mavix GCS')
     parser.add_argument('--headless', action='store_true',
-                        help='Запустить координатор без Qt UI')
+                        help='Run coordinator without Qt UI')
     parser.add_argument('--demo', action='store_true',
-                        help='Запустить UI с мок-данными (без сервера). '
-                             'Принимает любые email/пароль, показывает '
-                             'тестовых дронов и один мок-джойстик.')
-    parser.add_argument('--email', help='email для входа (первый запуск, headless или GUI)')
-    parser.add_argument('--password', help='пароль для входа (первый запуск, только headless)')
+                        help='Run UI with mock data (no server). '
+                             'Accepts any email/password, shows '
+                             'test drones and a mock joystick.')
+    parser.add_argument('--email', help='email for login (first run, headless or GUI)')
+    parser.add_argument('--password', help='password for login (first run, headless only)')
     args = parser.parse_args()
 
     _init_dirs()

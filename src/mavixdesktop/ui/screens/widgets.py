@@ -8,8 +8,6 @@ from mavixdesktop.ui.style import theme
 
 
 class StickWidget(QWidget):
-    """Виджет-стик: рисует квадрат с точкой текущего положения стика."""
-
     def __init__(self, label: str = '', parent: QWidget | None = None,
                  bg_alpha: int = 255, label_font_px: int = 9) -> None:
         super().__init__(parent)

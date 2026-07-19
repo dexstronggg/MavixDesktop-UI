@@ -1,4 +1,4 @@
-"""Экран настройки джойстиков: список, калибровка и превью стиков."""
+"""Joystick setup screen: list, calibration, and stick preview."""
 from __future__ import annotations
 
 import json
@@ -42,10 +42,6 @@ from mavixdesktop.ui.screens.widgets import StickWidget
 from mavixdesktop.ui.style import theme
 
 
-#### Алиасы совместимости ##############################################################
-# Алиасы совместимости, чтобы остальная часть этого 800-строчного legacy-
-# экрана продолжала работать без изменений. Реальные порты этих символов
-# живут в mavixdesktop.joystick.
 class JoystickManager:
     @staticmethod
     def list_joysticks() -> list[str]:
@@ -81,50 +77,29 @@ _STEP_ARM       = 9
 _STEP_DONE      = 10
 
 _STEPS = [
-    'Шаг 1/10: Установите все стики в ЦЕНТР → Далее',
-    'Шаг 2/10: ТЯГА — потяните вверх (МАКСИМУМ) → Далее',
-    'Шаг 3/10: ТЯГА — потяните вниз (МИНИМУМ) → Далее',
-    'Шаг 4/10: РЫСКАНИЕ — поверните вправо (МАКСИМУМ) → Далее',
-    'Шаг 5/10: РЫСКАНИЕ — поверните влево (МИНИМУМ) → Далее',
-    'Шаг 6/10: ТАНГАЖ — наклоните стик вперёд (МАКСИМУМ) → Далее',
-    'Шаг 7/10: ТАНГАЖ — наклоните стик назад (МИНИМУМ) → Далее',
-    'Шаг 8/10: КРЕН — наклоните стик вправо (МАКСИМУМ) → Далее',
-    'Шаг 9/10: КРЕН — наклоните стик влево (МИНИМУМ) → Далее',
-    'Шаг 10/10: Нажмите кнопку ARM/DISARM на контроллере',
-    'Калибровка завершена!\n\nНажмите «Готово» для сохранения.',
+    'Step 1/10: Set all sticks to CENTER -> Next',
+    'Step 2/10: THROTTLE - pull up (MAXIMUM) -> Next',
+    'Step 3/10: THROTTLE - pull down (MINIMUM) -> Next',
+    'Step 4/10: YAW - turn right (MAXIMUM) -> Next',
+    'Step 5/10: YAW - turn left (MINIMUM) -> Next',
+    'Step 6/10: PITCH - tilt forward (MAXIMUM) -> Next',
+    'Step 7/10: PITCH - tilt backward (MINIMUM) -> Next',
+    'Step 8/10: ROLL - tilt right (MAXIMUM) -> Next',
+    'Step 9/10: ROLL - tilt left (MINIMUM) -> Next',
+    'Step 10/10: Press the ARM/DISARM button on the controller',
+    'Calibration complete!\n\nPress "Done" to save.',
 ]
 
 
-#### Прогресс-индикатор калибровки #####################################################
 class _StepProgress(QWidget):
-    """Точечный progress-индикатор шагов калибровки.
-
-    Раньше прогресс был только в тексте инструкции («Шаг 3/10: …»),
-    оператор не видел сколько ещё осталось без чтения. Этот виджет —
-    10 точек одного размера в ряд, все три состояния визуально
-    различаются И каждое читается на тёмном фоне диалога (BG #07090E):
-
-    * **past** — сплошная заливка ACCENT (cyan, явный «сделано»);
-    * **current** — сплошная ACCENT + полупрозрачное cyan-halo вокруг
-      («вы здесь», выделяется среди прошлых);
-    * **future** — outline-only TEXT_MUTED (#8893A4) толщиной 1.5px,
-      прозрачная заливка — видимый муто́н на тёмном, ясно «ещё не».
-
-    Прежняя реализация использовала BORDER_HOVER (#2A3340) для future —
-    почти неотличимо от BG, оператор не видел сколько шагов осталось.
-
-    Высота виджета учитывает halo вокруг current (+6px к диаметру dots).
-    """
-
     _TOTAL = 10
     _DOT_SIZE = 8
     _DOT_GAP = 12
-    _HALO_PAD = 4  # сколько px halo выступает за пределы dot со всех сторон
+    _HALO_PAD = 4
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._current = 0
-        # Высота: dot + halo сверху + halo снизу + небольшой запас.
         self.setFixedHeight(self._DOT_SIZE + 2 * self._HALO_PAD + 2)
 
     def set_current(self, step: int) -> None:
@@ -138,7 +113,7 @@ class _StepProgress(QWidget):
         p.setRenderHint(QPainter.Antialiasing, True)
         accent = QColor(theme.ACCENT)
         halo = QColor(accent)
-        halo.setAlpha(72)  # ~28% — заметно, но не перекрывает соседние
+        halo.setAlpha(72)
         future = QColor(theme.TEXT_MUTED)
         d = self._DOT_SIZE
         gap = self._DOT_GAP
@@ -149,24 +124,16 @@ class _StepProgress(QWidget):
         done = self._current >= self._TOTAL
         for i in range(self._TOTAL):
             if done or i < self._current:
-                # past: сплошная ACCENT
                 p.setPen(Qt.NoPen)
                 p.setBrush(accent)
                 p.drawEllipse(x, y, d, d)
             elif i == self._current:
-                # current: halo (бОльший прозрачный круг) + solid dot поверх
                 p.setPen(Qt.NoPen)
                 p.setBrush(halo)
                 p.drawEllipse(x - pad, y - pad, d + 2 * pad, d + 2 * pad)
                 p.setBrush(accent)
                 p.drawEllipse(x, y, d, d)
             else:
-                # future: сплошная заливка TEXT_MUTED (#8893A4) — светлый
-                # муто́н на тёмном фоне BG (#07090E), явно читается. По
-                # цвету отличается от cyan past/current dot'ов, поэтому
-                # все три состояния остаются визуально различимы.
-                # Прежняя реализация (outline-only с 1.5px stroke) терялась
-                # на BG из-за тонкой линии и малого диаметра 8px.
                 p.setPen(Qt.NoPen)
                 p.setBrush(future)
                 p.drawEllipse(x, y, d, d)
@@ -174,12 +141,7 @@ class _StepProgress(QWidget):
         p.end()
 
 
-#### Карточки джойстиков ###############################################################
 _CARD_W  = 220
-# 14 (top margin) + 56 (icon) + 6 + 34 (имя — 2 строки) + 6 + 14 (статус)
-# + 6 + 52 (actions с иконкой + подписью) + 6 (bottom margin) ≈ 194.
-# Без addStretch внутри: actions упираются под статус, hover-полоса
-# AnimatedCard оказывается прямо под кнопками действий.
 _CARD_H  = 200
 _ICON_SZ = 56
 _GAP     = 20
@@ -245,7 +207,6 @@ class JoystickCard(AnimatedCard):
     def __init__(self, index: int, name: str, calibrated: bool) -> None:
         super().__init__()
         self._index = index
-        # держим ссылку, чтобы popup не собрался GC пока он открыт
         self._active_menu = None
 
         self.setFixedSize(_CARD_W, _CARD_H)
@@ -270,26 +231,17 @@ class JoystickCard(AnimatedCard):
 
         lay = QVBoxLayout(self)
         lay.setSpacing(6)
-        # Нижний margin 6px — на одну линию hover-полосы AnimatedCard
-        # (она 3px и рисуется у низа карточки), чтобы полоса оказалась
-        # прямо под рядом кнопок действий, без воздуха выше.
         lay.setContentsMargins(14, 14, 14, 6)
 
         icon_lbl = QLabel()
         icon_lbl.setAlignment(Qt.AlignCenter)
         icon_lbl.setPixmap(svg_pixmap('joystick.svg', _ICON_SZ, color=theme.ACCENT))
-        # Без явного transparent QSS-наследует QWidget { background: BG },
-        # и иконка отрисовывается как тёмный квадрат на чуть более
-        # светлом фоне карточки.
         icon_lbl.setStyleSheet('background: transparent; border: none;')
         icon_lbl.setAttribute(Qt.WA_TranslucentBackground, True)
 
         name_lbl = QLabel(name)
         name_lbl.setAlignment(Qt.AlignCenter)
         name_lbl.setWordWrap(True)
-        # Фиксируем высоту под две строки — без этого карточка
-        # «дышит» когда у одного контроллера имя в одну строку, а
-        # у соседнего в две: расположение actions_row съезжает.
         name_lbl.setFixedHeight(34)
         name_lbl.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY}; font-size: {theme.FONT_SIZE_SM}px;'
@@ -320,7 +272,6 @@ class JoystickCard(AnimatedCard):
         lay.addWidget(name_lbl)
         lay.addWidget(status_row)
 
-        # --- Явные кнопки действий вместо ...-меню (под статусом) ---
         actions_row = QWidget()
         actions_row.setStyleSheet('background: transparent; border: none;')
         ar = QHBoxLayout(actions_row)
@@ -329,11 +280,6 @@ class JoystickCard(AnimatedCard):
 
         self._action_buttons: list[QToolButton] = []
         for ic, label, sub in [
-            # «Калибровать» (11 ch) выходило за 60px ширины кнопки и
-            # ellipsis'илось до «Кали…вать». Существительное-форма
-            # «Калибровка» (10 ch) короче и хорошо сочетается с
-            # глагольными «Загрузить»/«Сохранить» — для оператора это
-            # читается как «действие/режим калибровки».
             ('tune.svg',   'Калибровка', 'calibrate'),
             ('upload.svg', 'Загрузить',  'file'),
             ('save.svg',   'Сохранить',  'file_save'),
@@ -342,27 +288,17 @@ class JoystickCard(AnimatedCard):
             b.setIcon(QIcon(svg_pixmap(ic, 18, color=theme.TEXT_PRIMARY)))
             b.setIconSize(QSize(18, 18))
             b.setText(label)
-            # ToolButtonTextUnderIcon — иконка сверху, подпись снизу;
-            # подпись делает действия читаемыми без tooltip'а (раньше
-            # значки были «cryptic для первого раза»).
             b.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
             b.setFixedHeight(52)
             b.setCursor(Qt.PointingHandCursor)
             b.setFocusPolicy(Qt.NoFocus)
-            b.setAutoRaise(True)  # Без фона/рамки кроме :hover/:pressed
-            # Локальный QSS: text размером SM-2, hover/pressed как
-            # QSS_BUTTON_ICON. Берём ACCENT_SUBTLE на hover, единым
-            # языком с остальными ghost-кнопками панели.
+            b.setAutoRaise(True)
             b.setStyleSheet(f"""
                 QToolButton {{
                     background: transparent;
                     border: none;
                     border-radius: {theme.RADIUS_MD}px;
                     color: {theme.TEXT_MUTED};
-                    /* 11px (SM-3) вместо 12px (SM-2): «Калибровка» 10ch
-                       при 12px ~65px не влезала в 60px ширины кнопки.
-                       На 11px все три подписи помещаются с запасом, без
-                       расширения карточки и без потери читаемости. */
                     font-size: {theme.FONT_SIZE_SM - 3}px;
                     padding: 4px 0;
                 }}
@@ -386,8 +322,6 @@ class JoystickCard(AnimatedCard):
         self._animate_bar(1000 if hovered else 0)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        # Клики по кнопкам действий перехватывают сами QPushButton —
-        # сюда долетают только клики по «телу» карточки.
         if event.button() == Qt.LeftButton:
             self.clicked.emit(self._index)
         super().mousePressEvent(event)
@@ -399,10 +333,7 @@ class _JoystickGrid(CardGrid):
     GAP    = _GAP
 
 
-#### Превью стиков и оверлеи ###########################################################
 class _StickPreviewDialog(QDialog):
-    """Всплывающее окно — показывает позиции стиков в реальном времени."""
-
     def __init__(self, joystick_index: int, joystick_name: str,
                  calibration: dict, parent: QWidget | None = None,
                  on_takeoff: Callable[[int, dict], None] | None = None) -> None:
@@ -498,12 +429,6 @@ class _StickPreviewDialog(QDialog):
 
 
 class QGCSearchOverlay(QDialog):
-    """Статус «Ищу QGroundControl…» на время фонового поиска исполняемого файла.
-
-    Сам ничего не ищет — поиск идёт в отдельном потоке, а вызывающий закрывает
-    оверлей через close(), когда поток вернул результат. Анимирует многоточие,
-    чтобы было видно, что приложение не зависло."""
-
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowFlags(
@@ -554,8 +479,6 @@ class QGCSearchOverlay(QDialog):
 
 
 class QGCLaunchingOverlay(QDialog):
-    """Статус «Открываю QGroundControl…»; закрывается когда окно QGC появилось."""
-
     def __init__(self, qgc_proc: subprocess.Popen,
                  parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -642,7 +565,6 @@ class QGCLaunchingOverlay(QDialog):
         super().closeEvent(event)
 
 
-#### Экран настройки джойстиков ########################################################
 class JoystickSetupPage(QWidget):
     DEMO_JOYSTICK_NAME = 'Демо-контроллер (Mock)'
 
@@ -650,13 +572,7 @@ class JoystickSetupPage(QWidget):
                  on_takeoff: Callable[[int, dict], None] | None = None,
                  demo: bool = False) -> None:
         super().__init__()
-        # Sentinel None заставляет самый первый _refresh заполнить UI даже
-        # при нуле джойстиков (иначе сравнение с пустым списком дало бы
-        # равенство и пропустило бы путь перестроения).
         self._joystick_names: list[str] | None = None
-        # Статусы калибровки устройств — часть «снимка» для _refresh, чтобы
-        # карточка обновлялась не только при подключении/отключении джойстика,
-        # но и после калибровки или удаления файла конфигурации.
         self._joystick_cal_states: list[bool] = []
         self._on_takeoff = on_takeoff
         self._fc_type: str = 'none'
@@ -687,10 +603,6 @@ class JoystickSetupPage(QWidget):
         root.addWidget(scroll, 1)
         root.addWidget(self._empty, 1)
 
-        # Пересканируем pygame-джойстики каждые 3 с, пока страница видна,
-        # чтобы подключённый контроллер появился без поиска кнопки
-        # пользователем. _refresh идемпотентен (пропускает перестроение,
-        # если список устройств идентичен), так что polling дешёвый.
         self._auto_refresh_timer = QTimer(self)
         self._auto_refresh_timer.setInterval(3000)
         self._auto_refresh_timer.timeout.connect(self._refresh)
@@ -706,14 +618,9 @@ class JoystickSetupPage(QWidget):
         self._auto_refresh_timer.stop()
 
     def __build_top_bar(self, on_back: Callable[[], None]) -> QWidget:
-        # Локальные хелперы вынесены в drone_list_page; импортируем
-        # их здесь, чтобы шапка двух кабинетных экранов жила в одном
-        # визуальном языке.
         from mavixdesktop.ui.screens.drone_list_page import _brand_widget, _icon_button
 
         top_bar = QWidget()
-        # #objectName-селектор, чтобы фон не каскадировал в дочерние
-        # лейблы/кнопки (они должны брать стили из QSS_GLOBAL).
         top_bar.setObjectName('topBar')
         top_bar.setStyleSheet(f"""
             QWidget#topBar {{
@@ -726,7 +633,6 @@ class JoystickSetupPage(QWidget):
         tb.setContentsMargins(28, 0, 28, 0)
         tb.setSpacing(12)
 
-        # Лево: бренд + разделитель + название раздела.
         tb.addWidget(_brand_widget(top_bar))
         sep = QFrame()
         sep.setFixedSize(1, 22)
@@ -744,7 +650,6 @@ class JoystickSetupPage(QWidget):
         tb.addWidget(title)
         tb.addStretch()
 
-        # Право: «Назад» — ghost-кнопка как в шапке dashboard.
         back_btn = _icon_button('arrow_back.svg', 'Назад', top_bar)
         back_btn.setToolTip('Назад к экрану дрона')
         back_btn.clicked.connect(on_back)
@@ -756,21 +661,10 @@ class JoystickSetupPage(QWidget):
         self._fc_type = fc_type
 
     def _refresh(self, force: bool = False) -> None:
-        # Всегда сначала спрашиваем pygame о реальных джойстиках — даже в
-        # демо-режиме: если у оператора есть подключённый USB-контроллер,
-        # дизайн экранов калибровки/превью нужно проверять именно на нём.
-        # Мок-имя подставляем только если демо + реального устройства нет
-        # (на голой машине без джойстика, чтобы экран не оказался пустым).
         names = JoystickManager.list_joysticks()
         if self._demo and not names:
             names = [self.DEMO_JOYSTICK_NAME]
 
-        # Тик авто-обновления: пропускаем перестроение, если состав устройств
-        # и статусы калибровки не изменились, чтобы не пересоздавать дочерние
-        # QWidget (и не сносить открытое меню) 3 раза в секунду. Статус
-        # калибровки в снимке нужен, чтобы карточка реагировала на калибровку
-        # и на удаление файла конфигурации. force=True — после сохранения
-        # калибровки, чтобы гарантированно перерисовать.
         cal_states = [bool(JoystickCalibration.load(name)) for name in names]
         if not force and names == self._joystick_names and cal_states == self._joystick_cal_states:
             return
@@ -794,14 +688,7 @@ class JoystickSetupPage(QWidget):
             cards.append(card)
         self._grid.set_cards(cards)
 
-    #### Обработчики карточек ##############################################################
     def _on_card_clicked(self, index: int) -> None:
-        # Раньше тут стоял if self._demo: QMessageBox → return — теперь
-        # пропускаем дальше даже в демо-режиме, чтобы дизайн диалога
-        # калибровки/превью можно было увидеть глазами. Если в системе
-        # нет реального джойстика, pygame.joystick.Joystick(0) внутри
-        # диалога бросит pygame.error и диалог не откроется — это
-        # ожидаемое ограничение демо, не баг UI.
         name = self._joystick_names[index]
         takeoff_cb = self._on_takeoff if self._fc_type in ('crsf', 'mavlink') else None
         saved = JoystickCalibration.load(name)
@@ -818,10 +705,6 @@ class JoystickSetupPage(QWidget):
                 dlg.exec()
 
     def _on_card_action(self, index: int, action: str) -> None:
-        # Блокер демо-режима убран — см. комментарий в _on_card_clicked.
-        # «Загрузить файл»/«Сохранить файл» работают и без реального
-        # устройства (это работа с JSON), «Калибровать» в демо без
-        # подключённого джойстика покажет исключение pygame.
         name = self._joystick_names[index]
         if action == 'file':
             self._load_from_file(index, name)
@@ -832,7 +715,6 @@ class JoystickSetupPage(QWidget):
         elif action == 'file_save':
             self._save_to_file(index, name)
 
-    #### Загрузка и сохранение файлов ######################################################
     def _load_from_file(self, index: int, name: str) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, 'Загрузить калибровку', '', 'JSON (*.json)'
@@ -877,7 +759,6 @@ class JoystickSetupPage(QWidget):
                                 f'Калибровка сохранена в:\n{path}')
 
 
-#### Диалог калибровки #################################################################
 class JoystickCalibrationDialog(QDialog):
     def __init__(self, joystick_index: int, joystick_name: str,
                  parent: QWidget | None = None) -> None:
@@ -908,8 +789,6 @@ class JoystickCalibrationDialog(QDialog):
         sticks_row.addStretch()
         layout.addLayout(sticks_row)
 
-        # Точки-прогресс над инструкцией: 10 шагов в ряд, заполняются
-        # по мере прохождения. Без них оператор не видел сколько осталось.
         self._progress = _StepProgress()
         layout.addWidget(self._progress)
 
@@ -929,7 +808,6 @@ class JoystickCalibrationDialog(QDialog):
 
         self._update_ui()
 
-    #### Опрос джойстика ###################################################################
     def _read_axes(self) -> list[float]:
         pygame.event.pump()
         return [self._js.get_axis(i) for i in range(self._js.get_numaxes())]
@@ -967,9 +845,9 @@ class JoystickCalibrationDialog(QDialog):
                             self._data['arm_type'] = 'button'
                             self._data['arm_button_index'] = i
                             self._instruction.setText(
-                                f'Кнопка {i} захвачена как ARM/DISARM.\n\nНажмите «Далее».'
+                                f'Button {i} captured as ARM/DISARM.\n\nPress "Next".'
                             )
-                            self._next_btn.setText(f'Далее (кнопка {i})')
+                            self._next_btn.setText(f'Next (button {i})')
                             break
                 if 'arm_axis_index' not in self._data and self._arm_axis_states is not None:
                     excluded = {
@@ -984,12 +862,11 @@ class JoystickCalibrationDialog(QDialog):
                             self._data['arm_type'] = 'axis'
                             self._data['arm_axis_index'] = i
                             self._instruction.setText(
-                                f'Ось {i} захвачена как ARM/DISARM (тумблер).\n\nНажмите «Далее».'
+                                f'Axis {i} captured as ARM/DISARM (switch).\n\nPress "Next".'
                             )
-                            self._next_btn.setText(f'Далее (ось {i})')
+                            self._next_btn.setText(f'Next (axis {i})')
                             break
 
-    #### Шаги калибровки ###################################################################
     def _on_next(self) -> None:
         vals = self._read_axes()
         center = self._data.get('center', [0.0] * len(vals))

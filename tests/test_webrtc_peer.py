@@ -1,9 +1,4 @@
-"""End-to-end PeerSession test: real aiortc loopback drone↔gcs in-process.
-
-The 'drone' side here is a plain aiortc RTCPeerConnection that creates
-data channels and produces an offer; the GCS side is our PeerSession
-applying the offer and producing an answer.
-"""
+"""End-to-end PeerSession test: real aiortc loopback drone<->gcs in-process. The 'drone' side here is a plain aiortc RTCPeerConnection that creates data channels and produces an offer; the GCS side is our PeerSession applying the offer and producing an answer."""
 from __future__ import annotations
 
 import asyncio
@@ -64,12 +59,6 @@ def test_build_configuration_ignores_entries_without_urls(monkeypatch):
     assert len(cfg.iceServers) == 1
 
 
-#### _patch_dtls_setup_passive #########################################################
-# The drone runs GStreamer webrtcbin which always wants to be the DTLS
-# client (a=setup:active). aiortc, by default, also returns
-# a=setup:active in its answer. With both sides claiming active, DTLS
-# never completes. Rewriting our answer to passive is required.
-
 def test_patch_dtls_replaces_setup_active_line():
     sdp = (
         'v=0\r\n'
@@ -109,7 +98,6 @@ def test_patch_dtls_does_not_touch_other_lines():
         'a=setup:active\r\n'
     )
     out = _patch_dtls_setup_passive(sdp)
-    # Only the setup line changed
     assert 'v=0\r\n' in out
     assert 'a=ice-options:trickle\r\n' in out
     assert 'a=fingerprint:sha-256 AA:BB\r\n' in out
@@ -123,8 +111,6 @@ def test_patch_dtls_does_not_touch_setup_passive_or_actpass():
 
 
 def test_patch_dtls_does_not_match_attribute_substring():
-    # A made-up line that *contains* "setup:active" as a substring but
-    # is not exactly that attribute — must be left alone.
     sdp = 'a=setup:active-but-not-really\r\na=setup:active\r\n'
     out = _patch_dtls_setup_passive(sdp)
     assert 'a=setup:active-but-not-really\r\n' in out
@@ -149,8 +135,6 @@ async def test_apply_offer_produces_valid_answer():
         answer_sdp = await peer.apply_offer(offer_sdp)
         assert isinstance(answer_sdp, str)
         assert answer_sdp.startswith('v=0')
-        # The DTLS-passive rewrite is load-bearing: GStreamer webrtcbin
-        # on the drone always wants active, so our answer must be passive.
         assert 'a=setup:passive' in answer_sdp
         assert 'a=setup:active' not in answer_sdp
     finally:
@@ -159,14 +143,6 @@ async def test_apply_offer_produces_valid_answer():
 
 
 async def test_datachannel_callback_fires_on_drone_open(monkeypatch):
-    """Drone opens channel → after offer/answer exchange, peer receives it.
-
-    This test exercises the data-channel path in an aiortc↔aiortc loopback;
-    the DTLS-passive rewrite is bypassed for the loopback (see _patch_dtls
-    unit tests above for full coverage). With a real GStreamer drone the
-    rewrite is required, but with two aiortc peers the role mismatch
-    introduced by the rewrite prevents DTLS from completing.
-    """
     monkeypatch.setattr(
         'mavixdesktop.webrtc.peer._patch_dtls_setup_passive', lambda s: s
     )
@@ -183,7 +159,6 @@ async def test_datachannel_callback_fires_on_drone_open(monkeypatch):
         answer_sdp = await peer.apply_offer(drone_pc.localDescription.sdp)
         await drone_pc.setRemoteDescription(RTCSessionDescription(sdp=answer_sdp, type='answer'))
 
-        # Give negotiation a moment to complete and trigger the datachannel event
         for _ in range(50):
             if received_labels:
                 break
@@ -197,7 +172,7 @@ async def test_datachannel_callback_fires_on_drone_open(monkeypatch):
 async def test_add_remote_ice_invalid_payload_returns_false():
     peer = PeerSession('drone', ice_servers=[])
     try:
-        ok = await peer.add_remote_ice({'sdpMLineIndex': 0})  # missing 'candidate'
+        ok = await peer.add_remote_ice({'sdpMLineIndex': 0})
         assert ok is False
     finally:
         await peer.close()
@@ -206,5 +181,4 @@ async def test_add_remote_ice_invalid_payload_returns_false():
 async def test_close_is_idempotent_ish():
     peer = PeerSession('drone', ice_servers=[])
     await peer.close()
-    # Calling close again may log but must not raise
     await peer.close()

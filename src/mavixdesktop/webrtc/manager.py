@@ -1,8 +1,4 @@
-"""Владеет одним PeerSession + его DataChannelHub за раз.
-
-Зеркалит WebRTCManager из MavixBoard, но инвертированно: мы принимаем offer /
-отправляем answer и *получаем* data-каналы, а не создаём их.
-"""
+"""Owns one PeerSession + its DataChannelHub at a time."""
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
@@ -20,7 +16,6 @@ SignalSender = Callable[[dict], Awaitable[None]]
 TrackHandler = Callable[['MediaStreamTrack'], None]
 
 
-#### Менеджер WebRTC-сессии ############################################################
 class WebRTCManager:
     def __init__(self, send: SignalSender, ice_servers: list[dict] | None = None) -> None:
         self._send = send
@@ -29,12 +24,6 @@ class WebRTCManager:
         self._channels: DataChannelHub | None = None
         self.on_session_ended: Callable[[], None] | None = None
         self.on_track: TrackHandler | None = None
-        # Срабатывает каждый раз, когда data-канал от дрона прикреплён к hub
-        # (аргумент label). Дрон создаёт packet/ping/config каналы, поэтому
-        # может сработать до 3 раз за сессию; вызывающие должны быть
-        # идемпотентны. Координатор использует это, чтобы подключать FC-
-        # обработчики только ПОСЛЕ того, как каналы реально появились на hub —
-        # а это происходит только когда DTLS+SCTP поднят, не сразу после offer/answer.
         self.on_channel_attached: Callable[[str], None] | None = None
 
     @property
@@ -95,7 +84,6 @@ class WebRTCManager:
             await self._peer.close()
         self.end_session()
 
-#### Внутренние помощники ##############################################################
     def _guard(self, drone_id: str) -> bool:
         if self._peer is None:
             logger.warning('[manager] сообщение для drone=%s, но активной сессии нет', drone_id)

@@ -1,11 +1,4 @@
-"""Следит за JoystickInput на предмет отключения в полёте и шлёт дрону один
-disarm-кадр, если устройство пропадает.
-
-Guard учитывает тип FC: в CRSF-режиме он формирует RC-кадр с нулевыми
-стиками и опущенным ARM-каналом; в MAVLink-режиме — пакет COMMAND_LONG /
-MAV_CMD_COMPONENT_ARM_DISARM. Оба идут через тот же packet data-channel,
-который уже несёт joystick-трафик дрону, так что доп. обвязки не нужно.
-"""
+"""Monitors JoystickInput for disconnect during flight and sends a disarm frame."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -14,7 +7,6 @@ from mavixdesktop.core.logger import logger
 from mavixdesktop.joystick.input import JoystickInput
 
 
-#### Сборка disarm-кадров ##############################################################
 def _build_mavlink_disarm() -> bytes | None:
     try:
         from pymavlink.dialects.v20 import common as mavlink
@@ -27,8 +19,8 @@ def _build_mavlink_disarm() -> bytes | None:
         target_component=1,
         command=mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
         confirmation=0,
-        param1=0.0,  # 0 = disarm
-        param2=21196.0,  # magic force-disarm (PX4/ArduPilot)
+        param1=0.0,
+        param2=21196.0,
         param3=0.0, param4=0.0, param5=0.0, param6=0.0, param7=0.0,
     )
     return msg.pack(mav)
@@ -39,12 +31,7 @@ def _build_crsf_disarm() -> bytes:
     return build_rc_frame(throttle=-1.0, roll=0.0, pitch=0.0, yaw=0.0, armed=False)
 
 
-#### Guard потери joystick #############################################################
 class JoystickGuard:
-    """Опрашивает JoystickInput; при переходе connected→disconnected ровно один
-    раз шлёт disarm-кадр через `send_frame`. После срабатывания guard
-    защёлкивается и не повторяется до reset()."""
-
     def __init__(
         self,
         js: JoystickInput,
@@ -77,7 +64,6 @@ class JoystickGuard:
         self._fired = True
         return True
 
-#### Внутренние помощники ##############################################################
     def _fire_disarm(self) -> None:
         try:
             frame = self._build_frame()

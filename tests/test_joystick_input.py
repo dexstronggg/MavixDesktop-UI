@@ -1,4 +1,4 @@
-"""Tests for joystick.input.JoystickInput — pygame is fully mocked."""
+"""Tests for joystick.input.JoystickInput -- pygame is fully mocked."""
 from __future__ import annotations
 
 import sys
@@ -84,13 +84,10 @@ def test_arm_button_toggles_on_press_release(monkeypatch):
 
     j = JoystickInput(0, _full_cal())
     assert j.is_armed() is False
-    # press
     button_state['val'] = 1
     assert j.is_armed() is True
-    # release
     button_state['val'] = 0
-    assert j.is_armed() is True  # stays armed
-    # press again → toggle off
+    assert j.is_armed() is True
     button_state['val'] = 1
     assert j.is_armed() is False
 
@@ -114,27 +111,22 @@ def test_arm_axis_mode(monkeypatch):
 
 
 def test_arm_axis_in_arm_on_entry_requires_disarm_first(monkeypatch):
-    """Вход в полёт с тумблером, оставленным в ARM, НЕ должен армировать сразу:
-    is_armed() держит DISARM, пока тумблер не пройдёт через DISARM."""
     cal = _full_cal()
     cal['arm_type'] = 'axis'
     cal['arm_axis_index'] = 5
     pg = MagicMock()
     js = MagicMock()
-    axis_state = {5: 1.0}  # тумблер УЖЕ в ARM в момент входа
+    axis_state = {5: 1.0}
     js.get_axis.side_effect = lambda idx: axis_state.get(idx, 0.0)
     pg.joystick.Joystick.return_value = js
     monkeypatch.setitem(sys.modules, 'pygame', pg)
     from mavixdesktop.joystick.input import JoystickInput
 
     j = JoystickInput(0, cal)
-    # защёлка держит DISARM, сколько бы ни опрашивали
     assert j.is_armed() is False
     assert j.is_armed() is False
-    # оператор перевёл тумблер в DISARM
     axis_state[5] = -1.0
     assert j.is_armed() is False
-    # после этого ARM снова работает как обычно
     axis_state[5] = 1.0
     assert j.is_armed() is True
 
@@ -155,9 +147,8 @@ def test_arm_axis_read_error_returns_false(monkeypatch):
 
 
 def test_partial_calibration_uses_defaults(monkeypatch):
-    """Even when calibration dict is sparse, reads should not crash."""
     _install_pygame_mock(monkeypatch, axes_by_idx={0: 0.5})
-    cal = {'axis_thr': 0}  # everything else missing
+    cal = {'axis_thr': 0}
     from mavixdesktop.joystick.input import JoystickInput
 
     j = JoystickInput(0, cal)

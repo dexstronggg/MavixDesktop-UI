@@ -1,5 +1,4 @@
-"""Tests for joystick.manager — only pure-Python helpers; list_joysticks
-is exercised by an integration smoke test that doesn't assume a pad."""
+"""Tests for joystick.manager -- only pure-Python helpers; list_joysticks is exercised by an integration smoke test that doesn't assume a pad."""
 from __future__ import annotations
 
 import sys
@@ -24,7 +23,6 @@ def test_build_sdl_config_basic_shape():
     parts = s.split(',')
     assert parts[0] == 'guid-abc'
     assert parts[1] == 'Test Pad'
-    # one entry per stick + arm + platform
     assert any(p.startswith('leftx:') for p in parts)
     assert any(p.startswith('lefty:') for p in parts)
     assert any(p.startswith('rightx:') for p in parts)
@@ -41,13 +39,10 @@ def test_build_sdl_arm_button_index_used():
 
 
 def test_build_sdl_inverts_axis_when_max_lt_min():
-    # raw axis: pushing up gives 1.0 (max=1, min=-1) → not inverted
     cal = _cal_neutral()
     s = build_sdl_config(cal, 'p', 'g')
-    # lefty gets a '~' because thr is NOT inverted (thr_max > thr_min)
     assert 'lefty:a1~' in s
 
-    # Flip the bounds → inverted
     cal['thr_max'] = -1.0
     cal['thr_min'] = 1.0
     s2 = build_sdl_config(cal, 'p', 'g')

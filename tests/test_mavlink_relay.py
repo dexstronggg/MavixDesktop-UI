@@ -10,7 +10,6 @@ from mavixdesktop.fc.mavlink_relay import MavlinkRelay
 
 
 def _spawn_udp_listener(host: str = '127.0.0.1') -> tuple[socket.socket, int]:
-    """Synchronous UDP socket bound to a random port, role: pretend QGC."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((host, 0))
     sock.settimeout(2.0)
@@ -39,7 +38,7 @@ async def test_stop_idempotent():
     relay = MavlinkRelay('127.0.0.1', 14550, bind_port=0)
     await relay.start()
     await relay.stop()
-    await relay.stop()  # must not raise
+    await relay.stop()
 
 
 async def test_send_to_qgc_delivers_packet():
@@ -73,7 +72,7 @@ async def test_send_to_qgc_accepts_memoryview_and_bytearray():
 
 async def test_send_to_qgc_before_start_is_noop():
     relay = MavlinkRelay('127.0.0.1', 14550, bind_port=0)
-    relay.send_to_qgc(b'data')  # must not raise
+    relay.send_to_qgc(b'data')
 
 
 async def test_send_to_qgc_empty_payload_is_noop():
@@ -116,7 +115,7 @@ async def test_callback_errors_are_swallowed():
         sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sender.sendto(b'\x00', ('127.0.0.1', relay.bound_port))
         sender.close()
-        await asyncio.sleep(0.05)  # process datagram; should not crash relay
+        await asyncio.sleep(0.05)
         assert relay.is_running is True
     finally:
         await relay.stop()
@@ -131,6 +130,6 @@ async def test_set_packet_callback_to_none():
         sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sender.sendto(b'\x01', ('127.0.0.1', relay.bound_port))
         sender.close()
-        await asyncio.sleep(0.05)  # no callback → no crash
+        await asyncio.sleep(0.05)
     finally:
         await relay.stop()

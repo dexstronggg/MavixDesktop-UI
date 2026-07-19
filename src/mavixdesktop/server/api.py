@@ -10,10 +10,7 @@ class ApiError(Exception):
     pass
 
 
-#### HTTP-клиент REST API ##############################################################
 class ApiSession:
-    """HTTP-клиент REST API MavixServer: login, refresh, ice-servers, list-drones."""
-
     def __init__(self, session: aiohttp.ClientSession) -> None:
         self._session = session
 
@@ -35,7 +32,6 @@ class ApiSession:
             logger.debug('[api] ошибка проверки health: %s', exc)
             return False
 
-#### Аутентификация ####################################################################
     async def login(self, email: str, password: str) -> dict:
         async with self._session.post(
             f'{settings.http_url}/api/v1/auth/login',
@@ -57,10 +53,6 @@ class ApiSession:
             return data
 
     async def password_reset_request(self, email: str) -> dict:
-        """Запрос восстановления пароля. Сервер всегда возвращает 200
-        (anti-enumeration: не раскрывает, существует ли email в БД) —
-        UI показывает одинаковое сообщение независимо от ответа.
-        """
         async with self._session.post(
             f'{settings.http_url}/api/v1/auth/password-reset/request',
             json={'email': email},
@@ -73,7 +65,6 @@ class ApiSession:
                 raise ApiError(data.get('detail', 'запрос восстановления пароля не удался'))
             return data
 
-#### ICE-серверы и дроны ###############################################################
     async def ice_servers(self) -> list[dict]:
         try:
             async with self._session.get(f'{settings.http_url}/api/v1/ice-servers') as r:
@@ -87,8 +78,6 @@ class ApiSession:
             return []
 
     async def delete_drone(self, drone_id: str, access_token: str) -> None:
-        """Удаляет дрон по REST API. Кидает ApiError на любую ошибку
-        кроме 204."""
         url = f'{settings.http_url}/api/v1/drones/{drone_id}'
         headers = {'Authorization': f'Bearer {access_token}'}
         async with self._session.delete(url, headers=headers) as r:

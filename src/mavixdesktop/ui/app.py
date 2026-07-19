@@ -1,14 +1,4 @@
-"""Главное Qt-окно MavixDesktop.
-
-Поток экранов: вход → список дронов → DroneViewPage (видео + настройки) →
-опционально JoystickSetupPage → FlightWindow.
-
-Связывает PySide6-UI с mavixdesktop.coordinator.SessionCoordinator через
-ConnectionManager (адаптирует async event loop к Qt-сигналам) и
-VideoManager (гоняет QTimer на 33 ms по очереди треков aiortc и отдаёт
-BGR-кадры в DroneViewPage.show_frame).
-"""
-
+"""Main Qt window of MavixDesktop."""
 from __future__ import annotations
 
 import platform
@@ -50,10 +40,7 @@ from mavixdesktop.ui.state import SessionState
 
 
 class _QgcFindWorker(QThread):
-    """Ищет QGroundControl в фоновом потоке, чтобы поиск (до ~5 с) не морозил
-    GUI. По завершении эмитит found с Path или None."""
-
-    found = Signal(object)  # Path | None
+    found = Signal(object)
 
     def run(self) -> None:
         try:
@@ -84,8 +71,6 @@ class App(QMainWindow):
         self._nav_history: list[int] = []
         self._bridge = Bridge()
 
-        # Демо-режим подменяет настоящий ConnectionManager заглушкой
-        # с мок-данными (см. ui/managers/demo_connection.py).
         self._conn = (
             DemoConnectionManager(bridge=self._bridge)
             if demo else
@@ -97,7 +82,6 @@ class App(QMainWindow):
         )
         self._conn.set_track_callback(self._video.on_track, on_reset=self._on_session_reset)
 
-        # Подписка на колбэки уровня coordinator (приходят через ConnectionManager.bridge).
         self._bridge.client_list_updated.connect(self._on_drones)
         self._bridge.fc_info_received.connect(self._on_fc_info)
         self._bridge.config_received.connect(self._on_cameras_received)
@@ -110,7 +94,6 @@ class App(QMainWindow):
         self._bridge.login_succeeded.connect(self._on_login_succeeded)
         self._bridge.login_failed.connect(self._on_login_failed)
 
-        # Сборка экранов.
         self.login_page = LoginPage(
             on_login=self._handle_login,
             on_forgot_password=self._handle_forgot_password,
@@ -139,7 +122,6 @@ class App(QMainWindow):
             demo=demo,
         )
         self.settings_page = SettingsPage(on_close=self._close_settings)
-        # Debug-страница нужна только при DEBUG-режиме (см. core.config).
         self.debug_page = (
             DebugPage(on_launch_qgc=self._debug_launch_qgc) if debug else None
         )
@@ -153,47 +135,32 @@ class App(QMainWindow):
         if self.debug_page is not None:
             self.stack.addWidget(self.debug_page)
         self.setCentralWidget(self.stack)
-        # Куда возвращаться при закрытии Settings (открыта из login/list).
         self._settings_return_to = self.login_page
 
         self._flight_window: FlightWindow | None = None
         self._qgc_overlay: QGCLaunchingOverlay | None = None
         self._qgc_search_overlay: QGCSearchOverlay | None = None
         self._qgc_search_thread: _QgcFindWorker | None = None
-        # Следит за активным джойстиком, пока идёт полётная сессия; если
-        # стик пропадает в полёте — шлёт дрону один disarm-фрейм.
         self._joystick_guard: JoystickGuard | None = None
-        self._joystick_guard_qgc_proc = None  # type: ignore[assignment]
+        self._joystick_guard_qgc_proc = None
         self._joystick_guard_timer = QTimer(interval=200)
         self._joystick_guard_timer.timeout.connect(self._tick_joystick_guard)
-        # Один таймер на 1 Hz гоняет и peer-to-peer ping (send_ping по
-        # ping-каналу), и обновление UI (читает обратно last_rtt_ms).
         self._ping_timer = QTimer(interval=1000)
         self._ping_timer.timeout.connect(self._tick_ping)
-        # Фоновый слушатель джойстика: для MAVLink-FC при открытом QGC
-        # мы продолжаем слушать ARM-кнопку джойстика поверх QGC и шлём
-        # MAV_CMD_COMPONENT_ARM_DISARM через packet-channel. Pygame
-        # читает /dev/input/eventN — фокус окна не нужен.
-        self._arm_joystick = None  # JoystickInput | None
+        self._arm_joystick = None
         self._arm_state = False
-        # Счётчик подряд-идущих ошибок чтения джойстика: 3 подряд = считаем
-        # пропавшим и шлём failsafe AUTO_RTL на PX4 (флаг ниже не даёт
-        # повторно отправить RTL после того, как уже отослали).
         self._arm_err_count = 0
         self._failsafe_sent = False
         self._arm_poll_timer = QTimer(interval=100)
         self._arm_poll_timer.timeout.connect(self._poll_arm_button)
 
-        # Периодически обновляем список дронов, пока виден экран списка.
         self._drone_list_refresh_timer = QTimer(interval=5000)
         self._drone_list_refresh_timer.timeout.connect(self._tick_drone_list_refresh)
 
-        # В DEBUG-режиме сразу показываем debug-страницу, минуя логин.
         if self.debug_page is not None:
             self.stack.setCurrentWidget(self.debug_page)
             return
 
-        # Старт: тихое восстановление при наличии refresh-токена, иначе вход.
         if self._conn.resume():
             self.stack.setCurrentWidget(self.drone_list_page)
             QTimer.singleShot(500, self._conn.request_drone_list)
@@ -205,10 +172,8 @@ class App(QMainWindow):
         if self.stack.currentWidget() is self.drone_list_page:
             self._conn.request_drone_list()
         else:
-            # Прекращаем опрос, когда пользователь ушёл с экрана; возобновляем в _handle_*.
             self._drone_list_refresh_timer.stop()
 
-    #### Навигация #########################################################################
     def _navigate_to(self, widget: QWidget) -> None:
         current = self.stack.currentWidget()
         if current is not widget:
@@ -219,7 +184,6 @@ class App(QMainWindow):
         if self._nav_history:
             self.stack.setCurrentIndex(self._nav_history.pop())
 
-    #### Аутентификация ####################################################################
     def _handle_login(self, email: str, password: str) -> None:
         self.login_page.set_busy(True)
         self.login_page.set_error('')
@@ -240,11 +204,6 @@ class App(QMainWindow):
             self.stack.setCurrentWidget(self.login_page)
 
     def _handle_forgot_password(self, email: str) -> None:
-        """Запрос восстановления пароля со страницы логина.
-
-        UI уже показал оператору сообщение-подтверждение, здесь просто
-        шлём fire-and-forget запрос на сервер (или no-op в демо).
-        """
         self._conn.request_password_reset(email)
 
     def _handle_logout(self) -> None:
@@ -254,12 +213,9 @@ class App(QMainWindow):
         self._conn.logout()
         self._video.stop()
         self._video.reset()
-        # Сбрасываем форму логина — иначе после logout оператор видит
-        # старый forgot-message, заполненный email и пр.
         self.login_page.reset()
         self.stack.setCurrentWidget(self.login_page)
 
-    #### Список дронов и выбор #############################################################
     def _on_drones(self, drones: list[dict]) -> None:
         try:
             self.drone_list_page.update(drones)
@@ -270,8 +226,6 @@ class App(QMainWindow):
         self._conn.request_drone_list()
 
     def _open_settings(self) -> None:
-        """Открыть страницу настроек. Запоминаем, откуда пришли, чтобы
-        закрытие вернуло на исходный экран."""
         current = self.stack.currentWidget()
         if current is not self.settings_page:
             self._settings_return_to = current
@@ -282,8 +236,6 @@ class App(QMainWindow):
         self.stack.setCurrentWidget(target)
 
     def _handle_delete_drone(self, drone_id: str) -> None:
-        """Удаляет дрон через REST API. Список обновится автоматически
-        через WS-list_drones внутри ConnectionManager."""
         def on_done(error: str | None) -> None:
             if error:
                 QMessageBox.warning(self, 'Ошибка', error)
@@ -296,14 +248,8 @@ class App(QMainWindow):
         self._state.cam_index = 0
         self._conn.select_drone(drone_id)
         self._video.start()
-        # Ping показываем всё время, пока поднята WebRTC-сессия; кнопки-
-        # переключателя больше нет. Это дёшево (8 bytes/s), а оператору во
-        # время полёта всегда нужен видимый индикатор задержки.
         self._ping_timer.start()
         self._drone_list_refresh_timer.stop()
-        # В демо overlay калибровки не нужен и его нечем погасить — кадров
-        # с камеры нет, а именно первый frame сбрасывает overlay в реальной
-        # сессии. Без этого условия overlay висел бы поверх всего drone-view.
         if not self._demo:
             self.drone_view_page.set_calibration_visible(True)
         self.stack.setCurrentWidget(self.drone_view_page)
@@ -323,8 +269,6 @@ class App(QMainWindow):
         self._conn.request_drone_list()
 
     def _on_battery_updated(self, percent: int, voltage: float) -> None:
-        """Раздача CRSF BATTERY_SENSOR: показать на drone-view и, если
-        полётное окно открыто — там тоже."""
         self.drone_view_page.update_battery(percent, voltage)
         if self._flight_window is not None:
             try:
@@ -333,20 +277,12 @@ class App(QMainWindow):
                 logger.debug('[app] обновление заряда в полётном окне: %s', exc)
 
     def _on_drone_went_offline(self, drone_id: str) -> None:
-        """Coordinator подтвердил, что дрон действительно офлайн (а не
-        кратковременный сбой при renegotiation). Если пользователь всё ещё
-        смотрит на drone-view, возвращаем его к списку, чтобы он не сидел
-        на замороженном кадре."""
         if self.stack.currentWidget() is not self.drone_view_page:
             return
         logger.info('[app] дрон %s офлайн, возврат к списку', drone_id)
         self._handle_back_to_list()
 
     def _on_connect_failed(self, drone_id: str) -> None:
-        """Board сбросил peer во время подключения (нет камер / ошибка
-        pipeline). Показываем по центру баннер на 3 s, затем возвращаемся к
-        списку дронов. Авто-переподключение намеренно не запускаем — причина
-        локальна для дрона и повтор просто зациклится."""
         if self.stack.currentWidget() is not self.drone_view_page:
             return
         logger.info('[app] подключение к дрону %s не удалось; показываю баннер', drone_id)
@@ -360,19 +296,10 @@ class App(QMainWindow):
             self._handle_back_to_list()
 
     def _on_session_reset(self) -> None:
-        """Вызывается из connection.ConnectionManager на session_ended.
-        Сбрасывает устаревшие треки, но сохраняет выбранный индекс камеры,
-        затем — если пользователь всё ещё на drone-view (т.е. идёт авто-
-        переподключение после смены параметров или hot-plug камеры) — снова
-        показывает overlay калибровки, пока не придёт первый кадр следующей
-        сессии. При полном отключении (возврат к списку) _handle_back_to_list
-        вместо этого зовёт video.reset(), который сбрасывает и индекс
-        камеры."""
         self._video.clear_tracks()
         if self.stack.currentWidget() is self.drone_view_page:
             self.drone_view_page.set_calibration_visible(True)
 
-    #### Drone-view: камеры, FC, битрейт, калибровка #######################################
     def _on_cameras_received(self, cameras: list) -> None:
         self._state.cameras = cameras
         self.drone_view_page.save_btn.setEnabled(True)
@@ -385,12 +312,6 @@ class App(QMainWindow):
         self.joystick_setup_page.set_fc_type(fc_type or 'none')
 
     def _on_cam_changed(self, cam_index: int) -> None:
-        # Переключение камеры — чисто UI-операция: видеотреки уже идут с борта,
-        # таймер просто показывает кадры другого. Никаких пакетов на board
-        # не шлём — раньше тут был троттлинг неактивных камер до 200 kbps,
-        # но это перезаписывало сохранённый пользователем bitrate в JSON
-        # на борту, и при возврате к камере её настройки оказывались
-        # потеряны. Теперь каждая камера всегда стримит на своём bitrate'е.
         self._state.cam_index = cam_index
         self._update_camera_settings_ui()
 
@@ -424,21 +345,12 @@ class App(QMainWindow):
             self._conn._submit(coord.send_bitrate_update([
                 {'device_index': device_index, 'bitrate_kbs': bitrate},
             ]))
-            # Раньше Desktop сам решал нужно ли слать params_update сравнивая
-            # старый и новый param_index, но при смене только FPS на той же
-            # резолюции эта проверка иногда не триггерилась (state.cameras
-            # могло быть рассинхронизировано с board'ом). Теперь шлём
-            # всегда — board сам проверит cam.param_index == new и пропустит
-            # renegotiation если действительно ничего не изменилось.
             self._conn._submit(coord.send_params_update([
                 {'device_index': device_index, 'param_index': param_index},
             ]))
         self.drone_view_page.save_btn.setEnabled(True)
 
     def _start_arm_listener(self, joystick_index: int, calibration: dict) -> None:
-        """Запускает фоновый опрос джойстика для arm-кнопки. Работает,
-        пока открыт QGC (или просто пока пользователь залогинен) — pygame
-        читает /dev/input/eventN, фокус окна не нужен."""
         from mavixdesktop.joystick.input import JoystickInput
         try:
             self._arm_joystick = JoystickInput(joystick_index, calibration)
@@ -459,10 +371,6 @@ class App(QMainWindow):
         self._failsafe_sent = False
 
     def _poll_arm_button(self) -> None:
-        """Опрос на 10 Hz. pygame.event.pump() обновляет состояние кнопок
-        даже когда окно нашего приложения не в фокусе. Если 3 чтения
-        подряд упали (или джойстик отвалился) — шлём PX4 AUTO_RTL и
-        останавливаем таймер."""
         if self._arm_joystick is None:
             return
         try:
@@ -489,8 +397,6 @@ class App(QMainWindow):
             self._stop_arm_listener()
 
     def _send_arm_disarm(self, armed: bool) -> None:
-        """Шлёт MAV_CMD_COMPONENT_ARM_DISARM через packet channel.
-        Команда долетит до PX4 параллельно с трафиком QGC."""
         from mavixdesktop.fc.mavlink_encoder import MavlinkEncoder
         coord = self._conn.coordinator
         if coord is None or coord._manager is None or coord._manager.channels is None:
@@ -508,10 +414,6 @@ class App(QMainWindow):
             logger.warning('[app] ошибка отправки arm: %s', exc)
 
     def _send_failsafe_rtl(self) -> None:
-        """Шлёт PX4 AUTO_RTL через packet channel — дрон автономно
-        вернётся на точку взлёта. Используется при потере джойстика
-        в режиме MAVLink+QGC (наш FlightWindow в passive сам RTL тоже
-        отправит, но если он закрыт, fallback срабатывает здесь)."""
         from mavixdesktop.fc.mavlink_encoder import MavlinkEncoder
         coord = self._conn.coordinator
         if coord is None or coord._manager is None or coord._manager.channels is None:
@@ -536,7 +438,6 @@ class App(QMainWindow):
         self._conn._submit(coord.send_calibrate())
         logger.info('[app] команда принудительной калибровки отправлена')
 
-    #### Джойстик и полёт ##################################################################
     def _open_joystick_setup(self) -> None:
         self._navigate_to(self.joystick_setup_page)
 
@@ -544,19 +445,9 @@ class App(QMainWindow):
         self._navigate_back()
 
     def _handle_joystick_selected(self, joystick_index: int, calibration: dict) -> None:
-        """CRSF — наш FlightWindow (joystick → CRSF-фрейм → board → UART).
-        MAVLink — параллельно запускаем QGroundControl (он сам шлёт
-        MANUAL_CONTROL) и открываем наш passive FlightWindow, чтобы
-        смотреть видео. Arm-кнопку джойстика слушает фоновый таймер."""
         coord = self._conn.coordinator
         fc_kind = coord.fc_kind if coord is not None else 'crsf'
         if fc_kind == 'mavlink':
-            # SDL_GAMECONTROLLERCONFIG передаётся в QGC через env-var при
-            # старте процесса — в уже запущенный инстанс инжектировать
-            # его нельзя. Проверка идёт через QSharedMemory с ключом QGC
-            # «QGroundControlRunGuardKey» (тем же, что сам QGC использует
-            # для single-instance lock); pgrep/proc/Popen.poll ловили
-            # wrapper-родителя AppImage/.deb и врали.
             if is_qgc_running():
                 logger.info('[app] QGC уже запущен — просим пользователя закрыть его')
                 QMessageBox.warning(
@@ -567,9 +458,6 @@ class App(QMainWindow):
                 )
                 return
             sdl_config = calibration.get('sdl_gamecontrollerconfig', '')
-            # Полётное окно и arm-listener от QGC не зависят — открываем их
-            # сразу, а QGC ищем в фоне со спиннером, чтобы поиск (до ~5 с) не
-            # морозил интерфейс. Результат обрабатывает _on_qgc_found.
             self._start_arm_listener(joystick_index, calibration)
             self._open_flight_window(joystick_index, calibration, passive=True)
             self._begin_qgc_search(sdl_config)
@@ -577,8 +465,6 @@ class App(QMainWindow):
         self._open_flight_window(joystick_index, calibration)
 
     def _begin_qgc_search(self, sdl_config: str) -> None:
-        """Запускает фоновый поиск QGC со спиннером; результат уходит в
-        _on_qgc_found (на GUI-потоке через очередь сигналов)."""
         self._qgc_search_overlay = QGCSearchOverlay()
         self._qgc_search_overlay.show_centered()
         worker = _QgcFindWorker()
@@ -587,8 +473,6 @@ class App(QMainWindow):
         worker.start()
 
     def _on_qgc_found(self, qgc_path: Path | None, sdl_config: str) -> None:
-        """Завершение фонового поиска: запускает найденный QGC, иначе просит
-        пользователя указать путь вручную."""
         if self._qgc_search_overlay is not None:
             self._qgc_search_overlay.close()
             self._qgc_search_overlay = None
@@ -606,8 +490,6 @@ class App(QMainWindow):
             self._set_debug_status(f'QGroundControl запущен (pid={proc.pid})')
 
     def _debug_launch_qgc(self) -> None:
-        """Кнопка debug-страницы: проверяет запуск QGC тем же путём, что и
-        полётный режим (фоновый поиск → запуск или диалог выбора пути)."""
         if is_qgc_running():
             QMessageBox.warning(
                 self, 'Закройте QGroundControl',
@@ -622,7 +504,6 @@ class App(QMainWindow):
             self.debug_page.set_status(text)
 
     def _launch_qgc_with_user_pick(self, sdl_config: str):
-        """Открыть диалог выбора файла, сохранить путь и повторить запуск."""
         if platform.system() == 'Windows':
             filt = 'QGroundControl (QGroundControl*.exe);;Executable (*.exe);;All files (*)'
         else:
@@ -675,9 +556,6 @@ class App(QMainWindow):
         self._flight_window.showFullScreen()
         self._flight_window.raise_()
         self._flight_window.activateWindow()
-        # Прячем главное окно на время полёта, чтобы не висело два окна
-        # (главное с выбором джойстика + полётное). Возвращаем в
-        # _handle_flight_closed.
         self.hide()
         self._start_joystick_guard(joystick_index, calibration, js=js_input)
 
@@ -690,7 +568,6 @@ class App(QMainWindow):
         self.stack.setCurrentWidget(self.drone_view_page)
         self._video.start()
 
-    #### Joystick guard ####################################################################
     def _start_joystick_guard(
         self,
         joystick_index: int,
@@ -731,9 +608,6 @@ class App(QMainWindow):
             self._joystick_guard_timer.stop()
             return
         guard.tick()
-        # В MAVLink-ветке нет FlightWindow, чтобы вести жизненный цикл, —
-        # выходим, как только сам QGC исчез (пользователь его закрыл).
-        # CRSF-ветка останавливается из _handle_flight_closed.
         proc = self._joystick_guard_qgc_proc
         if proc is not None and proc.poll() is not None:
             logger.info('[app] joystick guard остановлен (QGC завершился)')
@@ -745,14 +619,7 @@ class App(QMainWindow):
             'Связь с джойстиком потеряна. Дрону отправлена команда DISARM.',
         )
 
-    #### Peer-to-peer ping #################################################################
     def _tick_ping(self) -> None:
-        """Отправляет один ping по peer-каналу ping и обновляет UI
-        последним измеренным RTT. send_ping диспатчится в asyncio event
-        loop через call_soon_threadsafe — RTCDataChannel.send нельзя
-        безопасно звать из Qt-потока напрямую (он планирует на своём loop
-        через call_soon, и вызов тихо теряется, если это не текущий
-        поток)."""
         coord = self._conn.coordinator
         if coord is None or coord._manager is None or coord._manager.channels is None:
             return
@@ -766,13 +633,7 @@ class App(QMainWindow):
         self._bridge.speed_updated.emit(rtt)
 
 
-#### Адаптер для FlightWindow ##########################################################
 class _CoordinatorAdapter:
-    """Тонкая прослойка, чтобы FlightWindow (ожидающий устаревший
-    Signalling-API) мог общаться с новым Coordinator. Пробрасываются только
-    методы, которые FlightWindow реально использует; остальное возвращает
-    безобидные значения по умолчанию."""
-
     def __init__(self, conn: ConnectionManager) -> None:
         self._conn = conn
 

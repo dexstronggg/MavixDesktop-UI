@@ -1,4 +1,4 @@
-"""Постоянная калибровка joystick: сохранение/загрузка JSON-файлов в settings.data_path."""
+"""Persistent joystick calibration: save/load JSON files in settings.data_path."""
 from __future__ import annotations
 
 import json
@@ -16,7 +16,6 @@ REQUIRED_KEYS = frozenset({
 })
 
 
-#### Внутренние помощники ##############################################################
 def _safe_name(joystick_name: str) -> str:
     return ''.join(c for c in joystick_name if c.isalnum() or c in ' _-')
 
@@ -26,7 +25,6 @@ def _path(joystick_name: str, data_dir: Path | None = None) -> Path:
     return base / f'{_safe_name(joystick_name)}.json'
 
 
-#### Публичный API #####################################################################
 def save(cal: dict, joystick_name: str, data_dir: Path | None = None) -> Path:
     target = _path(joystick_name, data_dir)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -47,5 +45,5 @@ def load(joystick_name: str, data_dir: Path | None = None) -> dict | None:
 def validate(data: dict) -> tuple[bool, str]:
     missing = REQUIRED_KEYS - set(data.keys())
     if missing:
-        return False, f'Отсутствуют ключи: {", ".join(sorted(missing))}'
+        return False, f'Missing keys: {", ".join(sorted(missing))}'
     return True, ''

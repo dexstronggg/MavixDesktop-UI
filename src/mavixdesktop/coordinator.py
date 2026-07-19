@@ -1,13 +1,4 @@
-"""Координатор сессии верхнего уровня для desktop-стороны.
-
-Связывает вместе:
-  - SignalClient   — WebSocket-транспорт к /ws/gcs
-  - ApiSession     — REST для login / refresh / ice-servers
-  - WebRTCManager  — один PeerSession + DataChannelHub за раз
-  - MavlinkRelay   — UDP-мост к QGC (запускается, когда на config-канале
-                     становится известен FC типа mavlink)
-  - encoder.build_rc_frame — joystick → CRSF, когда FC типа crsf
-"""
+"""Top-level session coordinator for the desktop side."""
 from __future__ import annotations
 
 import asyncio
@@ -30,15 +21,6 @@ if TYPE_CHECKING:
 
 
 def _local_ice_servers() -> list[dict]:
-    """Собирает список ICE-серверов из локального конфига (config.py / Settings UI).
-
-    Записи имеют ту же форму, что и ApiSession.ice_servers(), поэтому
-    _build_configuration обрабатывает оба источника одинаково — STUN и TURN
-    включаются оба, а флаг force_relay решает, какой используется.
-
-    Возвращает [] только когда не настроены ни STUN, ни TURN; этот пустой
-    результат — сигнал вызывающему откатиться на /api/v1/ice-servers.
-    """
     servers: list[dict] = []
     if settings.stun_server:
         servers.append({'urls': settings.stun_server})
@@ -52,7 +34,6 @@ def _local_ice_servers() -> list[dict]:
     return servers
 
 
-#### Координатор сессии ################################################################
 class SessionCoordinator:
     def __init__(
         self,
@@ -100,7 +81,6 @@ class SessionCoordinator:
         return list(self._latest_cameras)
 
     async def send_bitrate_update(self, updates: list[dict]) -> None:
-        """Отправляет {type:bitrate, updates:[{device_index, bitrate_kbs}, ...]} по config-каналу."""
         if self._manager is None or self._manager.channels is None:
             return
         config_ch = self._manager.channels.config
@@ -109,12 +89,6 @@ class SessionCoordinator:
         config_ch.send_json({'type': 'bitrate', 'updates': updates})
 
     async def send_params_update(self, updates: list[dict]) -> None:
-        """Отправляет {type:params, updates:[{device_index, param_index}, ...]} по config-каналу.
-
-        Смена разрешения/FPS требует пересборки GStreamer-пайплайна, поэтому
-        плата после сохранения разрывает текущую сессию; GCS авто-переподключается,
-        и новый пайплайн собирается уже с новым param_index.
-        """
         if self._manager is None or self._manager.channels is None:
             return
         config_ch = self._manager.channels.config
@@ -123,9 +97,6 @@ class SessionCoordinator:
         config_ch.send_json({'type': 'params', 'updates': updates})
 
     async def send_calibrate(self) -> None:
-        """Отправляет {type:calibrate} по config-каналу. Плата сбрасывает
-        сохранённые калибровки и разрывает сессию; авто-переподключение
-        пересобирает пайплайн со свежей полной калибровкой всех камер."""
         if self._manager is None or self._manager.channels is None:
             return
         config_ch = self._manager.channels.config
@@ -136,9 +107,6 @@ class SessionCoordinator:
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
         self._stop_event = asyncio.Event()
-        # Локальный конфиг (config.py / Settings UI) имеет безусловный приоритет:
-        # если там задан хотя бы один STUN или TURN, используем ровно его и не
-        # обращаемся к API. К серверу идём, только когда локальный конфиг пуст.
         ice_servers = _local_ice_servers()
         if ice_servers:
             logger.info('[coord] используем %d ICE-сервер(ов) из локального конфига', len(ice_servers))
@@ -147,9 +115,6 @@ class SessionCoordinator:
             logger.info('[coord] локальный ICE-конфиг пуст — используем %d сервер(ов) из API', len(ice_servers))
         self._manager = WebRTCManager(send=self._signal_client.send, ice_servers=ice_servers)
         self._manager.on_track = self.on_track
-        # Срабатывает на каждый прикреплённый канал (packet/ping/config).
-        # Идемпотентно — см. _wire_channels_to_fc. НЕ должно вызываться из
-        # _handle_sdp: на тот момент DTLS+SCTP ещё не завершены, а hub пуст.
         self._manager.on_channel_attached = lambda _label: self._wire_channels_to_fc()
 
         while not self._stop_event.is_set():
@@ -177,7 +142,6 @@ class SessionCoordinator:
             self._stop_event.set()
 
     async def request_connect(self, drone_id: str) -> None:
-        """Вызывается из UI, когда пользователь кликает по дрону для старта стрима."""
         self._target_drone_id = drone_id
         self._connect_request_at = time.monotonic()
         if self._manager is not None:
@@ -196,7 +160,6 @@ class SessionCoordinator:
         await self._signal_client.send({'type': 'list_drones'})
 
     def send_joystick_packet(self, frame: bytes) -> None:
-        """Мост: каждый тик joystick-цикла UI отправляет один CRSF-кадр."""
         if self._manager is None or self._manager.channels is None:
             return
         packet = self._manager.channels.packet
@@ -204,7 +167,6 @@ class SessionCoordinator:
             return
         packet.send_bytes(frame)
 
-#### Диспетчер сигнальных сообщений ####################################################
     async def _on_message(self, msg: dict) -> None:
         kind = msg.get('type')
         match kind:
@@ -216,14 +178,6 @@ class SessionCoordinator:
                 await self._handle_ice(msg)
             case 'drone_disconnected':
                 drone_id = msg.get('drone_id')
-                # Отличаем «сессия так и не поднялась» (плата сбросила пир до
-                # SDP — например, нет камер / сломан пайплайн) от teardown в
-                # процессе (плата перепереговаривается после params/
-                # camera-hotplug). Если disconnect приходит в пределах 10s от
-                # нашего request_connect по этому же дрону, GCS вообще не видел
-                # видео → трактуем как жёсткий connect-failure: показываем в UI
-                # и НЕ авто-переподключаемся (иначе зациклимся, пока плата
-                # отвергает connect из-за всё ещё отсутствующих камер).
                 is_connect_failure = (
                     isinstance(drone_id, str)
                     and self._target_drone_id == drone_id
@@ -277,10 +231,6 @@ class SessionCoordinator:
                 self.on_drones_changed(self._latest_drones)
             except Exception as exc:
                 logger.warning('[coord] ошибка on_drones_changed: %s', exc)
-        # Авто-переподключение: если потеряли дрон и он снова в сети — переподключаемся.
-        # Проверяем active_drone_id, а не `_manager is None` — сам менеджер
-        # переживает teardown'ы (он переиспользуем); разорванная сессия
-        # сигнализируется через `_peer is None`, то есть active_drone_id is None.
         manager_idle = self._manager is None or self._manager.active_drone_id is None
         if self._reconnect_drone_id is not None and manager_idle:
             entry = next(
@@ -293,10 +243,6 @@ class SessionCoordinator:
                 logger.info('[coord] авто-переподключение к дрону %s', target)
                 await self.request_connect(target)
             else:
-                # Дрона нет в обновлённом списке как online: это не моргание
-                # перепереговоров — WS платы реально пропал (краш, сеть,
-                # питание). Перестаём ждать его возврата и даём UI увести
-                # пользователя из drone-view.
                 offline_id = self._reconnect_drone_id
                 self._reconnect_drone_id = None
                 logger.info('[coord] дрон %s подтверждённо offline; прекращаем переподключение', offline_id)
@@ -313,15 +259,7 @@ class SessionCoordinator:
         sdp = msg.get('sdp')
         if not isinstance(drone_id, str) or not isinstance(sdp, dict):
             return
-        # Первый SDP от дрона в сессии приходит как offer; менеджер
-        # обрабатывает только это направление (answer мы уже отправили).
-        # Раньше FC-привязка делалась здесь сразу, но на этот момент DTLS+SCTP
-        # ещё не завершены — hub.packet / hub.config всё ещё None.
-        # Теперь менеджер вызывает _wire_channels_to_fc через on_channel_attached,
-        # когда каждый data-канал реально появляется на aiortc PC.
         if sdp.get('type') == 'offer':
-            # SDP пришёл — connect в процессе; сбрасываем окно connect-failure,
-            # чтобы более поздний disconnect трактовался как обычный teardown.
             self._connect_request_at = None
             await self._manager.handle_offer(drone_id, sdp)
 
@@ -334,14 +272,6 @@ class SessionCoordinator:
             await self._manager.handle_ice(drone_id, cand)
 
     async def _handle_auth_refreshed(self, msg: dict) -> None:
-        """Сервер подтверждает refresh — его новый access-токен заменяет наш.
-        Также принимаем access-токен прямо от сервера (на случай, если наш
-        REST-refresh вернул более старый).
-
-        Если сервер ещё и ротировал refresh-токен (msg['refresh_token']),
-        обновляем in-memory копию И сохранённый token_store, иначе следующий
-        REST /auth/refresh упадёт с 401 на устаревшем токене.
-        """
         new_access = msg.get('access_token')
         if isinstance(new_access, str) and new_access:
             self._signal_client.update_access_token(new_access)
@@ -349,8 +279,6 @@ class SessionCoordinator:
         new_refresh = msg.get('refresh_token')
         if isinstance(new_refresh, str) and new_refresh and new_refresh != self._refresh_token:
             self._refresh_token = new_refresh
-            # Сохраняем для следующего запуска — сбои некритичны (in-memory
-            # копия остаётся доступной до конца этой сессии).
             try:
                 from mavixdesktop.server import token_store
                 email, _ = token_store.load()
@@ -377,16 +305,13 @@ class SessionCoordinator:
             self._signal_client.update_access_token(new_access)
 
     async def _refresh_now(self) -> str:
-        """Обращается к /api/v1/auth/refresh. Возвращает новый access-токен."""
         result = await self._api.refresh(self._refresh_token)
         new_access = result.get('access_token', '')
         if isinstance(new_access, str) and new_access:
             return new_access
         raise ApiError('refresh не вернул access-токен')
 
-#### Интеграция с FC и QGC-relay #######################################################
     def _wire_channels_to_fc(self) -> None:
-        """Как только data-каналы появились, подключает packet-канал к FC."""
         if self._manager is None or self._manager.channels is None:
             return
         hub = self._manager.channels
@@ -427,10 +352,6 @@ class SessionCoordinator:
                 logger.warning('[coord] ошибка on_battery_changed: %s', exc)
 
     def _handle_command_ack_message(self, payload: dict) -> None:
-        """Громкая лог-строка на каждый MAVLink COMMAND_ACK, который шлёт FC.
-        Result `ACCEPTED` означает, что наш SET_MODE / ARM прошёл; всё остальное
-        (DENIED / TEMPORARILY_REJECTED / FAILED / UNSUPPORTED) — объяснение FC,
-        почему команда была отклонена."""
         cmd = payload.get('command', '?')
         result = payload.get('result', '?')
         if result == 'ACCEPTED':
@@ -463,7 +384,6 @@ class SessionCoordinator:
                 logger.warning('[coord] ошибка on_cameras_received: %s', exc)
 
     def _on_config_message(self, payload: dict | list) -> None:
-        # ConfigChannel вызывает это синхронно; планируем async-обработчик.
         if self._loop is None:
             return
         self._loop.create_task(self._on_config_message_async(payload))
@@ -484,14 +404,10 @@ class SessionCoordinator:
                 self._mavlink = None
 
     def _on_packet_from_drone(self, data: bytes) -> None:
-        """Дрон → packet-канал → сюда. Для MAVLink пересылаем в QGC."""
         if self._fc_kind == 'mavlink' and self._mavlink is not None:
             self._mavlink.send_to_qgc(data)
-        # Для CRSF телеметрийные пакеты пока не имеют потребителя в UI; UI
-        # может подписаться через bridge-слой и парсить их сам.
 
     def _on_qgc_packet(self, data: bytes) -> None:
-        """QGC → UDP-сокет → сюда. Пересылаем дрону через packet-канал."""
         if self._manager is None or self._manager.channels is None:
             return
         packet = self._manager.channels.packet
@@ -500,14 +416,6 @@ class SessionCoordinator:
         packet.send_bytes(data)
 
     async def _teardown_session(self) -> None:
-        # Все вызывающие работают на собственном event loop координатора,
-        # поэтому можно просто await — без run_coroutine_threadsafe (который
-        # вызвал бы deadlock при планировании на loop, исполняющий нас сейчас).
-        # ВАЖНО: сохраняем self._manager живым между teardown'ами. close_async/
-        # end_session оставляют WebRTCManager в чистом состоянии, а
-        # request_connect вызывает start_session только когда manager не None —
-        # обнуление здесь ломает авто-переподключение (например, после
-        # params-driven сброса сессии) и путь повторного входа в drone-view.
         if self._manager is not None:
             await self._manager.close_async()
         if self._mavlink is not None:

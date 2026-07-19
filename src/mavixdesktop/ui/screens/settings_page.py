@@ -1,10 +1,4 @@
-"""UI настроек — редактирование ~/.config/mavixdesktop/config.json из приложения.
-
-Доступно через иконку-шестерёнку на странице логина и на странице списка
-дронов. Сохранение пишет JSON-файл и обновляет in-memory singleton
-settings (без перезапуска приложения); изменения SIGNAL_URL вступают в
-силу при следующем reconnect или логине.
-"""
+"""Settings UI — edits ~/.config/mavixdesktop/config.json from the app."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -29,9 +23,6 @@ from mavixdesktop.core.config import settings
 from mavixdesktop.ui.screens.utils import svg_pixmap
 from mavixdesktop.ui.style import theme
 
-# Значения по умолчанию, подставляемые при «Сбросить к дефолтам». Они
-# повторяют dev .env-example, чтобы «чистый» конфиг совпадал с тем, что
-# разработчик получает из коробки.
 _DEFAULTS = {
     'signal_url': 'http://localhost:8000',
     'stun_server': '',
@@ -45,13 +36,6 @@ _DEFAULTS = {
 
 
 class SettingsPage(QWidget):
-    """Одностраничная форма.
-
-    on_close вызывается, когда пользователь нажимает «Закрыть» (или
-    успешно сохраняет) — host должен вернуть тот экран, что был показан
-    до этого.
-    """
-
     def __init__(self, on_close: Callable[[], None]) -> None:
         super().__init__()
         self._on_close = on_close
@@ -116,7 +100,6 @@ class SettingsPage(QWidget):
 
         self._load_values()
 
-    #### Построение UI #####################################################################
     def _build_header(self) -> QWidget:
         header = QWidget()
         header.setStyleSheet('background: transparent;')
@@ -237,10 +220,7 @@ class SettingsPage(QWidget):
         actions.addWidget(save_btn)
         return actions
 
-    #### Данные и сохранение ###############################################################
     def _load_values(self) -> None:
-        # Берём значения из живого объекта settings, чтобы форма отражала
-        # эффективный конфиг (включая возможный override из OS env).
         current = {
             'signal_url': settings.signal_url,
             'stun_server': settings.stun_server,
@@ -280,7 +260,6 @@ class SettingsPage(QWidget):
     def _on_save(self) -> None:
         values = self._collect()
 
-        # Минимальная валидация: SIGNAL_URL обязателен и должен быть http(s).
         signal_url = values.get('signal_url', '').rstrip('/')
         if not signal_url:
             self._show_error('Поле SIGNAL_URL не может быть пустым.')
@@ -290,7 +269,6 @@ class SettingsPage(QWidget):
             return
         values['signal_url'] = signal_url
 
-        # qgc_port должен быть числом.
         port_str = values.get('qgc_port', '14550')
         try:
             port = int(port_str)
@@ -301,8 +279,6 @@ class SettingsPage(QWidget):
             return
         values['qgc_port'] = port
 
-        # Сохраняем JSON, поверх уже существующих ключей (на случай, если
-        # там есть что-то, чего UI не знает).
         existing = user_config.load()
         existing.update(values)
         try:

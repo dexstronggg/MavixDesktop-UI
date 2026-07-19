@@ -20,8 +20,6 @@ from mavixdesktop.ui.style import theme
 
 
 class TokenPage(QWidget):
-    """Стартовая страница: ввод токена подключения и параметров WebRTC."""
-
     def __init__(self, on_connect: Callable[[str], None], cur_token: str,
                  cur_signal_url: str = '', cur_stun: str = '', cur_turn: str = '') -> None:
         super().__init__()
@@ -92,7 +90,7 @@ class TokenPage(QWidget):
         self.signal_input.setMinimumHeight(40)
 
         self.stun_input = QLineEdit()
-        self.stun_input.setPlaceholderText('STUN server (например stun:stun.l.google.com:19302)')
+        self.stun_input.setPlaceholderText('STUN server (e.g. stun:stun.l.google.com:19302)')
         self.stun_input.setText(self._cur_stun)
         self.stun_input.setStyleSheet(theme.QSS_INPUT)
         self.stun_input.setMinimumHeight(40)

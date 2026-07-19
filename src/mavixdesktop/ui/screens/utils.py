@@ -1,4 +1,4 @@
-"""Общие UI-утилиты пакета screens."""
+"""Shared UI utilities for the screens package."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -29,24 +29,7 @@ from mavixdesktop.ui.style import theme
 _ICONS_DIR = Path(__file__).parent.parent / 'icons'
 
 
-#### SVG-хелперы #######################################################################
 def svg_pixmap(name: str, size: int, color: str | None = None) -> QPixmap:
-    """Загружает SVG из ui/icons/<name> и возвращает QPixmap.
-
-    Если передан color (hex или CSS-имя), результат перекрашивается:
-    сохраняется alpha-маска отрисованных фигур, цвет RGB заменяется на
-    указанный. Это обходит ограничение QSvgRenderer, у которого нет
-    currentColor из CSS — без перекраски иконки рендерятся чёрным
-    stroke-ом и не видны на тёмном фоне.
-
-    Тинтование делается через CompositionMode_SourceIn: сначала рисуем
-    SVG в прозрачный pixmap, потом заливаем его сплошным цветом в режиме
-    SourceIn — заливка попадает только туда, где у исходного pixmap'а
-    alpha > 0. Предыдущая реализация делала DestinationIn над отдельным
-    цветным pixmap'ом, и в некоторых конфигурациях Qt тот pixmap не
-    получал alpha-канал — иконка визуально оказывалась внутри чёрного
-    квадрата.
-    """
     renderer = QSvgRenderer(str(_ICONS_DIR / name))
     px = QPixmap(QSize(size, size))
     px.fill(Qt.transparent)
@@ -60,17 +43,12 @@ def svg_pixmap(name: str, size: int, color: str | None = None) -> QPixmap:
 
 
 def mavix_logo_pixmap(size: int) -> QPixmap:
-    """Логотип Mavix — cyan-градиентный квадрат со скруглёнными углами и
-    точно центрированной белой буквой 'M'. Рисуется QPainter-ом, без
-    QSvgRenderer — так Qt не теряет ни центрирование, ни шрифт.
-    """
     px = QPixmap(QSize(size, size))
     px.fill(Qt.transparent)
     p = QPainter(px)
     p.setRenderHint(QPainter.Antialiasing, True)
     p.setRenderHint(QPainter.TextAntialiasing, True)
 
-    # Фон: cyan linear gradient
     grad = QLinearGradient(0, 0, size, size)
     grad.setColorAt(0.0, QColor('#22d3ee'))
     grad.setColorAt(1.0, QColor('#06b6d4'))
@@ -79,7 +57,6 @@ def mavix_logo_pixmap(size: int) -> QPixmap:
     radius = size * 0.26
     p.drawRoundedRect(0, 0, size, size, radius, radius)
 
-    # Центрированная буква M
     font = QFont('Inter')
     font.setPixelSize(int(size * 0.62))
     font.setWeight(QFont.Weight.Bold)
@@ -90,14 +67,7 @@ def mavix_logo_pixmap(size: int) -> QPixmap:
     return px
 
 
-#### Фабрики overlay-кнопок ############################################################
 def overlay_btn(text: str, parent: QWidget, size: int | None = None) -> QPushButton:
-    """Прозрачная круглая кнопка с текстовым символом (стрелки и т.п.).
-
-    Поверх видеопотока на flight-окне должна читаться только сама иконка/
-    символ — без плашки. На hover — едва заметная белая подложка для
-    обратной связи; рамки нет вовсе.
-    """
     if size is None:
         size = theme.OVERLAY_BTN_SIDE
     btn = QPushButton(text, parent)
@@ -113,10 +83,6 @@ def overlay_btn(text: str, parent: QWidget, size: int | None = None) -> QPushBut
             font-size: {theme.OVERLAY_BTN_SIDE_FONT}px;
         }}
         QPushButton:hover {{
-            /* Тот же блю rgba(42,130,218,...), что у hover полей
-               разрешения/FPS/битрейта и у save/calibrate-кнопок в
-               SettingsBar — даёт единый визуальный язык всех
-               интерактивных hover-состояний на drone-view. */
             background: rgba(42, 130, 218, 0.20);
         }}
         QPushButton:pressed {{
@@ -132,13 +98,6 @@ def overlay_btn(text: str, parent: QWidget, size: int | None = None) -> QPushBut
 
 def overlay_icon_btn(svg_name: str, parent: QWidget,
                      size: int | None = None, icon_size: int | None = None) -> QPushButton:
-    """Прозрачная круглая кнопка с SVG-иконкой.
-
-    Тот же подход, что у overlay_btn: нормально — полностью прозрачно,
-    hover — едва заметный белый тинт. Раньше под иконкой рендерился
-    полупрозрачный чёрный круг, на полётном экране это читалось как
-    тёмный квадрат и засоряло видео.
-    """
     if size is None:
         size = theme.OVERLAY_BTN_CORNER
     if icon_size is None:
@@ -156,10 +115,6 @@ def overlay_icon_btn(svg_name: str, parent: QWidget,
             border-radius: {size // 2}px;
         }}
         QPushButton:hover {{
-            /* Тот же блю rgba(42,130,218,...), что у hover полей
-               разрешения/FPS/битрейта и у save/calibrate-кнопок в
-               SettingsBar — даёт единый визуальный язык всех
-               интерактивных hover-состояний на drone-view. */
             background: rgba(42, 130, 218, 0.20);
         }}
         QPushButton:pressed {{
@@ -172,17 +127,7 @@ def overlay_icon_btn(svg_name: str, parent: QWidget,
     return btn
 
 
-#### AnimatedCard ######################################################################
 class AnimatedCard(QWidget):
-    """База для карточек с анимируемой по hover акцентной полосой внизу.
-
-    Подклассы могут переопределить:
-        _ANIM_DURATION  — длительность анимации в мс
-        _BAR_RADIUS     — радиус скругления полосы в px
-        _BAR_HEIGHT     — высота полосы в px
-        _on_hover(bool) — вызывается на HoverEnter/Leave; по умолчанию
-                          анимирует только полосу
-    """
     _ANIM_DURATION = 500
     _BAR_RADIUS    = theme.RADIUS_LG
     _BAR_HEIGHT    = 3
@@ -190,8 +135,6 @@ class AnimatedCard(QWidget):
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
         self._bar_progress = 0
-        # Цвет hover-полосы можно переопределить у инстанса (DroneCard
-        # тонирует её под статус — green/red/amber). По умолчанию — cyan.
         self._bar_color: str = theme.ACCENT
         self._bar_anim = QPropertyAnimation(self, b'bar_progress')
         self._bar_anim.setDuration(self._ANIM_DURATION)
@@ -238,12 +181,7 @@ class AnimatedCard(QWidget):
         painter.end()
 
 
-#### CardGrid ##########################################################################
 class CardGrid(QWidget):
-    """Адаптивный grid, перераскладывающий колонки при ресайзе.
-
-    Подклассы обязаны задать CARD_W, CARD_H, GAP как атрибуты класса.
-    """
     CARD_W: int = 0
     CARD_H: int = 0
     GAP:    int = 0
@@ -279,25 +217,14 @@ class CardGrid(QWidget):
         self.__clear_layout()
         n = len(self._cards)
 
-        # Сбрасываем stretch на всех потенциально использованных колонках —
-        # иначе при переключении между режимами (N=1 ↔ N>1) остаются
-        # настройки прошлой раскладки и карточки уезжают.
         for c in range(cols + 2):
             self._layout.setColumnStretch(c, 0)
 
         if n == 1:
-            # Одна карточка не должна висеть по центру широкого экрана:
-            # прижимаем к верх-левому углу и пускаем stretch-колонку
-            # справа, чтобы пустое место не растягивало ячейку. Многокарточный
-            # layout остаётся как есть — карточки распределяются по колонкам
-            # через AlignHCenter (см. ветку else).
             self._layout.addWidget(self._cards[0], 0, 0, Qt.AlignTop | Qt.AlignLeft)
             self._layout.setColumnStretch(1, 1)
         else:
             for i, card in enumerate(self._cards):
-                # AlignHCenter — карточки центрируются в своих колонках, а не
-                # жмутся к левому краю. При 3 карточках в широком окне они
-                # равномерно распределяются по ширине, как в drone-list/joystick.
                 self._layout.addWidget(card, i // cols, i % cols, Qt.AlignTop | Qt.AlignHCenter)
 
         rows = (n + cols - 1) // cols if self._cards else 0

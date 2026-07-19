@@ -1,8 +1,4 @@
-"""Smoke tests for the Qt UI: imports + widget construction under offscreen QPA.
-
-These tests deliberately avoid driving the asyncio thread in ConnectionManager
-(login / coordinator), so no real network or PyAV codec setup happens.
-"""
+"""Smoke tests for the Qt UI: imports + widget construction under offscreen QPA. These tests deliberately avoid driving the asyncio thread in ConnectionManager (login / coordinator), so no real network or PyAV codec setup happens."""
 from __future__ import annotations
 
 import os
@@ -64,17 +60,14 @@ def test_drone_list_page_update_with_new_format(qapp):
         on_logout=lambda: None,
         on_joystick_cfg=lambda: None,
     )
-    # New format from MavixServer /ws/gcs
     page.update([
         {'drone_id': 'd-1', 'online': True},
         {'drone_id': 'd-2', 'online': False},
     ])
-    # Empty list should not crash
     page.update([])
 
 
 def test_drone_list_page_update_with_legacy_format(qapp):
-    """Tolerate the old {session_id, status} shape too."""
     from mavixdesktop.ui.screens.drone_list_page import DroneListPage
     page = DroneListPage(
         on_select=lambda _id: None,
@@ -86,9 +79,6 @@ def test_drone_list_page_update_with_legacy_format(qapp):
 
 
 def test_app_constructs_without_login(qapp, monkeypatch):
-    """When no refresh token is stored, App opens on the login page and the
-    ConnectionManager does NOT spin up an event loop."""
-    # Block keyring/file lookup from finding anything
     monkeypatch.setattr(
         'mavixdesktop.ui.managers.connection.token_store.load',
         lambda: (None, None),
@@ -100,13 +90,11 @@ def test_app_constructs_without_login(qapp, monkeypatch):
 
 
 def test_app_resumes_when_refresh_token_stored(qapp, monkeypatch):
-    """When refresh token exists, App opens on the drone list."""
     monkeypatch.setattr(
         'mavixdesktop.ui.managers.connection.token_store.load',
         lambda: ('me@example.com', 'r-token-xyz'),
     )
 
-    # Stub out the async refresh attempt so we don't hit the network
     from mavixdesktop.ui.managers import connection as conn_mod
 
     async def _no_op(self, *a, **kw):
@@ -119,8 +107,6 @@ def test_app_resumes_when_refresh_token_stored(qapp, monkeypatch):
 
 
 def test_token_page_constructs(qapp):
-    """Legacy TokenPage is still importable; no longer in the default flow
-    but kept for the token-based DM screens until they're migrated."""
     from mavixdesktop.ui.screens.token_page import TokenPage
     page = TokenPage(
         on_connect=lambda token: None,

@@ -1,8 +1,4 @@
-"""Хранилище токенов поверх OS keyring с фолбэком на обычный файл.
-
-Access-токены короткоживущие (~15 мин) и не сохраняются; между запусками
-переживает только refresh-токен.
-"""
+"""Token storage over OS keyring with file fallback."""
 from __future__ import annotations
 
 import json
@@ -16,7 +12,6 @@ _REFRESH_KEY = 'refresh_token'
 _EMAIL_KEY = 'email'
 
 
-#### Внутренние помощники ##############################################################
 def _file_path() -> Path:
     return settings.config_dir / 'tokens.json'
 
@@ -34,11 +29,6 @@ def _read_file() -> dict:
 def _write_file(data: dict) -> None:
     p = _file_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    # Refresh-токен — долгоживущий credential; файловый фолбэк используется,
-    # когда OS keyring недоступен. Ограничиваем доступ только владельцу (r/w),
-    # чтобы другие локальные учётки не могли его прочитать. O_CREAT|mode
-    # применяется только при создании файла; chmod после обрабатывает уже
-    # существующие файлы с возможно более слабыми правами.
     fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, 'w') as f:
         f.write(json.dumps(data))
@@ -46,16 +36,13 @@ def _write_file(data: dict) -> None:
 
 
 def _keyring() -> object | None:
-    """Ленивый импорт — тесты, не желающие трогать OS keyring, просто не
-    импортируют load/save этого модуля или подменяют через monkeypatch."""
     try:
-        import keyring  # type: ignore
+        import keyring
         return keyring
     except ImportError:
         return None
 
 
-#### Публичный API #####################################################################
 def save(email: str, refresh_token: str) -> None:
     kr = _keyring()
     if kr is not None:
@@ -69,7 +56,6 @@ def save(email: str, refresh_token: str) -> None:
 
 
 def load() -> tuple[str | None, str | None]:
-    """Возвращает (email, refresh_token); любое или оба значения могут быть None."""
     kr = _keyring()
     if kr is not None:
         try:

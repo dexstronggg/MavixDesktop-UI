@@ -10,8 +10,6 @@ import websockets
 from mavixdesktop.server.signal_client import SignalClient
 
 
-#### unit tests with mocked ws_connect #################################################
-
 async def test_connect_sends_auth_first_message():
     fake_conn = AsyncMock()
     with patch(
@@ -69,8 +67,6 @@ async def test_disconnect_noop_when_not_connected():
     assert not sc.is_connected
 
 
-#### integration with real websockets server ###########################################
-
 class _Server:
     def __init__(self) -> None:
         self.auth_msg: dict | None = None
@@ -97,7 +93,6 @@ async def test_full_lifecycle_against_real_server():
         sc = SignalClient(f'ws://localhost:{port}', 'jwt-abc')
 
         assert await sc.connect() is True
-        # Server reads the auth message during accept
         await asyncio.sleep(0.05)
         assert srv.auth_msg == {'type': 'auth', 'token': 'jwt-abc'}
 
@@ -121,7 +116,7 @@ async def test_full_lifecycle_against_real_server():
 
 async def test_listen_skips_invalid_json():
     async def handler(ws) -> None:
-        await ws.recv()  # auth
+        await ws.recv()
         await ws.send('not-json')
         await ws.send(json.dumps({'type': 'pong'}))
         await asyncio.sleep(0.05)

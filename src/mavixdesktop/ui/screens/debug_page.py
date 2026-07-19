@@ -1,8 +1,4 @@
-"""Debug-страница для проверки отдельных функций без борта и сервера.
-
-Включается флагом DEBUG в .env (см. core.config). Сейчас содержит одну
-кнопку — запуск QGroundControl, чтобы проверять поиск/диалог выбора/запуск
-QGC изолированно."""
+"""Debug page for testing individual functions without board or server."""
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -20,8 +16,6 @@ from mavixdesktop.ui.style import theme
 
 
 class DebugPage(QWidget):
-    """Стартовая страница в DEBUG-режиме: набор кнопок для ручной проверки."""
-
     def __init__(self, on_launch_qgc: Callable[[], None]) -> None:
         super().__init__()
 

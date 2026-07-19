@@ -1,14 +1,4 @@
-"""UI-адаптер над mavixdesktop.coordinator.SessionCoordinator.
-
-Coordinator крутит asyncio event loop в фоновом потоке. Этот адаптер:
-  - поднимает loop при создании;
-  - логинит пользователя (или восстанавливает из keyring) и запускает
-    coordinator;
-  - пробрасывает события coordinator в сигналы Qt Bridge;
-  - предоставляет синхронные UI-методы, которые планируют корутины на
-    фоновый loop.
-"""
-
+"""UI adapter over mavixdesktop.coordinator.SessionCoordinator."""
 from __future__ import annotations
 
 import asyncio
@@ -37,7 +27,6 @@ class ConnectionManager:
         self._track_callback = None
         self._reset_callback = None
 
-    #### Публичный API для App #############################################################
     @property
     def coordinator(self) -> SessionCoordinator | None:
         return self._coord
@@ -49,7 +38,6 @@ class ConnectionManager:
             self._coord.on_track = on_track
 
     def login(self, email: str, password: str) -> None:
-        """Запускает вход в фоновом loop; UI не блокируется."""
         self._ensure_loop_started()
         assert self._loop is not None
         asyncio.run_coroutine_threadsafe(
@@ -57,8 +45,6 @@ class ConnectionManager:
         )
 
     def resume(self) -> bool:
-        """Пытается перезапуститься по сохранённому refresh-токену.
-        Возвращает True, если токен найден."""
         email, refresh = token_store.load()
         if not refresh:
             return False
@@ -82,10 +68,6 @@ class ConnectionManager:
         drone_id: str,
         on_done: Callable[[str | None], None] | None = None,
     ) -> None:
-        """Асинхронно удаляет дрон через REST API. `on_done` вызывается в
-        главном Qt-потоке с None при успехе или строкой-сообщением об
-        ошибке при сбое (колбэк ставится в очередь через
-        QTimer.singleShot)."""
         self._ensure_loop_started()
         assert self._loop is not None
         asyncio.run_coroutine_threadsafe(
@@ -111,7 +93,6 @@ class ConnectionManager:
         except Exception as exc:
             logger.warning('[connection] не удалось удалить дрон: %s', exc)
             error = 'Не удалось удалить дрон. Попробуйте позже.'
-        # В любом случае обновляем список, чтобы UI подхватил изменения.
         if self._coord is not None and error is None:
             try:
                 await self._coord.request_drone_list()
@@ -133,14 +114,6 @@ class ConnectionManager:
             self._coord.send_joystick_packet(frame)
 
     def request_password_reset(self, email: str) -> None:
-        """Запрашивает восстановление пароля — fire-and-forget POST в API.
-
-        Используется со страницы логина по клику «Забыли пароль?». UI
-        показывает сообщение-подтверждение сразу, не дожидаясь ответа
-        (сервер всё равно отвечает одинаково в любом случае,
-        anti-enumeration). Если API-сессия ещё не создана (пользователь ни
-        разу не пытался войти) — создаём временную.
-        """
         self._ensure_loop_started()
         assert self._loop is not None
         asyncio.run_coroutine_threadsafe(self._async_password_reset(email), self._loop)
@@ -162,7 +135,6 @@ class ConnectionManager:
             if own_session:
                 await api.close()
 
-    #### Мост Qt в asyncio #################################################################
     def _ensure_loop_started(self) -> None:
         if self._loop is not None:
             return
@@ -240,7 +212,6 @@ class ConnectionManager:
         self._coord.on_battery_changed = self._emit_battery
         self._coord_task = asyncio.create_task(self._coord.run())
 
-    #### События coordinator в сигналы Qt ##################################################
     def _emit_drones(self, drones: list[dict]) -> None:
         try:
             self._bridge.client_list_updated.emit(drones)

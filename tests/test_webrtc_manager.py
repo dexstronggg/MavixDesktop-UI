@@ -40,7 +40,7 @@ async def test_start_session_replaces_existing(monkeypatch):
 
 async def test_end_session_clears():
     mgr = WebRTCManager(send=AsyncMock())
-    mgr.end_session()  # noop when no session
+    mgr.end_session()
     assert mgr.active_drone_id is None
 
 
@@ -108,7 +108,7 @@ async def test_handle_offer_missing_sdp_text_ignored(monkeypatch):
     send = AsyncMock()
     mgr = WebRTCManager(send=send)
     mgr.start_session('drone-1')
-    await mgr.handle_offer('drone-1', {'type': 'offer'})  # no 'sdp'
+    await mgr.handle_offer('drone-1', {'type': 'offer'})
     peer.apply_offer.assert_not_awaited()
     send.assert_not_awaited()
 
@@ -145,12 +145,6 @@ async def test_close_async_closes_peer_and_session(monkeypatch):
     assert mgr.active_drone_id is None
 
 
-#### on_channel_attached callback ######################################################
-# Hub.attach happens when aiortc fires the 'datachannel' event after
-# DTLS+SCTP completes — not immediately after offer/answer. The callback
-# lets the coordinator know "the channel is actually ready now" so it
-# can wire FC/config handlers at the right time.
-
 async def test_handle_datachannel_attaches_and_fires_callback(monkeypatch):
     peer = _build_peer_mock()
     monkeypatch.setattr(
@@ -163,11 +157,9 @@ async def test_handle_datachannel_attaches_and_fires_callback(monkeypatch):
     seen_labels: list[str] = []
     mgr.on_channel_attached = lambda label: seen_labels.append(label)
 
-    # Mock a channel with label 'packet-channel' — hub.attach knows how to
-    # route it (label match) and returns True.
     ch = MagicMock()
     ch.label = 'packet-channel'
-    ch.on = MagicMock()  # channel.on('message', handler) — used by PacketChannel
+    ch.on = MagicMock()
     mgr._handle_datachannel(ch)
 
     assert mgr.channels.packet is not None
@@ -186,17 +178,15 @@ async def test_handle_datachannel_skips_callback_when_attach_rejects(monkeypatch
     seen: list[str] = []
     mgr.on_channel_attached = lambda label: seen.append(label)
 
-    # Unknown label — DataChannelHub.attach warns and returns False.
     ch = MagicMock()
     ch.label = 'unknown-channel-label'
     ch.on = MagicMock()
     mgr._handle_datachannel(ch)
 
-    assert seen == []  # callback NOT fired because attach failed
+    assert seen == []
 
 
 async def test_handle_datachannel_swallows_callback_exception(monkeypatch):
-    """A buggy coordinator callback must not break channel attachment."""
     peer = _build_peer_mock()
     monkeypatch.setattr(
         'mavixdesktop.webrtc.manager.PeerSession',
@@ -213,6 +203,5 @@ async def test_handle_datachannel_swallows_callback_exception(monkeypatch):
     ch = MagicMock()
     ch.label = 'packet-channel'
     ch.on = MagicMock()
-    # Must not raise
     mgr._handle_datachannel(ch)
     assert mgr.channels.packet is not None

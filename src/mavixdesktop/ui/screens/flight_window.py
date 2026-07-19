@@ -46,49 +46,29 @@ class FlightWindow(QWidget):
         self._on_close = on_close
         self._cam_index = 0
         self._help_shown = False
-        # passive=True — окно только ПОКАЗЫВАЕТ видео + стики + battery +
-        # ping; никаких MAVLink-фреймов не шлёт. Используется когда
-        # параллельно запущен QGroundControl, который сам обрабатывает
-        # joystick → MANUAL_CONTROL. Arm-кнопку при этом слушает app
-        # отдельным фоновым таймером и шлёт ARM/DISARM через packet-channel.
         self._passive = bool(passive)
 
-        # Состояние потока на протокол. MAVLink требует encoder + heartbeat-
-        # таймер + отслеживание фронта arm; CRSF перекодирует весь кадр на
-        # каждом тике из сырых значений стиков, так что состояния, кроме
-        # armed, не нужно.
         self._fc_kind = (fc_kind or 'crsf').lower()
         self._mavlink_enc: MavlinkEncoder | None = None
         self._last_armed: bool | None = None
-        # Текущий выбранный main_mode (для PX4). Меняется через выпадающий
-        # список в углу окна. По умолчанию Stabilized — самый «дружелюбный»
-        # для multicopter на проверке управления.
         self._current_main_mode = PX4_MAIN_MODES['STABILIZED']
         self._mode_combo: QComboBox | None = None
         self._mode_set_sent = False
         self._heartbeat_timer: QTimer | None = None
-        # Ставится, когда джойстик физически отключён в полёте. Останавливает
-        # обычный 50 Hz поток и заменяет его 5 Hz пачкой «нейтральные стики +
-        # DISARM», чтобы FC надёжно получил kill-команду, даже если первый
-        # пакет потеряется.
         self._js_lost = False
         self._rtl_sent = False
         if self._fc_kind == 'mavlink' and not self._passive:
             self._mavlink_enc = MavlinkEncoder()
-            # PX4 запускает RC-loss failsafe, если не видит heartbeat от GCS
-            # ~1 с. Шлём один до старта 50 Hz manual_control-насоса и держим
-            # их идущими в фоне.
             self._send_packet(self._mavlink_enc.heartbeat())
             self._heartbeat_timer = QTimer(self, interval=1000)
             self._heartbeat_timer.timeout.connect(self.__send_heartbeat)
             self._heartbeat_timer.start()
 
         self.__build_ui()
-        self._timer = QTimer(interval=10)  # 100 Hz — ниже Betaflight срывается в RXLOSS
+        self._timer = QTimer(interval=10)
         self._timer.timeout.connect(self.__tick)
         self._timer.start()
 
-    #### Построение UI #####################################################################
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
         if not self._help_shown and not self._passive:
@@ -127,10 +107,6 @@ class FlightWindow(QWidget):
             'background: transparent;'
         )
 
-        # Большой красный баннер, появляется в момент обнаружения потери
-        # джойстика. Текст подменяется в __handle_joystick_lost: для MAVLink
-        # сообщаем об AUTO_RTL, для CRSF — о DISARM (тут нет настоящего
-        # failsafe).
         self._lost_lbl = QLabel('⚠  ДЖОЙСТИК ОТКЛЮЧЁН', self)
         self._lost_lbl.setAlignment(Qt.AlignCenter)
         self._lost_lbl.setStyleSheet(f"""
@@ -169,15 +145,10 @@ class FlightWindow(QWidget):
         self._battery_lbl.setStyleSheet(corner_qss)
         self._battery_lbl.hide()
 
-        # Dropdown переключения PX4 main_mode. Виден только для MAVLink-FC.
-        # При смене мгновенно шлём DO_SET_MODE; PX4 ACK логируется в
-        # coordinator'е, так что оператор видит подтверждение.
-        # В passive-режиме mode/reboot не показываем — этим управляет QGC.
         if self._fc_kind == 'mavlink' and not self._passive:
             self._mode_combo = QComboBox(self)
             for name, code in PX4_MAIN_MODES.items():
                 self._mode_combo.addItem(name, code)
-            # Установить default = Stabilized
             default_idx = list(PX4_MAIN_MODES.values()).index(self._current_main_mode)
             self._mode_combo.setCurrentIndex(default_idx)
             self._mode_combo.setFixedSize(140, 28)
@@ -201,7 +172,7 @@ class FlightWindow(QWidget):
 
             self._reboot_btn = QPushButton('⟳ Reboot FC', self)
             self._reboot_btn.setFixedSize(140, 28)
-            self._reboot_btn.setToolTip('Послать PX4 команду перезагрузки автопилота')
+            self._reboot_btn.setToolTip('Reboot PX4 autopilot')
             self._reboot_btn.setStyleSheet(f"""
                 QPushButton {{
                     background: rgba(180,30,30,0.65);
@@ -218,7 +189,6 @@ class FlightWindow(QWidget):
         else:
             self._reboot_btn: QPushButton | None = None
 
-    #### Геометрия и позиционирование ######################################################
     def resizeEvent(self, event: QResizeEvent) -> None:
         self.__reposition()
         super().resizeEvent(event)
@@ -253,12 +223,10 @@ class FlightWindow(QWidget):
         )
 
         if self._mode_combo is not None:
-            # Верхний правый угол, рядом с joystick-кнопкой.
             self._mode_combo.move(w - self._mode_combo.width() - _PAD,
                                    _PAD + theme.OVERLAY_BTN_CORNER + 8)
             self._mode_combo.raise_()
         if self._reboot_btn is not None:
-            # Под dropdown'ом режимов.
             self._reboot_btn.move(w - self._reboot_btn.width() - _PAD,
                                   _PAD + theme.OVERLAY_BTN_CORNER + 8 + 32)
             self._reboot_btn.raise_()
@@ -267,7 +235,6 @@ class FlightWindow(QWidget):
         self._lost_lbl.adjustSize()
         self._lost_lbl.move((w - self._lost_lbl.width()) // 2, (h - self._lost_lbl.height()) // 2)
 
-    #### Игровой цикл и ввод ###############################################################
     def __prev_cam(self) -> None:
         n = self._cam_count()
         if n > 0:
@@ -293,11 +260,6 @@ class FlightWindow(QWidget):
         self._ping_lbl.setText('— мс' if rtt < 0 else f'{rtt:.0f} мс')
 
     def update_battery(self, percent: int, voltage: float) -> None:
-        """Вызывается App при поступлении телеметрии батареи (CRSF или MAVLink).
-
-        Показывает только вольтаж — percent принимается для симметрии
-        сигнатуры с bridge-сигналом, но не рендерится.
-        """
         if voltage <= 0:
             return
         self._battery_lbl.setText(f'{voltage:.1f} V')
@@ -305,10 +267,6 @@ class FlightWindow(QWidget):
             self._battery_lbl.show()
 
     def __update_joystick(self) -> None:
-        # Повторный arm при потере джойстика запрещён: отправив аварийный
-        # disarm, продолжаем спамить им (реже), пока оператор не закроет
-        # окно. Возврат после выдернутого в полёте джойстика — не то, чем
-        # стоит удивлять пилота.
         if self._js_lost:
             self.__tick_emergency_failsafe()
             return
@@ -321,8 +279,6 @@ class FlightWindow(QWidget):
             thr, yaw, pitch, roll = self._js.get_stick_positions()
             armed = self._js.is_armed()
         except Exception as exc:
-            # Сбой чтения трактуем как отключение: ошибка pygame «device
-            # gone» часто всплывает здесь до прихода JOYDEVICEREMOVED.
             logger.warning('[FlightWindow] сбой чтения джойстика, трактуем как отключение: %s', exc)
             self.__handle_joystick_lost()
             return
@@ -333,8 +289,6 @@ class FlightWindow(QWidget):
         self._arm_label.setStyleSheet(_ARM_STYLE if armed else _DISARM_STYLE)
 
         if self._passive:
-            # Видео + UI визуально показываем, никаких MAVLink-фреймов
-            # не шлём — это делает параллельно запущенный QGC.
             return
 
         if self._fc_kind == 'mavlink':
@@ -342,18 +296,7 @@ class FlightWindow(QWidget):
         else:
             self.__tick_crsf(thr, yaw, pitch, roll, armed)
 
-    #### Аварийный failsafe ################################################################
     def __handle_joystick_lost(self) -> None:
-        """Однократная настройка при обнаружении пропажи геймпада.
-
-        Для MAVLink (PX4) шлём AUTO_RTL — дрон автономно вернётся домой
-        и сядет. Heartbeat НЕ глушим: PX4 должен видеть GCS живым, иначе
-        запустится встроенный RC-loss (у нас он отключён через NAV_RCL_ACT=0,
-        но всё равно полезно поддерживать связь, чтобы RTL прошёл штатно).
-
-        Для CRSF посылаем neutral+DISARM-спам — у Betaflight нет честного
-        RTL, а полагаться на конфиг RX-failsafe пользователя нельзя.
-        """
         if self._js_lost:
             return
         self._js_lost = True
@@ -368,7 +311,6 @@ class FlightWindow(QWidget):
             logger.warning('[FlightWindow] джойстик отключён — шлём AUTO_RTL')
             self._lost_lbl.setText('⚠  ДЖОЙСТИК ОТКЛЮЧЁН — ВКЛЮЧЕН RETURN-TO-LAUNCH')
             self._rtl_sent = False
-            # Heartbeat оставляем работать — PX4 нужно видеть GCS пока он рулит RTL.
         else:
             logger.warning('[FlightWindow] джойстик отключён — аварийный DISARM (CRSF)')
             self._lost_lbl.setText('⚠  ДЖОЙСТИК ОТКЛЮЧЁН — ДРОН РАЗАРМИРУЕТСЯ')
@@ -377,11 +319,6 @@ class FlightWindow(QWidget):
         self.__tick_emergency_failsafe()
 
     def __tick_emergency_failsafe(self) -> None:
-        """Раз в 5 тиков (~10 Hz) шлём failsafe-команду.
-
-        MAVLink: AUTO_RTL один раз (PX4 переключается и держит режим сам).
-        CRSF: neutral+DISARM на каждом тике, пока окно открыто.
-        """
         cnt = getattr(self, '_emerg_cnt', 0) + 1
         self._emerg_cnt = cnt
         if cnt % 5 != 0:
@@ -390,8 +327,6 @@ class FlightWindow(QWidget):
             if self._rtl_sent:
                 return
             try:
-                # Дублируем тремя пакетами в течение 0 ms — SCTP-канал
-                # надёжный, но при флакающем линке полезно повторить.
                 for _ in range(3):
                     self._send_packet(self._mavlink_enc.failsafe_rtl())
                 self._rtl_sent = True
@@ -404,7 +339,6 @@ class FlightWindow(QWidget):
         except Exception as exc:
             logger.debug('[FlightWindow] ошибка аварийной отправки crsf: %s', exc)
 
-    #### Кодирование команд FC #############################################################
     def __tick_crsf(self, thr: float, yaw: float, pitch: float,
                     roll: float, armed: bool) -> None:
         try:
@@ -412,9 +346,6 @@ class FlightWindow(QWidget):
         except Exception as exc:
             logger.debug('[FlightWindow] ошибка кодирования CRSF: %s', exc)
             return
-        # Логируем переходы ARM/DISARM явно, чтобы подтвердить, что нажатие
-        # кнопки реально считывается и кадр с новым значением CH5 уходит.
-        # Стики шумят на 50 Hz; не спамим.
         if armed != self._last_armed:
             logger.info(
                 '[FlightWindow] переход arm CRSF: %s -> %s '
@@ -428,11 +359,6 @@ class FlightWindow(QWidget):
     def __tick_mavlink(self, thr: float, yaw: float, pitch: float,
                        roll: float, armed: bool) -> None:
         assert self._mavlink_enc is not None
-        # Однократный SET_MODE до того, как оператор начнёт армить: у PX4
-        # нет параметра «режим по умолчанию», он остаётся в Hold без явной
-        # SET_MODE-команды. Делаем это на первом тике джойстика, так что
-        # packet-канал к этому моменту точно открыт. Используется текущий
-        # выбранный mode из dropdown-а (по умолчанию Stabilized).
         if not self._mode_set_sent:
             self._send_packet(self._mavlink_enc.set_mode(self._current_main_mode))
             self._mode_set_sent = True
@@ -444,10 +370,6 @@ class FlightWindow(QWidget):
             return
         self._send_packet(mc)
 
-        # Arm/disarm по фронту. Делаем force-arm (param2=21196 magic) в
-        # расчёте, что оператор уже отключил pre-arm проверки в QGC по
-        # настройка_px4.md — иначе PX4 игнорирует обычный arm, пока сенсоры
-        # не откалиброваны полностью.
         if self._last_armed is None or armed != self._last_armed:
             try:
                 self._send_packet(self._mavlink_enc.arm_disarm(armed, force=True))
@@ -456,19 +378,13 @@ class FlightWindow(QWidget):
                 logger.warning('[FlightWindow] ошибка команды arm: %s', exc)
             self._last_armed = armed
 
-    #### Обработчики панели управления #####################################################
     def __on_reboot_clicked(self) -> None:
-        """С подтверждением шлёт PX4 MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN.
-
-        PX4 ответит COMMAND_ACK и тут же ребутнётся — WebRTC-сессия
-        переподключится, mode/arm нужно будет выставлять заново.
-        """
         if self._mavlink_enc is None:
             return
         reply = QMessageBox.question(
             self, 'Reboot FC',
-            'Перезагрузить полётник?\n\nКоманда отправится только если дрон разармирован — '
-            'PX4 защищает себя от ребута в воздухе.',
+            'Reboot the flight controller?\n\n'
+            'The command will only be sent if the drone is disarmed.',
             QMessageBox.Yes | QMessageBox.Cancel,
             QMessageBox.Cancel,
         )
@@ -481,11 +397,6 @@ class FlightWindow(QWidget):
             logger.warning('[FlightWindow] ошибка отправки reboot: %s', exc)
 
     def __on_mode_picked(self, idx: int) -> None:
-        """Мгновенно шлёт SET_MODE при выборе в dropdown.
-
-        PX4 ответит COMMAND_ACK для DO_SET_MODE — увидите в логах
-        ACCEPTED/DENIED.
-        """
         if self._mode_combo is None or self._mavlink_enc is None:
             return
         main_mode = self._mode_combo.itemData(idx)
@@ -503,7 +414,6 @@ class FlightWindow(QWidget):
         except Exception as exc:
             logger.warning('[FlightWindow] ошибка отправки SET_MODE: %s', exc)
 
-    #### Отправка и рендер #################################################################
     def __send_heartbeat(self) -> None:
         if self._mavlink_enc is None:
             return
@@ -531,7 +441,6 @@ class FlightWindow(QWidget):
                 )
             )
 
-    #### Закрытие окна #####################################################################
     def __finish(self) -> None:
         self._stop_streams()
         if self._on_close:
@@ -546,8 +455,6 @@ class FlightWindow(QWidget):
         self._timer.stop()
         if self._heartbeat_timer is not None:
             self._heartbeat_timer.stop()
-        # Шлём один финальный DISARM при закрытии, чтобы не оставить FC
-        # армированным, если оператор просто нажал кнопку «назад».
         if self._mavlink_enc is not None and self._last_armed:
             try:
                 self._send_packet(self._mavlink_enc.arm_disarm(False, force=True))

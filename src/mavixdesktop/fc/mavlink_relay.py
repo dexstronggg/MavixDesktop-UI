@@ -1,12 +1,4 @@
-"""Асинхронный UDP-relay между WebRTC data-channel и локальным QGroundControl.
-
-Заменяет legacy-цикл приёма на потоках на asyncio.DatagramProtocol, чтобы был
-единый event loop и без обвязки с блокировками/потоками.
-
-Поток данных:
-  QGC  --udp-->  этот сокет  -->  on_packet_to_drone(bytes)  -->  data-channel
-  data-channel  -->  send_to_qgc(bytes)  -->  этот сокет  --udp-->  QGC
-"""
+"""Async UDP-relay between WebRTC data-channel and local QGroundControl."""
 from __future__ import annotations
 
 import asyncio
@@ -17,26 +9,24 @@ from mavixdesktop.core.logger import logger
 PacketCallback = Callable[[bytes], None]
 
 
-#### UDP-протокол relay ################################################################
 class _RelayProtocol(asyncio.DatagramProtocol):
     def __init__(self, on_packet: PacketCallback) -> None:
         self._on_packet = on_packet
         self.transport: asyncio.DatagramTransport | None = None
 
-    def connection_made(self, transport: asyncio.DatagramTransport) -> None:  # type: ignore[override]
+    def connection_made(self, transport: asyncio.DatagramTransport) -> None:
         self.transport = transport
 
-    def datagram_received(self, data: bytes, _addr: object) -> None:  # type: ignore[override]
+    def datagram_received(self, data: bytes, _addr: object) -> None:
         try:
             self._on_packet(data)
         except Exception as exc:
             logger.warning('[mavlink-relay] ошибка колбэка: %s', exc)
 
-    def error_received(self, exc: Exception) -> None:  # type: ignore[override]
+    def error_received(self, exc: Exception) -> None:
         logger.debug('[mavlink-relay] error_received: %s', exc)
 
 
-#### Relay QGC <-> data-channel ########################################################
 class MavlinkRelay:
     def __init__(self, qgc_host: str, qgc_port: int, bind_port: int = 0) -> None:
         self._qgc_host = qgc_host
@@ -86,7 +76,6 @@ class MavlinkRelay:
         self._on_packet_to_drone = None
 
     def send_to_qgc(self, data: bytes) -> None:
-        """Пересылает в QGC пакет, пришедший из data-channel дрона."""
         if self._transport is None or not data:
             return
         if isinstance(data, memoryview):
@@ -99,6 +88,5 @@ class MavlinkRelay:
             logger.warning('[mavlink-relay] ошибка sendto: %s', exc)
 
     def _dispatch(self, data: bytes) -> None:
-        """Внутреннее: пересылает пакет из QGC-сокета в data-channel."""
         if self._on_packet_to_drone is not None:
             self._on_packet_to_drone(data)

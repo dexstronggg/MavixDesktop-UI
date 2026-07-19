@@ -1,18 +1,10 @@
-"""Чтение калиброванных позиций стиков и состояния ARM из pygame Joystick."""
+"""Read calibrated stick positions and ARM state from pygame Joystick."""
 from __future__ import annotations
 
 from collections.abc import Iterable
 
 
 class JoystickInput:
-    """Оборачивает pygame Joystick словарём калибровки.
-
-    Словарь той же формы, что выдаёт calibration.save():
-      axis_thr / axis_yaw / axis_pitch / axis_roll → индекс оси для каждого стика
-      <name>_min / _max / _center → границы нормализации
-      arm_type ('axis' | 'button'), arm_axis_index / arm_button_index
-    """
-
     AXES: Iterable[str] = ('thr', 'yaw', 'pitch', 'roll')
 
     def __init__(self, joystick_index: int, calibration: dict, pump_events: bool = True) -> None:
@@ -25,32 +17,18 @@ class JoystickInput:
         self._pump_events = pump_events
         self._arm = False
         self._arm_btn_prev = 0
-        # Защита от «вошёл в полёт с тумблером в ARM»: пока с момента создания
-        # input не увидели DISARM хотя бы раз, is_armed() возвращает False,
-        # чтобы вход в полёт не приводил к мгновенному армированию. После
-        # первого DISARM — обычная логика (DISARM→ARM работает как всегда).
         self._disarm_seen = False
-        # Запоминаем instance_id, чтобы сопоставлять событие device-removed
-        # именно с этим joystick (если у пользователя подключено больше
-        # одного). Падает в None, если pygame пока не может сообщить.
         try:
             self._instance_id = self._js.get_instance_id()
         except Exception:
             self._instance_id = None
         self._connected = True
 
-#### Публичный API #####################################################################
     @property
     def name(self) -> str:
         return self._js.get_name()
 
     def is_connected(self) -> bool:
-        """True, пока pygame ещё видит этот joystick. Прокачиваем очередь
-        событий, чтобы JOYDEVICEREMOVED успел обновить состояние.
-
-        Используется FlightWindow для аварийного disarm, если геймпад
-        выдернули в полёте.
-        """
         import pygame
         if self._pump_events:
             pygame.event.pump()
@@ -65,7 +43,6 @@ class JoystickInput:
             return False
 
     def get_stick_positions(self) -> tuple[float, float, float, float]:
-        """Возвращает (throttle, yaw, pitch, roll) в диапазоне [-1, 1]."""
         if self._pump_events:
             import pygame
             pygame.event.pump()
@@ -77,11 +54,6 @@ class JoystickInput:
         )
 
     def is_armed(self) -> bool:
-        """Возвращает текущее состояние ARM, при необходимости опрашивая переходы кнопки.
-
-        Пока с момента создания input не зафиксирован DISARM, всегда отдаёт
-        False — иначе вход в полёт с тумблером, оставленным в ARM, мгновенно
-        армировал бы дрон. После первого DISARM работает обычная логика."""
         raw = self._read_arm_raw()
         if not self._disarm_seen:
             if not raw:
@@ -99,7 +71,6 @@ class JoystickInput:
                 return False
         return self._poll_arm_button()
 
-#### Внутренние помощники ##############################################################
     def _read_axis(self, name: str) -> float:
         idx = self._cal.get(f'axis_{name}', 0)
         try:

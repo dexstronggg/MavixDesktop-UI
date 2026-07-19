@@ -1,4 +1,4 @@
-"""Общий логгер приложения: единый именованный синглтон `logger`."""
+"""Common application logger: single named singleton `logger`."""
 from __future__ import annotations
 
 import logging
@@ -15,9 +15,6 @@ def _build_logger() -> logging.Logger:
     stream.setFormatter(formatter)
     log.addHandler(stream)
 
-    # ICE_DEBUG=1 включает DEBUG-логирование aioice/aiortc — каждую кандидат-пару,
-    # connectivity-проверку и TURN-запрос. Используется для диагностики, почему
-    # relay-пара не проходит валидацию (нет permission, нет ответа и т.п.).
     if os.getenv('ICE_DEBUG', '').strip().lower() in ('1', 'true', 'yes', 'on'):
         for name in ('aioice', 'aiortc'):
             dbg = logging.getLogger(name)
@@ -31,17 +28,11 @@ logger = _build_logger()
 
 
 def enable_debug_logging() -> None:
-    """Поднимает уровень логгера приложения до DEBUG, чтобы были видны
-    logger.debug(...) (например, диагностика поиска QGC). Вызывается при
-    включённом DEBUG-режиме."""
     logger.setLevel(logging.DEBUG)
     logger.debug('[log] debug-режим включён — уровень логирования DEBUG')
 
 
 def setup_file_logging() -> None:
-    # Импорт settings отложен внутрь функции, чтобы не создавать цикл
-    # импорта: core.config импортирует user_config, который пользуется
-    # этим логгером ещё до того, как config закончит инициализацию.
     from mavixdesktop.core.config import settings
 
     log_path = settings.log_path

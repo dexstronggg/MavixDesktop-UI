@@ -35,9 +35,7 @@ from mavixdesktop.ui.screens.utils import (
 from mavixdesktop.ui.style import theme
 
 
-#### Хелперы шапки и карточек ##########################################################
 def _brand_widget(parent: QWidget | None = None) -> QWidget:
-    """Логотип-бренд: квадратик с M плюс надпись MAVIX, как в шапке сайта."""
     w = QWidget(parent)
     w.setStyleSheet('background: transparent;')
     h = QHBoxLayout(w)
@@ -60,11 +58,6 @@ def _brand_widget(parent: QWidget | None = None) -> QWidget:
 
 def _icon_button(icon_name: str | None, text: str,
                  parent: QWidget | None = None) -> QPushButton:
-    """Ghost-кнопка с опциональной SVG-иконкой плюс текстом.
-
-    Если icon_name равен None — кнопка только текстовая (используется
-    для «Выйти», чтобы не делать акцент иконкой).
-    """
     btn = QPushButton(text, parent)
     if icon_name is not None:
         btn.setIcon(QIcon(svg_pixmap(icon_name, 16, color=theme.TEXT_PRIMARY)))
@@ -77,15 +70,12 @@ def _icon_button(icon_name: str | None, text: str,
 _CARD_W   = 210
 _CARD_H   = 230
 _ICON_SIZE = 88
-_ID_MAX_CHARS = 16  # сколько символов drone_id влезает в карточку 210px
+_ID_MAX_CHARS = 16
 
-
-# Цвета hover-полосы и статус-точки по статусу. Используется и в карточке,
-# и в stats-row выше грида — единый источник правды.
 _STATUS_COLORS = {
-    'ready':      theme.STATUS_READY,    # зелёный
-    'offline':    theme.STATUS_ERROR,    # красный
-    'connecting': theme.WARNING,         # жёлтый
+    'ready':      theme.STATUS_READY,
+    'offline':    theme.STATUS_ERROR,
+    'connecting': theme.WARNING,
 }
 _STATUS_LABELS = {
     'ready':      'готов',
@@ -105,15 +95,6 @@ def _dim_pixmap(src: QPixmap, opacity: float = 0.3) -> QPixmap:
 
 
 def _truncate_id(drone_id: str, max_chars: int = _ID_MAX_CHARS) -> str:
-    """Middle-ellipsis для длинных drone_id.
-
-    Раньше тут было ``id[:6]`` — для ``demo-online-0001`` это давало
-    ``demo-o`` и операторы не могли отличить дроны. Теперь видна и
-    голова, и хвост: ``demo-online-0001`` → ``demo-online-0001`` (16 → 16);
-    ``e3a7...9f01`` для совсем длинных hash-id (64 hex). Полный id
-    остаётся в tooltip — копируется хоть и не через карточку, но
-    хотя бы видно при наведении.
-    """
     if not drone_id:
         return '——'
     if len(drone_id) <= max_chars:
@@ -123,7 +104,6 @@ def _truncate_id(drone_id: str, max_chars: int = _ID_MAX_CHARS) -> str:
     return f'{drone_id[:head]}…{drone_id[-tail:]}'
 
 
-#### Карточка дрона ####################################################################
 class DroneCard(AnimatedCard):
     clicked = Signal(str)
     delete_requested = Signal(str)
@@ -134,18 +114,12 @@ class DroneCard(AnimatedCard):
         self._drone_id = drone_id
         self._status = status
         self._ready = (status == 'ready')
-        # Hover-полоса AnimatedCard перекрашивается под статус —
-        # ready=зелёная, offline=красная, connecting=жёлтая. На занятом
-        # экране оператор по цвету полосы под курсором сразу видит,
-        # с каким дроном он взаимодействует.
         self._bar_color = _STATUS_COLORS.get(status, theme.ACCENT)
 
         self.setFixedSize(_CARD_W, _CARD_H)
         if self._ready:
             self.setCursor(Qt.PointingHandCursor)
 
-        # Border у hover тоже окрашивается по статусу — единый цветовой
-        # язык со status-точкой и hover-полосой.
         hover_border = self._bar_color
         self._style_normal = f"""
             QWidget#droneCard {{
@@ -191,12 +165,9 @@ class DroneCard(AnimatedCard):
             'background: transparent; border: none;'
         )
 
-        # Status chip — пилюля с фоном цвета статуса, заметнее чем dot+text.
         status_chip = QLabel(_STATUS_LABELS.get(status, status))
         status_chip.setAlignment(Qt.AlignCenter)
         chip_color = _STATUS_COLORS.get(status, theme.TEXT_MUTED)
-        # rgba-фон через прямое декомпозицию hex — QColor.fromString дала
-        # бы то же, но f-string проще читать.
         chip_rgba = self._hex_to_rgba(chip_color, 0.14)
         status_chip.setStyleSheet(
             f'color: {chip_color}; background: {chip_rgba};'
@@ -218,9 +189,6 @@ class DroneCard(AnimatedCard):
         layout.addWidget(id_lbl)
         layout.addWidget(status_wrap)
 
-        # Меню "..." в правом верхнем углу карточки — overlay, чтобы не
-        # вмешиваться в центрированный layout. Виден всегда; клик по нему
-        # не должен запускать обычное "выбрать дрон".
         self._dots_btn = QPushButton(self)
         self._dots_btn.setFixedSize(28, 28)
         self._dots_btn.setCursor(Qt.PointingHandCursor)
@@ -240,7 +208,6 @@ class DroneCard(AnimatedCard):
         delete_act = QAction('Удалить дрон', menu)
         delete_act.triggered.connect(self._confirm_delete)
         menu.addAction(delete_act)
-        # Показываем меню под кнопкой.
         pos = self._dots_btn.mapToGlobal(self._dots_btn.rect().bottomRight())
         menu.exec(pos)
 
@@ -291,15 +258,7 @@ class _DroneGrid(CardGrid):
     GAP    = 20
 
 
-#### Статистика и подсказки ############################################################
 class _StatsBar(QWidget):
-    """Сводка по флоту: всего / готов / offline / подключение.
-
-    Обновляется из ``DroneListPage.update``; пустой грид/неизвестные
-    статусы корректно дают нули. Визуально — горизонтальный ряд
-    «{число} {подпись}», с тонкими разделителями между пунктами.
-    """
-
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName('statsBar')
@@ -369,15 +328,6 @@ class _StatsBar(QWidget):
 
 
 class _DocsHint(QWidget):
-    """Подсказка-«подвал» внизу drone-list: книжная иконка + текст
-    «Не видите свой дрон?» + строка про документацию.
-
-    Заполняет пустое пространство страницы когда дронов мало (3 карточки
-    в 1080p окне оставляли >700px пустоты под собой). Всегда виден,
-    при большом количестве дронов ScrollArea сверху занимает высоту,
-    hint остаётся на дне как нативный footer.
-    """
-
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName('docsHint')
@@ -397,8 +347,6 @@ class _DocsHint(QWidget):
         lay.setSpacing(14)
         lay.addStretch()
 
-        # Иконка дрона в muted-цвете — тот же визуальный язык что у
-        # карточек выше, но без акцента (это пассивная подсказка).
         icon = QLabel()
         icon.setFixedSize(24, 24)
         icon.setPixmap(svg_pixmap('drone_list.svg', 24, color=theme.TEXT_MUTED))
@@ -415,11 +363,6 @@ class _DocsHint(QWidget):
         sep.setStyleSheet(f'color: {theme.TEXT_DISABLED}; font-size: {theme.FONT_SIZE_BASE}px;')
         lay.addWidget(sep)
 
-        # Кликабельная ссылка на документацию ЛК. settings.http_url —
-        # базовый URL сервера из конфига MavixDesktop (по дефолту
-        # http://localhost:8000, на проде — публичный домен Mavix);
-        # роут /dashboard/docs/user живёт на MavixWeb, который обычно
-        # развёрнут на том же хосте за reverse-proxy.
         link = QLabel('Как зарегистрировать дрон — см. документацию')
         link.setCursor(Qt.PointingHandCursor)
         link.setStyleSheet(
@@ -436,7 +379,6 @@ class _DocsHint(QWidget):
         QDesktopServices.openUrl(QUrl(f'{base}/dashboard/docs/user'))
 
 
-#### Страница списка дронов ############################################################
 class DroneListPage(QWidget):
     def __init__(self, on_select: Callable[[str], None], on_refresh: Callable[[], None],
                  on_logout: Callable[[], None], on_joystick_cfg: Callable[[], None],
@@ -452,7 +394,6 @@ class DroneListPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
 
         top_bar = QWidget()
-        # #objectName-селектор: фон не каскадирует в дочерние виджеты.
         top_bar.setObjectName('topBar')
         top_bar.setStyleSheet(f"""
             QWidget#topBar {{
@@ -465,7 +406,6 @@ class DroneListPage(QWidget):
         tb.setContentsMargins(28, 0, 28, 0)
         tb.setSpacing(12)
 
-        # Лево: лого-бренд + заголовок раздела.
         tb.addWidget(_brand_widget(top_bar))
         sep = QFrame()
         sep.setFixedSize(1, 22)
@@ -483,12 +423,9 @@ class DroneListPage(QWidget):
         tb.addWidget(title)
         tb.addStretch()
 
-        # Право: действия.
         joy_btn = _icon_button('joystick.svg', 'Джойстик', top_bar)
         joy_btn.clicked.connect(on_joystick_cfg)
 
-        # Шестерёнка → открыть Settings. Стиль как у joy_btn (ghost),
-        # только без текста.
         gear_btn = QPushButton(top_bar)
         gear_btn.setFixedSize(40, 38)
         gear_btn.setCursor(Qt.PointingHandCursor)
@@ -511,10 +448,6 @@ class DroneListPage(QWidget):
         if on_open_settings is not None:
             gear_btn.clicked.connect(on_open_settings)
 
-        # «Выйти» — без иконки: символ logout оптически мог читаться
-        # как G→. Текста достаточно. Hover красный — действие
-        # деструктивное (сброс сессии), а не нейтрально-навигационное
-        # как у соседних ghost-кнопок (joy / back).
         logout_btn = _icon_button(None, 'Выйти', top_bar)
         logout_btn.setStyleSheet(f"""
             QPushButton {{
@@ -566,9 +499,6 @@ class DroneListPage(QWidget):
         root.addWidget(self._stats)
         root.addWidget(scroll, 1)
         root.addWidget(self._empty, 1)
-        # Hint-блок снизу страницы — единый «подвал» с подсказкой как
-        # добавить дрон. Всегда виден; при заполненном гриде ScrollArea
-        # выше занимает основную высоту, hint остаётся на дне окна.
         root.addWidget(self._hint)
 
     def showEvent(self, event: QShowEvent) -> None:
@@ -593,8 +523,6 @@ class DroneListPage(QWidget):
         cards = []
         counts = {'ready': 0, 'offline': 0, 'connecting': 0}
         for i, d in enumerate(drones):
-            # Принимаем и новый формат ({drone_id, online}), и старый
-            # ({session_id, status}); при наличии предпочитаем новые поля.
             drone_id = d.get('drone_id', d.get('session_id', ''))
             if 'online' in d:
                 status = 'ready' if d.get('online') else 'offline'

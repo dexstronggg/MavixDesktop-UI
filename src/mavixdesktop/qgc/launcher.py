@@ -1,4 +1,4 @@
-"""Поиск и запуск QGroundControl с env-переменной SDL_GAMECONTROLLERCONFIG."""
+"""Find and launch QGroundControl with SDL_GAMECONTROLLERCONFIG env var."""
 from __future__ import annotations
 
 import contextlib
@@ -13,30 +13,18 @@ from pathlib import Path
 from mavixdesktop.core import user_config
 from mavixdesktop.core.logger import logger
 
-# Ключ в config.json, где лежит выбранный/найденный путь к QGroundControl.
 _QGC_PATH_KEY = 'qgc_path'
 
-# Параметры ограниченного поиска. Полный рекурсивный обход дисков на Windows
-# (rglob по C:/ D:/ E:/) подвешивал GUI на минуты, поэтому поиск жёстко
-# ограничен по времени, глубине и числу просмотренных записей.
 _SEARCH_DEADLINE_S = 5.0
 _SEARCH_MAX_DEPTH = 2
 _SEARCH_BUDGET = 20_000
 
 
 def _legacy_path_file() -> Path:
-    """Старое место хранения пути (plain-text), которое мигрируем в config.json."""
     return Path.home() / '.config' / 'mavixdesktop' / 'qgc_path.txt'
 
 
-#### Сохранённый путь к QGC ############################################################
 def get_saved_qgc_path() -> Path | None:
-    """Возвращает сохранённый путь к QGC из config.json, если файл всё ещё на месте.
-
-    Если ключа нет — пробует одноразовую миграцию из старого qgc_path.txt.
-    Если путь записан, но файл по нему исчез, — чистит ключ и возвращает None,
-    чтобы вызвавший заново спросил путь у пользователя.
-    """
     raw = user_config.load().get(_QGC_PATH_KEY)
     if not raw:
         return _migrate_legacy_path()
@@ -69,13 +57,11 @@ def clear_saved_qgc_path() -> None:
 
 
 def _migrate_legacy_path() -> Path | None:
-    """Переносит путь из старого qgc_path.txt в config.json (одноразово)."""
     legacy = _legacy_path_file()
     try:
         text = legacy.read_text(encoding='utf-8').strip()
     except (FileNotFoundError, PermissionError, OSError):
         return None
-    # Файл больше не нужен независимо от валидности содержимого.
     with contextlib.suppress(OSError):
         legacy.unlink()
     if not text:
@@ -88,20 +74,11 @@ def _migrate_legacy_path() -> Path | None:
     return p
 
 
-#### Поиск установленного QGC ##########################################################
 def _is_qgc_windows_exe(name: str) -> bool:
-    """Совпадает только с установленным QGroundControl.exe.
-
-    Сознательно НЕ startswith('qgroundcontrol'), иначе под совпадение попадает
-    инсталлятор QGroundControl-installer-AMD64.exe (обычно лежит в Downloads) и
-    прочие сопутствующие .exe. Деинсталлятор Inno Setup называется unins000.exe
-    и под точное имя тоже не подходит."""
     return name.lower() == 'qgroundcontrol.exe'
 
 
 def _is_qgc_linux_file(name: str) -> bool:
-    """Бинарь QGroundControl или его AppImage (QGroundControl-x86_64.AppImage,
-    QGroundControl-aarch64.AppImage и т.п.)."""
     n = name.lower()
     return n == 'qgroundcontrol' or (n.startswith('qgroundcontrol') and n.endswith('.appimage'))
 
@@ -111,13 +88,6 @@ def _bounded_find(
     predicate: Callable[[str], bool],
     deadline_s: float,
 ) -> Path | None:
-    """Итеративный поиск файла по predicate в нескольких корнях.
-
-    Глубина, число просмотренных записей и время жёстко ограничены, поэтому
-    в худшем случае функция возвращается за ~deadline_s секунд независимо от
-    размера диска. В каталоги-симлинки/junction не заходим (только реальные
-    подкаталоги), что исключает зацикливание.
-    """
     start = time.monotonic()
     scanned = 0
     visited: set[str] = set()
@@ -201,12 +171,6 @@ def _find_qgc_windows(deadline_s: float) -> Path | None:
 
 
 def find_qgc(deadline_s: float = _SEARCH_DEADLINE_S) -> Path | None:
-    """Возвращает путь к QGroundControl: сначала сохранённый, иначе ищет в системе.
-
-    Авто-найденный путь сразу сохраняется в config.json, чтобы при следующем
-    запуске не искать заново. Поиск ограничен по времени (deadline_s) и не
-    блокирует надолго — вызывать его всё равно лучше в фоновом потоке.
-    """
     saved = get_saved_qgc_path()
     if saved is not None:
         return saved
@@ -222,14 +186,6 @@ def find_qgc(deadline_s: float = _SEARCH_DEADLINE_S) -> Path | None:
     return found
 
 
-#### Запуск и контроль процесса ########################################################
-# QGroundControl сам реализует single-instance через QSharedMemory с
-# фиксированным ключом «QGroundControlRunGuardKey» (см. src/RunGuard.h в
-# mavlink/qgroundcontrol). Сегмент создаёт сам GUI-процесс QGC и
-# освобождает при выходе. AppImage/.exe wrapper его НЕ создаёт, поэтому
-# attach к этому ключу — единственный честный признак «QGC реально
-# открыт». Pgrep / /proc / Popen.poll давали ложные срабатывания именно
-# потому, что ловили wrapper-родителя, переживающего закрытие GUI.
 _QGC_RUNGUARD_KEY = 'QGroundControlRunGuardKey'
 
 _last_launched_proc: subprocess.Popen[bytes] | None = None
@@ -239,7 +195,6 @@ def is_qgc_running() -> bool:
     try:
         from PySide6.QtCore import QSharedMemory
     except ImportError:
-        # Без Qt можем только глянуть на наш собственный Popen.
         proc = _last_launched_proc
         return proc is not None and proc.poll() is None
     shm = QSharedMemory(_QGC_RUNGUARD_KEY)
@@ -250,8 +205,6 @@ def is_qgc_running() -> bool:
 
 
 def launch_qgc(sdl_config: str = '', qgc_path: Path | None = None) -> subprocess.Popen[bytes] | None:
-    """Запускает QGC. Путь можно передать явно (например, найденный в фоне);
-    иначе ищется через find_qgc()."""
     if qgc_path is None:
         qgc_path = find_qgc()
     if not qgc_path:

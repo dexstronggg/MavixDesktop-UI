@@ -1,10 +1,4 @@
-"""Экран входа по email и паролю, используется при отсутствии refresh-токена.
-
-Визуальный язык — Aviation Dark (см. Mavix Web): тёмный фон с лёгким cyan
-свечением, карточка по центру, логотип сверху, поля с иконками,
-full-width primary-кнопка.
-"""
-
+"""Login screen with email and password."""
 from __future__ import annotations
 
 import math
@@ -30,29 +24,18 @@ from mavixdesktop.ui.style import theme
 
 
 class _AuthBackground(QWidget):
-    """Анимированный фон страницы входа — несколько полупрозрачных
-    цветовых «пятен» (cyan/blue), которые медленно плавают по
-    синусоидам. Аналог bg-fx с лендинга сайта Mavix.
-    """
-
-    # Один блоб = (базовая x в %, базовая y в %, амплитуда x в %,
-    # амплитуда y в %, период сек, фаза, радиус в % мин-стороны, цвет rgba).
     _BLOBS = [
-        (25, 25,  18, 12, 32.0, 0.0,  55, (34, 211, 238, 36)),   # cyan
-        (75, 75,  22, 14, 38.0, 1.3,  60, (6,  182, 212, 30)),   # cyan-darker
-        (60, 30,  16, 18, 44.0, 2.1,  50, (29, 78,  216, 28)),   # blue
+        (25, 25,  18, 12, 32.0, 0.0,  55, (34, 211, 238, 36)),
+        (75, 75,  22, 14, 38.0, 1.3,  60, (6,  182, 212, 30)),
+        (60, 30,  16, 18, 44.0, 2.1,  50, (29, 78,  216, 28)),
     ]
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName('authBg')
-        # Свой paintEvent — отключаем фоновую заливку Qt-stylesheet,
-        # рисуем всё сами (стиль из родителя/QSS_GLOBAL не помешает).
         self.setAttribute(Qt.WA_StyledBackground, False)
 
         self._t0 = time.monotonic()
-        # 30 FPS — достаточно для очень медленной анимации, нагрузка
-        # минимальная (3 радиальных градиента на кадр).
         self._timer = QTimer(self)
         self._timer.setInterval(33)
         self._timer.timeout.connect(self.update)
@@ -62,7 +45,6 @@ class _AuthBackground(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing, True)
 
-        # Базовая заливка фона.
         p.fillRect(self.rect(), QColor(theme.BG))
 
         w = self.width()
@@ -72,7 +54,6 @@ class _AuthBackground(QWidget):
 
         p.setPen(Qt.NoPen)
         for bx, by, ax, ay, period, phase, rad_pct, rgba in self._BLOBS:
-            # медленные перемещения по синусу/косинусу
             cx = (bx + ax * math.sin(2 * math.pi * t / period + phase)) / 100.0 * w
             cy = (by + ay * math.cos(2 * math.pi * t / period + phase * 1.2)) / 100.0 * h
             radius = rad_pct / 100.0 * min_side
@@ -87,8 +68,6 @@ class _AuthBackground(QWidget):
 
 
 class _IconLineEdit(QFrame):
-    """Поле ввода с SVG-иконкой слева, скруглённое, focus-cyan."""
-
     def __init__(self, icon_name: str, placeholder: str, echo: bool = False,
                  parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -148,7 +127,6 @@ class _IconLineEdit(QFrame):
             self.input.setEchoMode(QLineEdit.EchoMode.Password)
         layout.addWidget(self.input, 1)
 
-        # Перерисовать рамку на фокус/расфокус.
         self.input.focusInEvent = self._wrap_focus_in(self.input.focusInEvent)
         self.input.focusOutEvent = self._wrap_focus_out(self.input.focusOutEvent)
 
@@ -170,18 +148,6 @@ class _IconLineEdit(QFrame):
 
 
 class _Spinner(QWidget):
-    """Маленький крутящийся индикатор загрузки — 270° дуги.
-
-    Используется внутри submit-кнопки на login-форме: при set_busy(True)
-    кнопка меняет текст на «Подождите…», и левее текста крутится этот
-    spinner, давая визуальный feedback. Раньше был только статичный
-    текст — пользователь не понимал, идёт ли запрос вообще.
-
-    Рисуется QPainter'ом, без QMovie/GIF — не зависит от ассетов.
-    Цвет передаётся в конструктор (для кнопки берём BG, контраст к
-    cyan-заливке primary-кнопки).
-    """
-
     def __init__(self, size: int = 16, color: QColor | None = None, parent=None) -> None:
         super().__init__(parent)
         self.setFixedSize(size, size)
@@ -189,7 +155,7 @@ class _Spinner(QWidget):
         self._color = color or QColor(theme.BG)
         self._angle = 0
         self._timer = QTimer(self)
-        self._timer.setInterval(16)  # ~60 FPS
+        self._timer.setInterval(16)
         self._timer.timeout.connect(self._tick)
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.hide()
@@ -212,10 +178,7 @@ class _Spinner(QWidget):
         pen = QPen(self._color, 2)
         pen.setCapStyle(Qt.RoundCap)
         p.setPen(pen)
-        # Inset 2px чтобы дуга не упиралась в края (учёт ширины pen'а).
         rect = self.rect().adjusted(2, 2, -2, -2)
-        # Qt API: drawArc принимает startAngle и spanAngle в 1/16 градуса.
-        # Рисуем 270° (3/4 окружности), стартуя с текущего угла.
         p.drawArc(rect, -self._angle * 16, 270 * 16)
         p.end()
 
@@ -232,14 +195,12 @@ class LoginPage(QWidget):
         self._on_forgot_password = on_forgot_password
         self._on_open_settings = on_open_settings
 
-        # Фон страницы — без него родительское окно темнит, но без свечения.
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
         bg = _AuthBackground(self)
         outer.addWidget(bg)
 
-        # Шестерёнка в правом верхнем углу + центрированная карточка ниже.
         center_layout = QVBoxLayout(bg)
         center_layout.setContentsMargins(24, 24, 24, 24)
         center_layout.addLayout(self._build_top_bar())
@@ -277,7 +238,6 @@ class LoginPage(QWidget):
         bar.addWidget(gear)
         return bar
 
-    #### Карточка ##########################################################################
     def _build_card(self) -> QWidget:
         card = QFrame()
         card.setObjectName('authCard')
@@ -299,7 +259,6 @@ class LoginPage(QWidget):
         layout.setContentsMargins(32, 32, 32, 32)
         layout.setSpacing(18)
 
-        # --- Бренд: лого, название, сабтайтл ---
         brand_row = QHBoxLayout()
         brand_row.setSpacing(10)
         brand_row.setContentsMargins(0, 0, 0, 0)
@@ -340,7 +299,6 @@ class LoginPage(QWidget):
 
         layout.addSpacing(10)
 
-        # --- Поля ввода ---
         self._email_wrap = _IconLineEdit('email.svg', 'Email', echo=False)
         self.email = self._email_wrap.input
         self.email.returnPressed.connect(self._submit)
@@ -350,7 +308,6 @@ class LoginPage(QWidget):
         self.password = self._password_wrap.input
         self.password.returnPressed.connect(self._submit)
 
-        # Кнопка «глаз» внутри поля пароля.
         self._show_pw_btn = QPushButton()
         self._show_pw_btn.setIcon(self._icon_pixmap_as_icon('eye.svg', 18))
         self._show_pw_btn.setFixedSize(30, 30)
@@ -363,7 +320,6 @@ class LoginPage(QWidget):
         self._password_wrap.layout().addWidget(self._show_pw_btn)
         layout.addWidget(self._password_wrap)
 
-        # --- Ошибка (видна, только когда есть текст) ---
         self.error = QLabel('')
         self.error.setWordWrap(True)
         self.error.setStyleSheet(
@@ -376,7 +332,6 @@ class LoginPage(QWidget):
         self.error.hide()
         layout.addWidget(self.error)
 
-        # --- Submit-кнопка на всю ширину ---
         self._submit_btn = QPushButton('Войти')
         self._submit_btn.setCursor(Qt.PointingHandCursor)
         self._submit_btn.setMinimumHeight(46)
@@ -384,15 +339,9 @@ class LoginPage(QWidget):
         self._submit_btn.clicked.connect(self._submit)
         layout.addWidget(self._submit_btn)
 
-        # Spinner внутри submit-кнопки слева от текста — child widget,
-        # позиционируется в showEvent кнопки. Стартует/останавливается
-        # из set_busy. Цвет — BG (тёмный) для контраста с cyan заливкой
-        # primary-кнопки.
         self._busy_spinner = _Spinner(16, QColor(theme.BG), self._submit_btn)
-        # Позиционируем после layout-pass: minimumHeight=46, y центрируем.
         self._submit_btn.installEventFilter(self)
 
-        # --- «Забыли пароль?» — кликабельный текст ---
         forgot_row = QHBoxLayout()
         forgot_row.setContentsMargins(0, 4, 0, 0)
         forgot_row.addStretch()
@@ -402,14 +351,11 @@ class LoginPage(QWidget):
             f'color: {theme.TEXT_MUTED}; background: transparent;'
             f'font-size: {theme.FONT_SIZE_SM}px;'
         )
-        # QLabel не клик-эмитит сигнал — ловим mousePressEvent через
-        # переопределение метода (см. _on_forgot_clicked внизу класса).
         self._forgot_link.mousePressEvent = self._on_forgot_clicked
         forgot_row.addWidget(self._forgot_link)
         forgot_row.addStretch()
         layout.addLayout(forgot_row)
 
-        # --- Сообщение после запроса восстановления (изначально скрыто) ---
         self._forgot_msg = QLabel('')
         self._forgot_msg.setAlignment(Qt.AlignCenter)
         self._forgot_msg.setWordWrap(True)
@@ -423,9 +369,6 @@ class LoginPage(QWidget):
         return card
 
     def eventFilter(self, obj, event) -> bool:
-        # При первом show / каждом resize submit-кнопки позиционируем
-        # spinner. Левый padding кнопки QSS_BUTTON_PRIMARY ~22px,
-        # ставим spinner на 18px от левого края, по вертикали — центр.
         if obj is self._submit_btn:
             from PySide6.QtCore import QEvent as _QE
             if event.type() in (_QE.Resize, _QE.Show):
@@ -436,37 +379,21 @@ class LoginPage(QWidget):
     def _icon_pixmap_as_icon(self, name: str, size: int) -> QIcon:
         return QIcon(svg_pixmap(name, size, color=theme.TEXT_MUTED))
 
-    #### Публичный API #####################################################################
     def set_error(self, message: str) -> None:
         self.error.setText(message)
         self.error.setVisible(bool(message))
 
     def reset(self) -> None:
-        """Сбросить форму в исходное состояние при возврате на login.
-
-        Без этого после logout оставались:
-        - текст «Инструкции по восстановлению…» от прошлого forgot-flow
-        - заполненные email/password
-        - возможно error-баннер от прошлой неудачной попытки
-        Оператор приходит на «свежую» форму как при первом запуске.
-        """
         self.email.clear()
         self.password.clear()
         self.set_error('')
         self._forgot_msg.hide()
         self._forgot_msg.clear()
         self.set_busy(False)
-        # Возвращаем фокус в email — оператор сразу может начать печатать.
         self.email.setFocus()
 
     def set_busy(self, busy: bool) -> None:
-        """Блокировать форму на время сетевого запроса."""
         self._submit_btn.setEnabled(not busy)
-        # Spinner — слева текста; смещаем подпись на ~22 px вправо
-        # дополнительным паддингом в виде пробелов, чтобы текст не лез
-        # под spinner. QSS-padding-left менять сложнее (теряется
-        # центрирование текста), пробелы — простой и предсказуемый
-        # способ.
         if busy:
             self._submit_btn.setText('     Подождите…')
             self._busy_spinner.start()
@@ -480,12 +407,6 @@ class LoginPage(QWidget):
         self._forgot_link.setEnabled(not busy)
 
     def _on_forgot_clicked(self, _event) -> None:
-        """Click handler «Забыли пароль?»: валидируем email и зовём
-        callback. Текст-ответ показывается inline в _forgot_msg —
-        неважно был email валидным или нет, сервер тоже отвечает
-        одинаково (anti-enumeration: «если зарегистрирован, письмо
-        отправлено»), мы повторяем эту семантику в UI.
-        """
         if not self._submit_btn.isEnabled():
             return
         email = self.email.text().strip()
@@ -499,8 +420,6 @@ class LoginPage(QWidget):
             return
         if self._on_forgot_password is not None:
             self._on_forgot_password(email)
-        # Anti-enumeration: один и тот же текст и для зарегистрированного
-        # email, и для незнакомого — соответствует поведению API.
         self._forgot_msg.setStyleSheet(
             f'color: {theme.ACCENT}; background: transparent;'
             f'font-size: {theme.FONT_SIZE_SM - 1}px; padding: 4px 0;'
@@ -510,7 +429,6 @@ class LoginPage(QWidget):
         )
         self._forgot_msg.show()
 
-    #### Внутреннее ########################################################################
     def _toggle_password_visibility(self, visible: bool) -> None:
         self.password.setEchoMode(
             QLineEdit.EchoMode.Normal if visible else QLineEdit.EchoMode.Password
