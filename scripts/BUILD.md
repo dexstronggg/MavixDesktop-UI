@@ -29,11 +29,22 @@ sudo apt install -y patchelf binutils    # системные зависимос
 
 ```bash
 scp dist/mavixdesktop-linux root@SERVER:/srv/mavix/MavixServer/prebuilt/
+ssh root@SERVER 'cd /srv/mavix && docker compose restart app'
 ```
 
-или обёрткой `StartUp/build/build_desktop_linux.sh` (сборка + scp + restart app).
-
 ## Windows
+
+### Вариант A — GitHub Actions (не нужна Windows-машина)
+
+Готовый workflow `.github/workflows/build-windows.yml` в репозитории.
+
+1. GitHub → `dexstronggg/MavixDesktop-UI` → вкладка **Actions** → **Build Windows EXE** → **Run workflow**.
+2. Указать ветку (по умолчанию `remote_control`) → **Run**.
+3. После завершения — в самом run скачать артефакт **mavixdesktop-exe** (там `dist/mavixdesktop.exe`).
+
+Срабатывает и автоматически по тегу `vX.Y`.
+
+### Вариант B — локально на Windows-машине
 
 В PowerShell:
 
@@ -46,8 +57,20 @@ pip install pyinstaller
 .\scripts\build_windows.ps1
 ```
 
-Результат: `dist\mavixdesktop.exe`. Положить на сервер в
-`/srv/mavix/MavixServer/prebuilt/mavixdesktop.exe`.
+Результат: `dist\mavixdesktop.exe`.
+
+Что нужно перед этим:
+- Python 3.12+ с [python.org](https://python.org) (галка «Add Python to PATH»).
+- Доступ к приватному репозиторию (PAT или добавить в коллабораторы).
+
+### Отправка на сервер (оба варианта)
+
+```bash
+scp mavixdesktop.exe root@SERVER:/srv/mavix/MavixServer/prebuilt/
+ssh root@SERVER 'cd /srv/mavix && docker compose restart app'
+```
+
+Кнопка «Windows (.exe)» на сайте начнёт его отдавать.
 
 Особенности Windows:
 - **SmartScreen** при первом запуске покажет «Windows protected your PC»
