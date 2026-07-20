@@ -147,3 +147,97 @@ def test_name_property(monkeypatch):
 
     j = JoystickInput(0, _full_cal())
     assert j.name == 'Fake Pad'
+
+
+# ── arm-on-entry latch: вход в полёт с тумблером уже в ARM не армирует ──────────
+def test_arm_axis_already_armed_on_entry_stays_disarmed(monkeypatch):
+    cal = _full_cal()
+    cal['arm_type'] = 'axis'
+    cal['arm_axis_index'] = 5
+    axis_state = {5: 1.0}  # тумблер уже в положении ARM на момент входа
+    pg = MagicMock()
+    js = MagicMock()
+    js.get_axis.side_effect = lambda idx: axis_state.get(idx, 0.0)
+    pg.joystick.Joystick.return_value = js
+    monkeypatch.setitem(sys.modules, 'pygame', pg)
+    from mavixdesktop.joystick.input import JoystickInput
+
+    j = JoystickInput(0, cal)
+    # пока не увидели DISARM — арм подавлен, даже если тумблер уже в ARM
+    assert j.is_armed() is False
+    assert j.is_armed() is False
+    # увидели DISARM
+    axis_state[5] = -1.0
+    assert j.is_armed() is False
+    # теперь повторный ARM срабатывает как обычно
+    axis_state[5] = 1.0
+    assert j.is_armed() is True
+
+
+# ── drop-on-entry latch: вход с зажатой кнопкой сброса не сбрасывает груз ───────
+def test_drop_button_held_on_entry_suppressed_until_released(monkeypatch):
+    cal = {'drop_type': 'button', 'drop_button_index': 2}
+    btn = {2: 1}  # кнопка сброса уже зажата на момент входа
+    pg = MagicMock()
+    js = MagicMock()
+    js.get_button.side_effect = lambda idx: btn.get(idx, 0)
+    js.get_axis.side_effect = lambda idx: 0.0
+    pg.joystick.Joystick.return_value = js
+    monkeypatch.setitem(sys.modules, 'pygame', pg)
+    from mavixdesktop.joystick.input import JoystickInput
+
+    j = JoystickInput(0, cal)
+    # зажата с самого начала — сброс подавлен
+    assert j.is_drop_pressed() is False
+    assert j.is_drop_pressed() is False
+    # отпустили
+    btn[2] = 0
+    assert j.is_drop_pressed() is False
+    # новое нажатие → один фронт = один сброс
+    btn[2] = 1
+    assert j.is_drop_pressed() is True
+    assert j.is_drop_pressed() is False  # удержание не повторяет сброс
+
+
+def test_drop_button_normal_edge_after_safe(monkeypatch):
+    cal = {'drop_type': 'button', 'drop_button_index': 2}
+    btn = {2: 0}  # отпущена с самого начала
+    pg = MagicMock()
+    js = MagicMock()
+    js.get_button.side_effect = lambda idx: btn.get(idx, 0)
+    js.get_axis.side_effect = lambda idx: 0.0
+    pg.joystick.Joystick.return_value = js
+    monkeypatch.setitem(sys.modules, 'pygame', pg)
+    from mavixdesktop.joystick.input import JoystickInput
+
+    j = JoystickInput(0, cal)
+    assert j.is_drop_pressed() is False
+    btn[2] = 1
+    assert j.is_drop_pressed() is True
+    assert j.is_drop_pressed() is False
+
+
+def test_drop_axis_held_on_entry_suppressed(monkeypatch):
+    cal = {'drop_type': 'axis', 'drop_axis_index': 4}
+    axis = {4: 1.0}  # тумблер сброса уже в активном положении
+    pg = MagicMock()
+    js = MagicMock()
+    js.get_axis.side_effect = lambda idx: axis.get(idx, 0.0)
+    pg.joystick.Joystick.return_value = js
+    monkeypatch.setitem(sys.modules, 'pygame', pg)
+    from mavixdesktop.joystick.input import JoystickInput
+
+    j = JoystickInput(0, cal)
+    assert j.is_drop_pressed() is False
+    axis[4] = 0.0  # вернули в безопасное
+    assert j.is_drop_pressed() is False
+    axis[4] = 1.0  # теперь активация = один сброс
+    assert j.is_drop_pressed() is True
+
+
+def test_drop_unbound_returns_false(monkeypatch):
+    _install_pygame_mock(monkeypatch, axes_by_idx={})
+    from mavixdesktop.joystick.input import JoystickInput
+
+    j = JoystickInput(0, _full_cal())  # drop_type не задан
+    assert j.is_drop_pressed() is False

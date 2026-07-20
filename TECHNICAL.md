@@ -14,7 +14,7 @@ MavixDesktop — приложение оператора системы дост
 
 - **Наименование:** MavixDesktop.
 - **Стек:** Python 3.12, PySide6 (Qt), aiortc (WebRTC), pygame (джойстик),
-  PyAV (H.264), QtNetwork (тайлы карты). Сборка — PyInstaller (.exe/.AppImage).
+  PyAV (H.264), QtNetwork (тайлы карты). Сборка — PyInstaller (`.exe` + Linux-бинарь, `--onefile`).
 - **Связь:** REST + WS-сигналинг с MavixServer; WebRTC P2P с MavixBoard;
   локально — QGroundControl (MAVLink-полёт).
 
@@ -54,7 +54,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e .
 python -m mavixdesktop
 ```
-Готовые сборки (.exe/.AppImage) отдаёт сайт MavixWeb; сборка — `StartUp/build/`.
+Готовые сборки (`.exe` + Linux-бинарь) отдаёт сайт MavixWeb; сборка — `StartUp/build/`.
 Настройки (адрес сервера, STUN/TURN, force-relay) — через `.env`/config; адрес
 WS можно переопределить. Регистрация не нужна — логин/пароль выдаёт администратор.
 
@@ -102,6 +102,13 @@ WS можно переопределить. Регистрация не нужн
   параллельно QGC. Hot-plug — через `pygame.event.pump()` (а не хрупкий
   `quit()+init()`). Зависание при открытии QGC устранено откатом ошибочной
   «защиты» декодера (приведено к рабочему поведению ветки `remote_control`).
+- **Поиск QGC.** Авто-поиск исполняемого файла ограничен по времени (≤5 с),
+  глубине (≤2) и числу записей: раньше полный `rglob` по дискам `C:/ D:/ E:/`
+  подвешивал GUI на минуты. Совпадение строгое — `QGroundControl.exe`
+  (а не `startswith`), иначе под него попадал инсталлятор
+  `QGroundControl-installer-*.exe` и приложение запускало именно его. Найденный
+  путь кэшируется в `~/.config/mavixdesktop/qgc_path.txt`; если не найден —
+  пользователь указывает файл вручную.
 - **Одно окно.** Полётное окно открывается с прятанием главного окна — у
   приложения остаётся одно видимое окно (не два в alt-tab).
 

@@ -293,8 +293,8 @@ def test_app_demo_handlers(qapp, monkeypatch):
 # ---------------------------------------------------------------- qgc/launcher
 def test_qgc_launcher_pure(monkeypatch, tmp_path):
     from mavixdesktop.qgc import launcher
-    assert launcher._looks_like_qgc('QGroundControl.AppImage') is True
-    assert launcher._looks_like_qgc('notepad.exe') is False
+    assert launcher._is_qgc_linux_file('QGroundControl.AppImage') is True
+    assert launcher._is_qgc_linux_file('notepad.exe') is False
     # сохранение/чтение/очистка пути
     p = tmp_path / 'QGroundControl.AppImage'
     p.write_text('x')
@@ -569,8 +569,10 @@ def test_joystick_input_mocked(monkeypatch):
     assert js.is_connected() is True
     pos = js.get_stick_positions()
     assert len(pos) == 4
-    assert js.is_armed() is True            # ось 4 = 0.6 > 0.5
-    js.is_drop_pressed()                    # фронт нажатия кнопки 2
+    # ось 4 = 0.6 (ARM), но при входе latch подавляет арм, пока не увидим
+    # DISARM хотя бы раз — иначе вход в полёт сразу армировал бы дрон
+    assert js.is_armed() is False
+    js.is_drop_pressed()                    # под latch'ом подавлено
     js.is_drop_pressed()
 
     # вариант arm по кнопке + drop по оси

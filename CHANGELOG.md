@@ -48,8 +48,7 @@
 ## [0.3.0] - 2026-05-25
 
 ### Added
-- Сборка единым файлом через PyInstaller (Linux + Windows).
-- AppImage как основной Linux-формат распространения.
+- Сборка единым файлом через PyInstaller (Linux `mavixdesktop-linux` + Windows `.exe`).
 
 ## [0.2.0] - 2026-05-21
 
