@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 from aiortc import RTCPeerConnection, RTCSessionDescription
 
 from mavixdesktop.webrtc.peer import (

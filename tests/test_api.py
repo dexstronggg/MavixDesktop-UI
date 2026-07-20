@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import aiohttp
 import pytest
@@ -16,7 +16,7 @@ class _FakeResponse:
     async def json(self) -> dict:
         return self._payload
 
-    async def __aenter__(self) -> '_FakeResponse':
+    async def __aenter__(self) -> _FakeResponse:
         return self
 
     async def __aexit__(self, *exc) -> None:

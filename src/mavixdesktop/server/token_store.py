@@ -1,6 +1,7 @@
 """Token storage over OS keyring with file fallback."""
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -73,10 +74,8 @@ def clear() -> None:
     kr = _keyring()
     if kr is not None:
         for key in (_REFRESH_KEY, _EMAIL_KEY):
-            try:
+            with contextlib.suppress(Exception):
                 kr.delete_password(settings.keyring_service, key)
-            except Exception:
-                pass
     p = _file_path()
     if p.exists():
         try:

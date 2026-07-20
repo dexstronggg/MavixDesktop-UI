@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import queue
 
 from aiortc import VideoStreamTrack
@@ -110,7 +111,5 @@ class VideoManager:
         q = self.track_queues.get(self._track_ids[self._cam_index])
         if q is None:
             return
-        try:
+        with contextlib.suppress(queue.Empty):
             self._on_frame(q.get_nowait())
-        except queue.Empty:
-            pass

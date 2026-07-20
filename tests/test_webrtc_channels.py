@@ -3,8 +3,6 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
-import pytest
-
 from mavixdesktop.webrtc.channels import (
     ConfigChannel,
     DataChannelHub,
@@ -72,7 +70,7 @@ def test_packet_on_message_dispatches_to_handler():
 
 def test_packet_on_message_no_handler():
     ch = _mock_channel('packet-channel')
-    pc = PacketChannel(ch)
+    PacketChannel(ch)
     _fire(ch, 'message', b'\x01')
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from unittest.mock import AsyncMock, patch
 
@@ -81,7 +82,7 @@ class _Server:
                 await ws.send(json.dumps(outgoing))
             async for msg in ws:
                 self.received.append(json.loads(msg))
-        except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed):
+        except (TimeoutError, websockets.exceptions.ConnectionClosed):
             return
 
 
@@ -104,10 +105,8 @@ async def test_full_lifecycle_against_real_server():
             received.append(msg)
             await sc.disconnect()
 
-        try:
+        with contextlib.suppress(websockets.exceptions.ConnectionClosed):
             await asyncio.wait_for(sc.listen(collect), timeout=2.0)
-        except websockets.exceptions.ConnectionClosed:
-            pass
 
         assert received == [{'type': 'drones', 'drones': []}]
         await asyncio.sleep(0.05)
@@ -133,7 +132,7 @@ async def test_listen_skips_invalid_json():
 
         try:
             await asyncio.wait_for(sc.listen(cb), timeout=1.5)
-        except (asyncio.TimeoutError, websockets.exceptions.ConnectionClosed):
+        except (TimeoutError, websockets.exceptions.ConnectionClosed):
             pass
         finally:
             await sc.disconnect()

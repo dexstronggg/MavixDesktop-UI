@@ -324,7 +324,6 @@ async def test_drones_event_auto_reconnects_after_disconnect():
     c._manager = None
 
     c._manager_factory = None
-    original_request_connect = c.request_connect
 
     called = []
 
