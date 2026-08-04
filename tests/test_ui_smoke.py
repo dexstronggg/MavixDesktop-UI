@@ -113,3 +113,21 @@ def test_token_page_constructs(qapp):
         cur_token='', cur_signal_url='', cur_stun='', cur_turn='',
     )
     assert page is not None
+
+
+def test_settings_page_ui_scale_slider(qapp, tmp_path, monkeypatch):
+    from mavixdesktop.core import user_config
+    monkeypatch.setattr(user_config, 'USER_CONFIG_PATH', tmp_path / 'config.json')
+
+    from mavixdesktop.ui.screens.settings_page import SettingsPage
+    page = SettingsPage(on_close=lambda: None)
+
+    slider = page._ui_scale_slider
+    assert slider is not None
+    assert slider.minimum() == user_config.UI_SCALE_MIN
+    assert slider.maximum() == user_config.UI_SCALE_MAX
+    assert slider.value() == user_config.UI_SCALE_DEFAULT
+
+    slider.setValue(130)
+    assert page._ui_scale_value.text() == '130 %'
+    assert page._collect()['ui_scale'] == 130

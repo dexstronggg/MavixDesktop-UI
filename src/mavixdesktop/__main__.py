@@ -4,6 +4,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import os
+import signal
 import sys
 
 from mavixdesktop.coordinator import SessionCoordinator
@@ -136,6 +138,10 @@ class _BoundedToolTipFilter:
 
 
 def _run_gui(demo: bool = False) -> int:
+    from mavixdesktop.core import user_config
+
+    user_config.apply_ui_scale_to_env()
+
     from PySide6.QtGui import QFont, QIcon
     from PySide6.QtWidgets import QApplication
 
@@ -172,8 +178,18 @@ def _run_gui(demo: bool = False) -> int:
     app._mavix_tooltip_filter = tooltip_filter
 
     window = App(demo=demo, debug=settings.debug)
-    window.show()
-    return app.exec()
+    window.showMaximized()
+
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
+    code = app.exec()
+
+    logger.info('[bootstrap] окно закрыто, завершаем процесс')
+    for stream in (sys.stdout, sys.stderr):
+        with contextlib.suppress(Exception):
+            stream.flush()
+    os._exit(code)
 
 
 def main() -> None:

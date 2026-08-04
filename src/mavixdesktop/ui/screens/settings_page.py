@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
@@ -32,6 +34,7 @@ _DEFAULTS = {
     'qgc_host': '127.0.0.1',
     'qgc_port': '14550',
     'force_relay': False,
+    'ui_scale': user_config.UI_SCALE_DEFAULT,
 }
 
 
@@ -41,6 +44,9 @@ class SettingsPage(QWidget):
         self._on_close = on_close
         self._inputs: dict[str, QLineEdit] = {}
         self._force_relay_cb: QCheckBox | None = None
+        self._ui_scale_slider: QSlider | None = None
+        self._ui_scale_value: QLabel | None = None
+        self._ui_scale_saved: int = user_config.load_ui_scale()
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(theme.SPACE_LG, theme.SPACE_LG, theme.SPACE_LG, theme.SPACE_LG)
@@ -88,6 +94,8 @@ class SettingsPage(QWidget):
                 ('qgc_port', 'QGC порт', '14550'),
             ],
         ))
+
+        body_layout.addWidget(self._build_ui_scale_card())
 
         body_layout.addWidget(self._build_force_relay_card())
 
@@ -163,6 +171,81 @@ class SettingsPage(QWidget):
 
         return card
 
+    def _build_ui_scale_card(self) -> QWidget:
+        card = QWidget()
+        card.setObjectName('settingsCard')
+        card.setStyleSheet(
+            f'QWidget#settingsCard {{'
+            f' background-color: {theme.BG_INPUT};'
+            f' border: 1px solid {theme.BORDER};'
+            f' border-radius: {theme.RADIUS_LG}px;'
+            f' }}'
+        )
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(theme.SPACE_LG, theme.SPACE_MD, theme.SPACE_LG, theme.SPACE_MD)
+        layout.setSpacing(theme.SPACE_SM)
+
+        h = QLabel('Масштаб интерфейса')
+        h.setStyleSheet(f'color: {theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;')
+        layout.addWidget(h)
+
+        sub = QLabel(
+            'Увеличивает или уменьшает всё сразу: текст, кнопки, отступы, иконки. '
+            'Значение умножается на масштаб, заданный в системе, — если там уже '
+            'стоит 125%, то 120% здесь дадут итоговые 150%.'
+        )
+        sub.setStyleSheet(f'color: {theme.TEXT_MUTED}; font-size: 13px;')
+        sub.setWordWrap(True)
+        layout.addWidget(sub)
+        layout.addSpacing(theme.SPACE_SM)
+
+        row = QHBoxLayout()
+        row.setSpacing(theme.SPACE_MD)
+
+        slider = QSlider(Qt.Horizontal)
+        slider.setMinimum(user_config.UI_SCALE_MIN)
+        slider.setMaximum(user_config.UI_SCALE_MAX)
+        slider.setSingleStep(user_config.UI_SCALE_STEP)
+        slider.setPageStep(user_config.UI_SCALE_STEP * 2)
+        slider.setTickInterval(user_config.UI_SCALE_STEP * 2)
+        slider.setTickPosition(QSlider.TicksBelow)
+        slider.setStyleSheet(theme.QSS_SLIDER)
+        slider.setCursor(Qt.PointingHandCursor)
+        slider.valueChanged.connect(self._on_ui_scale_changed)
+        self._ui_scale_slider = slider
+
+        value_label = QLabel(f'{user_config.UI_SCALE_DEFAULT} %')
+        value_label.setMinimumWidth(56)
+        value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        value_label.setStyleSheet(
+            f'color: {theme.ACCENT}; font-size: 15px; font-weight: 600;'
+            f' font-family: {theme.FONT_FAMILY_MONO};'
+        )
+        self._ui_scale_value = value_label
+
+        row.addWidget(slider, 1)
+        row.addWidget(value_label)
+        layout.addLayout(row)
+
+        warn = QLabel(
+            '⚠  Новый масштаб применится только после полного перезапуска '
+            'приложения — закройте его и откройте снова.'
+        )
+        warn.setStyleSheet(f'color: {theme.WARNING}; font-size: 13px; font-weight: 500;')
+        warn.setWordWrap(True)
+        layout.addWidget(warn)
+
+        return card
+
+    def _on_ui_scale_changed(self, value: int) -> None:
+        step = user_config.UI_SCALE_STEP
+        snapped = round(value / step) * step
+        if snapped != value and self._ui_scale_slider is not None:
+            self._ui_scale_slider.setValue(snapped)
+            return
+        if self._ui_scale_value is not None:
+            self._ui_scale_value.setText(f'{snapped} %')
+
     def _build_force_relay_card(self) -> QWidget:
         card = QWidget()
         card.setObjectName('settingsCard')
@@ -234,11 +317,18 @@ class SettingsPage(QWidget):
             inp.setText(current.get(key, ''))
         if self._force_relay_cb is not None:
             self._force_relay_cb.setChecked(bool(getattr(settings, 'force_relay', False)))
+        self._ui_scale_saved = user_config.load_ui_scale()
+        if self._ui_scale_slider is not None:
+            self._ui_scale_slider.setValue(self._ui_scale_saved)
+        if self._ui_scale_value is not None:
+            self._ui_scale_value.setText(f'{self._ui_scale_saved} %')
 
     def _collect(self) -> dict:
         values: dict = {key: inp.text().strip() for key, inp in self._inputs.items()}
         if self._force_relay_cb is not None:
             values['force_relay'] = self._force_relay_cb.isChecked()
+        if self._ui_scale_slider is not None:
+            values[user_config.UI_SCALE_KEY] = self._ui_scale_slider.value()
         return values
 
     def _on_reset(self) -> None:
@@ -256,6 +346,8 @@ class SettingsPage(QWidget):
             inp.setText(_DEFAULTS.get(key, ''))
         if self._force_relay_cb is not None:
             self._force_relay_cb.setChecked(bool(_DEFAULTS.get('force_relay', False)))
+        if self._ui_scale_slider is not None:
+            self._ui_scale_slider.setValue(int(_DEFAULTS['ui_scale']))
 
     def _on_save(self) -> None:
         values = self._collect()
@@ -288,7 +380,25 @@ class SettingsPage(QWidget):
             return
 
         config_module.reload_from_user_config()
+
+        new_scale = int(values.get(user_config.UI_SCALE_KEY, self._ui_scale_saved))
+        if new_scale != self._ui_scale_saved:
+            self._ui_scale_saved = new_scale
+            self._show_restart_required(new_scale)
+
         self._on_close()
+
+    def _show_restart_required(self, scale: int) -> None:
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Information)
+        box.setWindowTitle('Требуется перезапуск')
+        box.setText(f'Масштаб интерфейса сохранён: {scale} %.')
+        box.setInformativeText(
+            'Он применится только после полного перезапуска приложения.\n'
+            'Закройте Mavix и запустите снова.'
+        )
+        box.setStandardButtons(QMessageBox.Ok)
+        box.exec()
 
     def _show_error(self, message: str) -> None:
         QMessageBox.warning(self, 'Ошибка', message)

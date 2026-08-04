@@ -58,7 +58,7 @@ class App(QMainWindow):
         self._debug = debug
         title = 'Mavix · ДЕМО-РЕЖИМ' if demo else 'Mavix'
         self.setWindowTitle(title)
-        self.setMinimumSize(1300, 600)
+        self.setMinimumSize(1, 1)
         self.resize(1300, 600)
 
         try:

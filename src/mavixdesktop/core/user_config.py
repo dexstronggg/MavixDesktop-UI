@@ -19,7 +19,14 @@ EDITABLE_KEYS = (
     'qgc_host',
     'qgc_port',
     'force_relay',
+    'ui_scale',
 )
+
+UI_SCALE_KEY = 'ui_scale'
+UI_SCALE_MIN = 50
+UI_SCALE_MAX = 150
+UI_SCALE_DEFAULT = 100
+UI_SCALE_STEP = 5
 
 
 def load() -> dict[str, Any]:
@@ -58,6 +65,28 @@ _MAPPING = {
 }
 
 _MANAGED_KEYS: set[str] = set()
+
+
+def load_ui_scale() -> int:
+    """UI scale in percent, clamped to [UI_SCALE_MIN, UI_SCALE_MAX]."""
+    raw = load().get(UI_SCALE_KEY, UI_SCALE_DEFAULT)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        logger.warning('[user-config] некорректный %s=%r, беру %d', UI_SCALE_KEY, raw, UI_SCALE_DEFAULT)
+        return UI_SCALE_DEFAULT
+    return max(UI_SCALE_MIN, min(UI_SCALE_MAX, value))
+
+
+def apply_ui_scale_to_env() -> None:
+    """Sets QT_SCALE_FACTOR before QApplication is created; Qt reads it once at startup."""
+    if os.environ.get('QT_SCALE_FACTOR'):
+        return
+    scale = load_ui_scale()
+    if scale == UI_SCALE_DEFAULT:
+        return
+    os.environ['QT_SCALE_FACTOR'] = f'{scale / 100:.2f}'
+    logger.info('[user-config] масштаб интерфейса %d%%', scale)
 
 
 def apply_to_env() -> None:

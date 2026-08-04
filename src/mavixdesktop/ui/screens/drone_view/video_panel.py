@@ -23,7 +23,6 @@ class VideoPanel(QWidget):
                  on_back: Callable[[], None], on_joy: Callable[[], None],
                  on_takeoff: Callable[[], None]) -> None:
         super().__init__()
-        self.setMinimumSize(640, 360)
 
         self.video = QLabel(self)
         self.video.setAlignment(Qt.AlignCenter)

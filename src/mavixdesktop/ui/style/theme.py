@@ -455,3 +455,29 @@ QPushButton:disabled {{
     background: transparent;
 }}
 '''
+
+QSS_SLIDER = f'''
+QSlider::groove:horizontal {{
+    background: {BG_HOVER};
+    border: 1px solid {BORDER};
+    border-radius: 3px;
+    height: 6px;
+}}
+QSlider::sub-page:horizontal {{
+    background: {ACCENT};
+    border: 1px solid {ACCENT};
+    border-radius: 3px;
+    height: 6px;
+}}
+QSlider::handle:horizontal {{
+    background: {TEXT_PRIMARY};
+    border: 2px solid {ACCENT};
+    border-radius: 9px;
+    width: 14px;
+    height: 14px;
+    margin: -6px 0;
+}}
+QSlider::handle:horizontal:hover {{
+    background: {ACCENT_HOVER};
+}}
+'''
