@@ -30,6 +30,7 @@ class VideoPanel(QWidget):
 
         self.__build_controls(on_prev, on_next, on_back, on_joy, on_takeoff)
         self.__build_speed_overlay()
+        self.__build_quality_overlays()
         self.__build_labels()
         self.__build_calibration_overlay()
         self.__build_error_overlay()
@@ -83,6 +84,84 @@ class VideoPanel(QWidget):
         self.battery_overlay.setFixedSize(90, 26)
         self.battery_overlay.setStyleSheet(corner_qss)
         self.battery_overlay.hide()
+
+    def __build_quality_overlays(self) -> None:
+        self.quality_overlay = QLabel('—', self)
+        self.quality_overlay.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        self.quality_overlay.setStyleSheet(self.__quality_qss(theme.TEXT_MUTED))
+        self.quality_overlay.adjustSize()
+
+        self.stale_overlay = QLabel('', self)
+        self.stale_overlay.setAlignment(Qt.AlignCenter)
+        self.stale_overlay.setStyleSheet(f"""
+            QLabel {{
+                background: rgba(0,0,0,0.60);
+                color: {theme.STATUS_ERROR};
+                border: 1px solid {theme.STATUS_ERROR};
+                border-radius: {theme.RADIUS_MD}px;
+                font-size: {theme.FONT_SIZE_SM}px;
+                font-weight: 600;
+                padding: 6px 14px;
+            }}
+        """)
+        self.stale_overlay.hide()
+
+        self.stats_panel = QLabel('', self)
+        self.stats_panel.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.stats_panel.setStyleSheet(f"""
+            QLabel {{
+                background: rgba(0,0,0,0.72);
+                color: {theme.TEXT_PRIMARY};
+                border: 1px solid rgba(255,255,255,0.12);
+                border-radius: {theme.RADIUS_MD}px;
+                font-family: monospace;
+                font-size: {theme.FONT_SIZE_SM - 1}px;
+                padding: 10px 14px;
+            }}
+        """)
+        self.stats_panel.hide()
+
+    @staticmethod
+    def __quality_qss(color: str) -> str:
+        return f"""
+            QLabel {{
+                background: rgba(0,0,0,0.45);
+                color: {color};
+                border: 1px solid rgba(255,255,255,0.10);
+                border-radius: {theme.RADIUS_SM}px;
+                font-size: {theme.FONT_SIZE_SM - 2}px;
+                font-family: monospace;
+                padding: 3px 10px;
+            }}
+        """
+
+    def update_quality(self, text: str, color: str) -> None:
+        self.quality_overlay.setStyleSheet(self.__quality_qss(color))
+        self.quality_overlay.setText(text)
+        self.quality_overlay.adjustSize()
+        self.__reposition(self.width(), self.height())
+
+    def update_stale(self, seconds: float) -> None:
+        if seconds <= 0:
+            self.stale_overlay.hide()
+            return
+        self.stale_overlay.setText(f'⚠  нет свежего кадра {seconds:.1f} с')
+        self.stale_overlay.adjustSize()
+        self.stale_overlay.show()
+        self.stale_overlay.raise_()
+        self.__reposition(self.width(), self.height())
+
+    def set_stats_text(self, text: str) -> None:
+        self.stats_panel.setText(text)
+        self.stats_panel.adjustSize()
+        self.__reposition(self.width(), self.height())
+
+    def toggle_stats_panel(self) -> bool:
+        visible = self.stats_panel.isHidden()
+        self.stats_panel.setVisible(visible)
+        if visible:
+            self.stats_panel.raise_()
+        return visible
 
     def __build_calibration_overlay(self) -> None:
         self.calib_overlay = QFrame(self)
@@ -237,6 +316,10 @@ class VideoPanel(QWidget):
             (w - self.error_overlay.width()) // 2,
             (h - self.error_overlay.height()) // 2,
         )
+
+        self.quality_overlay.move(16, h - self.quality_overlay.height() - 16)
+        self.stale_overlay.move((w - self.stale_overlay.width()) // 2, 64)
+        self.stats_panel.move(16, 16 + theme.OVERLAY_BTN_CORNER + 12)
 
         hw = min(400, w)
         self.hint_lbl.setFixedWidth(hw)

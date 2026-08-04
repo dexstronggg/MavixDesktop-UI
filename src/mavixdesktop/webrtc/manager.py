@@ -34,6 +34,10 @@ class WebRTCManager:
     def channels(self) -> DataChannelHub | None:
         return self._channels
 
+    @property
+    def peer_connection(self) -> object | None:
+        return self._peer.pc if self._peer is not None else None
+
     def update_ice_servers(self, ice_servers: list[dict]) -> None:
         self._ice_servers = list(ice_servers)
 

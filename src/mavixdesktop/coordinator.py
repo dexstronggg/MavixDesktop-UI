@@ -15,6 +15,7 @@ from mavixdesktop.fc.mavlink_relay import MavlinkRelay
 from mavixdesktop.server.api import ApiError, ApiSession
 from mavixdesktop.server.signal_client import SignalClient
 from mavixdesktop.webrtc.manager import WebRTCManager
+from mavixdesktop.webrtc.stats import StatsCollector
 
 if TYPE_CHECKING:
     from aiortc import MediaStreamTrack
@@ -67,6 +68,9 @@ class SessionCoordinator:
         self.on_error: Callable[[str], None] | None = None
         self.on_session_ended: Callable[[], None] | None = None
         self.on_battery_changed: Callable[[int, float], None] | None = None
+        self.on_inbound_stats: Callable[[float, float], None] | None = None
+        self.on_board_stats: Callable[[dict], None] | None = None
+        self._stats_task: asyncio.Task | None = None
 
     @property
     def fc_kind(self) -> str:
@@ -262,6 +266,7 @@ class SessionCoordinator:
         if sdp.get('type') == 'offer':
             self._connect_request_at = None
             await self._manager.handle_offer(drone_id, sdp)
+            self._start_stats_collector()
 
     async def _handle_ice(self, msg: dict) -> None:
         if self._manager is None:
@@ -332,12 +337,42 @@ class SessionCoordinator:
             self._handle_battery_message(payload)
         elif kind == 'command_ack':
             self._handle_command_ack_message(payload)
+        elif kind == 'stats':
+            self._handle_board_stats(payload)
         elif kind == 'fc_armed':
             armed = bool(payload.get('armed', False))
             cm = int(payload.get('custom_mode', 0))
             logger.info('[coord] FC armed=%s custom_mode=0x%08x', armed, cm)
         else:
             logger.debug('[coord] неизвестный тип config-канала: %s', kind)
+
+    def _start_stats_collector(self) -> None:
+        if self._manager is None or self._manager.peer_connection is None:
+            return
+        self._stop_stats_collector()
+        collector = StatsCollector(self._manager.peer_connection, self._emit_inbound_stats)
+        self._stats_task = asyncio.create_task(collector.run())
+
+    def _stop_stats_collector(self) -> None:
+        if self._stats_task is not None and not self._stats_task.done():
+            self._stats_task.cancel()
+        self._stats_task = None
+
+    def _emit_inbound_stats(self, bitrate_kbps: float, loss_pct: float) -> None:
+        if self.on_inbound_stats is None:
+            return
+        try:
+            self.on_inbound_stats(bitrate_kbps, loss_pct)
+        except Exception as exc:
+            logger.warning('[coord] ошибка on_inbound_stats: %s', exc)
+
+    def _handle_board_stats(self, payload: dict) -> None:
+        if self.on_board_stats is None:
+            return
+        try:
+            self.on_board_stats(payload)
+        except Exception as exc:
+            logger.warning('[coord] ошибка on_board_stats: %s', exc)
 
     def _handle_battery_message(self, payload: dict) -> None:
         try:
@@ -416,6 +451,7 @@ class SessionCoordinator:
         packet.send_bytes(data)
 
     async def _teardown_session(self) -> None:
+        self._stop_stats_collector()
         if self._manager is not None:
             await self._manager.close_async()
         if self._mavlink is not None:

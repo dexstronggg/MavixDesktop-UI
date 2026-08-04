@@ -24,9 +24,11 @@ class VideoManager:
         self,
         on_frame: Callable[[Any], None],
         on_cam_changed: Callable[[int], None] | None = None,
+        on_frame_shown: Callable[[], None] | None = None,
     ) -> None:
         self._on_frame = on_frame
         self._on_cam_changed = on_cam_changed
+        self._on_frame_shown = on_frame_shown
 
         self._track_ids: list[str] = []
         self._receive_tasks: list[asyncio.Task] = []
@@ -86,6 +88,7 @@ class VideoManager:
                 return
             self._rendered += 1
         self._on_frame(img)
+        self._notify_shown()
 
     def _active_track_id(self) -> str | None:
         if not self._track_ids:
@@ -114,7 +117,17 @@ class VideoManager:
             img = self._pending.pop(track_id, None)
             if img is not None:
                 self._rendered += 1
+        if img is not None:
+            self._notify_shown()
         return img
+
+    def _notify_shown(self) -> None:
+        if self._on_frame_shown is None:
+            return
+        try:
+            self._on_frame_shown()
+        except Exception as exc:
+            logger.debug('[video] ошибка обработчика on_frame_shown: %s', exc)
 
     def shift_cam(self, delta: int) -> int:
         if not self._track_ids:

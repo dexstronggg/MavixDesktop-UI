@@ -44,6 +44,8 @@ class DroneViewPage(QWidget):
             self._on_prev()
         elif event.key() == Qt.Key_Right:
             self._on_next()
+        elif event.key() == Qt.Key_S:
+            self._video_panel.toggle_stats_panel()
         else:
             super().keyPressEvent(event)
 
@@ -56,6 +58,15 @@ class DroneViewPage(QWidget):
 
     def update_ping(self, rtt_ms: float) -> None:
         self._video_panel.update_ping_overlay(rtt_ms)
+
+    def update_quality(self, text: str, color: str) -> None:
+        self._video_panel.update_quality(text, color)
+
+    def update_stale(self, seconds: float) -> None:
+        self._video_panel.update_stale(seconds)
+
+    def set_stats_text(self, text: str) -> None:
+        self._video_panel.set_stats_text(text)
 
     def update_battery(self, percent: int, voltage: float) -> None:
         self._video_panel.update_battery_overlay(percent, voltage)

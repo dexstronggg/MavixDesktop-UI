@@ -91,6 +91,26 @@ class FlightWindow(QWidget):
         self._next_btn = overlay_btn('▶', self)
         self._next_btn.clicked.connect(self.__next_cam)
 
+        self._quality_lbl = QLabel('\u25cf  нет данных', self)
+        self._quality_lbl.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        self._quality_lbl.setStyleSheet(self.__quality_qss(theme.TEXT_MUTED))
+        self._quality_lbl.adjustSize()
+
+        self._stale_lbl = QLabel('', self)
+        self._stale_lbl.setAlignment(Qt.AlignCenter)
+        self._stale_lbl.setStyleSheet(f'''
+            QLabel {{
+                background: rgba(0,0,0,0.60);
+                color: {theme.STATUS_ERROR};
+                border: 1px solid {theme.STATUS_ERROR};
+                border-radius: {theme.RADIUS_MD}px;
+                font-size: {theme.FONT_SIZE_SM}px;
+                font-weight: 600;
+                padding: 6px 14px;
+            }}
+        ''')
+        self._stale_lbl.hide()
+
         self._arm_label = QLabel('DISARM', self)
         self._arm_label.setAlignment(Qt.AlignCenter)
         self._arm_label.setAttribute(Qt.WA_TranslucentBackground)
@@ -217,6 +237,8 @@ class FlightWindow(QWidget):
         self._arm_label.setGeometry((w - arm_w) // 2, stick_y - 26, arm_w, 20)
 
         self._ping_lbl.move(w - self._ping_lbl.width() - _PAD, h - self._ping_lbl.height() - _PAD)
+        self._quality_lbl.move(_PAD, h - self._quality_lbl.height() - _PAD)
+        self._stale_lbl.move((w - self._stale_lbl.width()) // 2, _PAD + theme.OVERLAY_BTN_CORNER + 34)
         self._battery_lbl.move(
             w - self._battery_lbl.width() - _PAD,
             h - self._ping_lbl.height() - self._battery_lbl.height() - _PAD - 6,
@@ -429,6 +451,36 @@ class FlightWindow(QWidget):
             self._signalling.send_crsf_packet(packet)
         except Exception as exc:
             logger.debug('[FlightWindow] ошибка send_packet: %s', exc)
+
+    @staticmethod
+    def __quality_qss(color: str) -> str:
+        return f"""
+            QLabel {{
+                background: rgba(0,0,0,0.45);
+                color: {color};
+                border: 1px solid rgba(255,255,255,0.10);
+                border-radius: {theme.RADIUS_SM}px;
+                font-size: {theme.FONT_SIZE_SM - 2}px;
+                font-family: monospace;
+                padding: 3px 10px;
+            }}
+        """
+
+    def update_quality(self, text: str, color: str) -> None:
+        self._quality_lbl.setStyleSheet(self.__quality_qss(color))
+        self._quality_lbl.setText(text)
+        self._quality_lbl.adjustSize()
+        self.__reposition()
+
+    def update_stale(self, seconds: float) -> None:
+        if seconds <= 0:
+            self._stale_lbl.hide()
+            return
+        self._stale_lbl.setText(f'\u26a0  нет свежего кадра {seconds:.1f} с')
+        self._stale_lbl.adjustSize()
+        self._stale_lbl.show()
+        self._stale_lbl.raise_()
+        self.__reposition()
 
     def __update_video_frame(self) -> None:
         frame = self._get_frame(self._cam_index)

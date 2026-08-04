@@ -23,6 +23,8 @@ class ConnectionManager:
         self._api: ApiSession | None = None
         self._signal: SignalClient | None = None
         self._coord: SessionCoordinator | None = None
+        self._on_inbound_stats = None
+        self._on_board_stats = None
         self._coord_task: asyncio.Task | None = None
         self._track_callback = None
         self._reset_callback = None
@@ -210,7 +212,16 @@ class ConnectionManager:
         self._coord.on_drone_offline = self._emit_drone_offline
         self._coord.on_connect_failed = self._emit_connect_failed
         self._coord.on_battery_changed = self._emit_battery
+        self._coord.on_inbound_stats = self._on_inbound_stats
+        self._coord.on_board_stats = self._on_board_stats
         self._coord_task = asyncio.create_task(self._coord.run())
+
+    def set_quality_sink(self, on_inbound, on_board) -> None:
+        self._on_inbound_stats = on_inbound
+        self._on_board_stats = on_board
+        if self._coord is not None:
+            self._coord.on_inbound_stats = on_inbound
+            self._coord.on_board_stats = on_board
 
     def _emit_drones(self, drones: list[dict]) -> None:
         try:

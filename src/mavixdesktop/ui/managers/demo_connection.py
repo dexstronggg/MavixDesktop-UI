@@ -44,6 +44,9 @@ class DemoConnectionManager:
         if on_done is not None:
             on_done(None)
 
+    def set_quality_sink(self, on_inbound, on_board) -> None:
+        return
+
     def set_track_callback(self, on_track, on_reset=None) -> None:
         return None
 

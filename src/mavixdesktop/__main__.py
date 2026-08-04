@@ -10,7 +10,13 @@ import sys
 
 from mavixdesktop.coordinator import SessionCoordinator
 from mavixdesktop.core.config import settings
-from mavixdesktop.core.logger import enable_debug_logging, logger, setup_file_logging
+from mavixdesktop.core.logger import (
+    enable_debug_logging,
+    install_exception_hooks,
+    install_qt_message_handler,
+    logger,
+    setup_file_logging,
+)
 from mavixdesktop.server import token_store
 from mavixdesktop.server.api import ApiError, ApiSession
 from mavixdesktop.server.signal_client import SignalClient
@@ -21,6 +27,7 @@ def _init_dirs() -> None:
     settings.log_path.parent.mkdir(parents=True, exist_ok=True)
     settings.config_dir.mkdir(parents=True, exist_ok=True)
     setup_file_logging()
+    install_exception_hooks()
 
 
 async def _authenticate_headless(api: ApiSession, email: str | None, password: str | None) -> tuple[str, str]:
@@ -158,6 +165,8 @@ def _run_gui(demo: bool = False) -> int:
             '[bootstrap] сигнальный сервер недоступен, переключаемся в демо-режим'
         )
         demo = True
+
+    install_qt_message_handler()
 
     app = QApplication(sys.argv)
     app_icon = QIcon()

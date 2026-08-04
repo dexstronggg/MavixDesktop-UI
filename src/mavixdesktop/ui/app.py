@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import platform
+from datetime import date
 from pathlib import Path
 
 from PySide6.QtCore import QThread, QTimer, Signal
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mavixdesktop.core.config import settings
 from mavixdesktop.core.logger import logger
 from mavixdesktop.joystick.guard import JoystickGuard
 from mavixdesktop.qgc.launcher import (
@@ -24,6 +26,12 @@ from mavixdesktop.qgc.launcher import (
 from mavixdesktop.ui.login_page import LoginPage
 from mavixdesktop.ui.managers.connection import ConnectionManager
 from mavixdesktop.ui.managers.demo_connection import DemoConnectionManager
+from mavixdesktop.ui.managers.quality import (
+    STALE_FRAME_MS,
+    LinkQuality,
+    format_quality_line,
+    format_stats_table,
+)
 from mavixdesktop.ui.managers.video import VideoManager
 from mavixdesktop.ui.screens.bridge import Bridge
 from mavixdesktop.ui.screens.debug_page import DebugPage
@@ -76,10 +84,13 @@ class App(QMainWindow):
             if demo else
             ConnectionManager(bridge=self._bridge)
         )
+        self._quality = LinkQuality()
         self._video = VideoManager(
             on_frame=lambda img: self.drone_view_page.show_frame(img),
             on_cam_changed=self._on_cam_changed,
+            on_frame_shown=self._quality.on_frame_shown,
         )
+        self._conn.set_quality_sink(self._quality.update_inbound, self._on_board_stats)
         self._conn.set_track_callback(self._video.on_track, on_reset=self._on_session_reset)
 
         self._bridge.client_list_updated.connect(self._on_drones)
@@ -145,8 +156,10 @@ class App(QMainWindow):
         self._joystick_guard_qgc_proc = None
         self._joystick_guard_timer = QTimer(interval=200)
         self._joystick_guard_timer.timeout.connect(self._tick_joystick_guard)
-        self._ping_timer = QTimer(interval=1000)
+        self._ping_timer = QTimer(interval=200)
         self._ping_timer.timeout.connect(self._tick_ping)
+        self._quality_timer = QTimer(interval=1000)
+        self._quality_timer.timeout.connect(self._tick_quality)
         self._arm_joystick = None
         self._arm_state = False
         self._arm_err_count = 0
@@ -208,6 +221,8 @@ class App(QMainWindow):
 
     def _handle_logout(self) -> None:
         self._ping_timer.stop()
+        self._quality_timer.stop()
+        self._quality.end_session()
         self._stop_arm_listener()
         self._drone_list_refresh_timer.stop()
         self._conn.logout()
@@ -248,7 +263,9 @@ class App(QMainWindow):
         self._state.cam_index = 0
         self._conn.select_drone(drone_id)
         self._video.start()
+        self._quality.start_session(log_path=self._stats_log_path())
         self._ping_timer.start()
+        self._quality_timer.start()
         self._drone_list_refresh_timer.stop()
         if not self._demo:
             self.drone_view_page.set_calibration_visible(True)
@@ -257,6 +274,9 @@ class App(QMainWindow):
     def _handle_back_to_list(self) -> None:
         self._video.stop()
         self._ping_timer.stop()
+        self._quality_timer.stop()
+        self._quality.end_session()
+        self.drone_view_page.update_stale(0.0)
         self._stop_arm_listener()
         self.drone_view_page.update_ping(-1.0)
         self._conn.disconnect_drone()
@@ -630,7 +650,39 @@ class App(QMainWindow):
         if loop is not None:
             loop.call_soon_threadsafe(ping_ch.send_ping)
         rtt = ping_ch.last_rtt_ms if ping_ch.last_rtt_ms is not None else -1.0
+        self._quality.add_rtt(rtt)
         self._bridge.speed_updated.emit(rtt)
+        self._tick_stale()
+
+    def _tick_stale(self) -> None:
+        staleness = self._quality.snapshot().staleness_ms
+        seconds = staleness / 1000.0 if staleness > STALE_FRAME_MS else 0.0
+        self.drone_view_page.update_stale(seconds)
+        if self._flight_window is not None:
+            self._flight_window.update_stale(seconds)
+
+    def _on_board_stats(self, payload: dict) -> None:
+        try:
+            self._quality.update_board(
+                bitrate_out_kbps=float(payload.get('bitrate_out_kbps', -1.0)),
+                encoder_kbps=float(payload.get('encoder_kbps', -1.0)),
+                pli=int(payload.get('pli', 0)),
+            )
+        except (TypeError, ValueError) as exc:
+            logger.debug('[app] некорректный stats от борта: %s', exc)
+
+    @staticmethod
+    def _stats_log_path():
+        return settings.log_path.parent / f'stats_{date.today()}.jsonl'
+
+    def _tick_quality(self) -> None:
+        snap = self._quality.snapshot()
+        self._quality.log_snapshot(snap)
+        self.drone_view_page.update_quality(*format_quality_line(snap))
+        self.drone_view_page.set_stats_text(format_stats_table(snap))
+        if self._flight_window is not None:
+            self._flight_window.update_quality(*format_quality_line(snap))
+
 
 
 class _CoordinatorAdapter:

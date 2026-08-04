@@ -131,3 +131,92 @@ def test_settings_page_ui_scale_slider(qapp, tmp_path, monkeypatch):
     slider.setValue(130)
     assert page._ui_scale_value.text() == '130 %'
     assert page._collect()['ui_scale'] == 130
+
+
+def test_drone_view_quality_overlays(qapp):
+    from mavixdesktop.ui.screens.drone_view import DroneViewPage
+    page = DroneViewPage(
+        on_back=lambda: None, on_prev=lambda: None, on_next=lambda: None,
+        on_save=lambda: None, on_joystick_cfg=lambda: None,
+        on_takeoff=lambda: None, on_calibrate=lambda: None,
+    )
+    panel = page._video_panel
+
+    page.update_quality('●  2.4 Мбит/с   потери 0.3%   78 мс', '#4ADE80')
+    assert 'Мбит/с' in panel.quality_overlay.text()
+
+    assert panel.stale_overlay.isHidden()
+    page.update_stale(1.4)
+    assert '1.4' in panel.stale_overlay.text()
+    page.update_stale(0.0)
+    assert panel.stale_overlay.isHidden()
+
+    page.set_stats_text('КАЧЕСТВО КАНАЛА\n\nпотери   0.30 %')
+    assert 'потери' in panel.stats_panel.text()
+    assert panel.stats_panel.isHidden()
+    assert panel.toggle_stats_panel() is True
+    assert panel.toggle_stats_panel() is False
+
+
+def test_quality_line_and_table_render(qapp):
+    from mavixdesktop.ui.managers.quality import (
+        LEVEL_BAD,
+        LEVEL_IDLE,
+        LEVEL_OK,
+        LinkSnapshot,
+        format_quality_line,
+        format_stats_table,
+    )
+
+    idle_text, _ = format_quality_line(LinkSnapshot(level=LEVEL_IDLE))
+    assert 'нет данных' in idle_text
+
+    ok_text, ok_color = format_quality_line(
+        LinkSnapshot(level=LEVEL_OK, bitrate_in_kbps=2400.0, loss_pct=0.3, rtt_p95_ms=78.0)
+    )
+    assert '2.4 Мбит/с' in ok_text and '0.3%' in ok_text and '78 мс' in ok_text
+
+    _, bad_color = format_quality_line(LinkSnapshot(level=LEVEL_BAD))
+    assert bad_color != ok_color
+
+    table = format_stats_table(LinkSnapshot(level=LEVEL_OK, bitrate_in_kbps=2400.0, pli=3))
+    assert 'входящий поток' in table
+    assert 'запросов ключевого кадра' in table
+    assert '—' in table, 'метрики борта без данных показываются прочерком'
+
+
+def test_flight_window_quality_overlays(qapp):
+    from mavixdesktop.ui.managers.quality import (
+        LEVEL_BAD,
+        LinkSnapshot,
+        format_quality_line,
+    )
+    from mavixdesktop.ui.screens.flight_window import FlightWindow
+
+    class FakeJoystick:
+        def is_connected(self):
+            return True
+
+        def read(self):
+            return {'thr': 0.0, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
+
+        def is_armed(self):
+            return False
+
+    window = FlightWindow(
+        joystick_input=FakeJoystick(), signalling=None,
+        get_frame=lambda idx: None, cam_count=lambda: 1,
+        loop=None, on_close=lambda: None, fc_kind='crsf', passive=True,
+    )
+    window.resize(1280, 720)
+
+    window.update_quality(*format_quality_line(
+        LinkSnapshot(level=LEVEL_BAD, bitrate_in_kbps=900.0, loss_pct=4.2, rtt_p95_ms=530.0)
+    ))
+    assert '0.9 Мбит/с' in window._quality_lbl.text()
+
+    assert window._stale_lbl.isHidden()
+    window.update_stale(2.1)
+    assert '2.1' in window._stale_lbl.text()
+    window.update_stale(0.0)
+    assert window._stale_lbl.isHidden()
