@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import cast
 
 from mavixdesktop.core.logger import logger
 from mavixdesktop.joystick.input import JoystickInput
@@ -10,6 +11,8 @@ from mavixdesktop.joystick.input import JoystickInput
 def _build_mavlink_disarm() -> bytes | None:
     try:
         from pymavlink.dialects.v20 import common as mavlink
+
+        from mavixdesktop.fc.mavlink_encoder import ARM_FORCE_MAGIC
     except ImportError:
         logger.warning('[joystick-guard] pymavlink не установлен; mavlink disarm пропущен')
         return None
@@ -20,10 +23,10 @@ def _build_mavlink_disarm() -> bytes | None:
         command=mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
         confirmation=0,
         param1=0.0,
-        param2=21196.0,
+        param2=float(ARM_FORCE_MAGIC),
         param3=0.0, param4=0.0, param5=0.0, param6=0.0, param7=0.0,
     )
-    return msg.pack(mav)
+    return cast(bytes, msg.pack(mav))
 
 
 def _build_crsf_disarm() -> bytes:

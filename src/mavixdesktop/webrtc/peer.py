@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from aiortc import (
     RTCConfiguration,
@@ -50,9 +50,9 @@ def _log_candidates(label: str, sdp: str) -> None:
         logger.info('[ice/%s] нет кандидатов в SDP', label)
         return
     for typ, lines in by_type.items():
-        logger.info('[ice/%s] %s x%d', label, typ, len(lines))
+        logger.info('[ice/%s] кандидаты %s x%d', label, typ, len(lines))
         for cand in lines:
-            logger.info('[ice/%s]   %s', label, cand.strip())
+            logger.debug('[ice/%s]   %s', label, cand.strip())
 
 
 def _filter_to_relay_only(sdp: str, label: str) -> str:
@@ -73,7 +73,7 @@ def _filter_to_relay_only(sdp: str, label: str) -> str:
     return ''.join(out_lines)
 
 
-def _entry_scheme(entry: dict) -> str:
+def _entry_scheme(entry: dict[str, Any]) -> str:
     urls = entry.get('urls') if isinstance(entry, dict) else None
     if not urls:
         return ''
@@ -83,7 +83,7 @@ def _entry_scheme(entry: dict) -> str:
     return url.split(':', 1)[0].strip().lower()
 
 
-def _build_configuration(ice_servers: list[dict]) -> RTCConfiguration:
+def _build_configuration(ice_servers: list[dict[str, Any]]) -> RTCConfiguration:
     use_relay = bool(getattr(settings, 'force_relay', False))
     mode = 'RELAY (только TURN)' if use_relay else 'DIRECT (только STUN)'
     logger.info('[ice/config] режим=%s, force_relay=%s, получено %d ICE-сервер(ов)',
@@ -104,7 +104,7 @@ def _build_configuration(ice_servers: list[dict]) -> RTCConfiguration:
             continue
         username = entry.get('username')
         credential = entry.get('credential')
-        kwargs: dict = {'urls': urls}
+        kwargs: dict[str, Any] = {'urls': urls}
         if username:
             kwargs['username'] = username
         if credential:
@@ -130,7 +130,7 @@ class PeerSession:
     def __init__(
         self,
         drone_id: str,
-        ice_servers: list[dict] | None = None,
+        ice_servers: list[dict[str, Any]] | None = None,
         pc: RTCPeerConnection | None = None,
     ) -> None:
         self.drone_id = drone_id
@@ -184,7 +184,7 @@ class PeerSession:
                     [line for line in final_sdp.splitlines() if line.startswith('m=')])
         return final_sdp
 
-    async def add_remote_ice(self, candidate: dict) -> bool:
+    async def add_remote_ice(self, candidate: dict[str, Any]) -> bool:
         try:
             from aiortc.sdp import candidate_from_sdp
             cand_str = candidate.get('candidate')
@@ -241,7 +241,8 @@ class PeerSession:
         logger.info('[ice/state] iceConnectionState=%s', state)
         if state == 'failed':
             logger.warning('[ice/state] ICE failed — нет работающей кандидат-пары. '
-                           'Проверьте логи [ice/offer/drone] и [ice/answer/gcs] выше: '
+                           'Проверьте логи [ice/offer/drone] и [ice/answer/gcs] выше '
+                           '(на DEBUG-уровне логов там же полный список кандидатов): '
                            'обе стороны должны иметь хотя бы по одному relay-кандидату.')
 
     def _handle_gather_state(self) -> None:

@@ -1,6 +1,8 @@
 """MAVLink v2 packet builders for Mavix joystick -> PX4 path."""
 from __future__ import annotations
 
+from typing import Protocol, cast
+
 from pymavlink.dialects.v20 import common as mavlink
 
 SRC_SYSTEM = 255
@@ -18,6 +20,10 @@ PX4_MAIN_MODE_AUTO = 4
 PX4_AUTO_SUB_RTL = 5
 
 ARM_FORCE_MAGIC = 21196
+
+
+class _Packable(Protocol):
+    def pack(self, mav: mavlink.MAVLink) -> bytes: ...
 
 
 class MavlinkEncoder:
@@ -39,24 +45,6 @@ class MavlinkEncoder:
             base_mode=0,
             custom_mode=0,
             system_status=mavlink.MAV_STATE_ACTIVE,
-        )
-        return self._pack(msg)
-
-    def manual_control(
-        self,
-        throttle: float,
-        yaw: float,
-        pitch: float,
-        roll: float,
-        buttons: int = 0,
-    ) -> bytes:
-        msg = self._mav.manual_control_encode(
-            target=self.target_system,
-            x=_to_axis(pitch),
-            y=_to_axis(roll),
-            z=_to_throttle(throttle),
-            r=_to_axis(yaw),
-            buttons=buttons,
         )
         return self._pack(msg)
 
@@ -112,20 +100,4 @@ class MavlinkEncoder:
         return self._pack(msg)
 
     def _pack(self, msg: object) -> bytes:
-        return msg.pack(self._mav)
-
-
-def _to_axis(value: float) -> int:
-    if value < -1.0:
-        value = -1.0
-    elif value > 1.0:
-        value = 1.0
-    return int(value * 1000.0)
-
-
-def _to_throttle(value: float) -> int:
-    if value < -1.0:
-        value = -1.0
-    elif value > 1.0:
-        value = 1.0
-    return int((value + 1.0) * 500.0)
+        return cast(_Packable, msg).pack(self._mav)

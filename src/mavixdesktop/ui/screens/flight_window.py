@@ -2,17 +2,29 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from typing import TYPE_CHECKING, Protocol
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QCloseEvent, QImage, QPixmap, QResizeEvent, QShowEvent
-from PySide6.QtWidgets import QComboBox, QLabel, QMessageBox, QPushButton, QWidget
+from PySide6.QtGui import (
+    QCloseEvent,
+    QImage,
+    QKeyEvent,
+    QPixmap,
+    QResizeEvent,
+    QShowEvent,
+)
+from PySide6.QtWidgets import QLabel, QMessageBox, QWidget
 
 from mavixdesktop.core.logger import logger
 from mavixdesktop.fc.encoder import build_rc_frame
-from mavixdesktop.fc.mavlink_encoder import PX4_MAIN_MODES, MavlinkEncoder
+from mavixdesktop.joystick.input import JoystickInput
+from mavixdesktop.ui.screens.help_dialog import HelpDialog
 from mavixdesktop.ui.screens.utils import overlay_btn, overlay_icon_btn
 from mavixdesktop.ui.screens.widgets import StickWidget
 from mavixdesktop.ui.style import theme
+
+if TYPE_CHECKING:
+    import numpy as np
 
 _TAKEOFF_HELP = (
     'Перед взлётом:\n\n'
@@ -30,10 +42,19 @@ _ARM_STYLE   = f'font-weight: bold; font-size: 13px; color: {theme.STATUS_ARM}; 
 _DISARM_STYLE = f'font-weight: bold; font-size: 13px; color: {theme.STATUS_DISARM}; background: transparent;'
 
 
+class Signalling(Protocol):
+    @property
+    def peer_ping_ms(self) -> float:
+        ...
+
+    def send_crsf_packet(self, frame: bytes) -> None:
+        ...
+
+
 class FlightWindow(QWidget):
-    def __init__(self, joystick_input, signalling,
-                 get_frame: Callable[[int], object], cam_count: Callable[[], int],
-                 loop: asyncio.AbstractEventLoop, on_close: Callable[[], None],
+    def __init__(self, joystick_input: JoystickInput, signalling: Signalling | None,
+                 get_frame: Callable[[int], np.ndarray[tuple[int, int, int], np.dtype[np.uint8]] | None], cam_count: Callable[[], int],
+                 loop: asyncio.AbstractEventLoop | None, on_close: Callable[[], None],
                  fc_kind: str = 'crsf',
                  passive: bool = False) -> None:
         super().__init__()
@@ -49,20 +70,8 @@ class FlightWindow(QWidget):
         self._passive = bool(passive)
 
         self._fc_kind = (fc_kind or 'crsf').lower()
-        self._mavlink_enc: MavlinkEncoder | None = None
         self._last_armed: bool | None = None
-        self._current_main_mode = PX4_MAIN_MODES['STABILIZED']
-        self._mode_combo: QComboBox | None = None
-        self._mode_set_sent = False
-        self._heartbeat_timer: QTimer | None = None
         self._js_lost = False
-        self._rtl_sent = False
-        if self._fc_kind == 'mavlink' and not self._passive:
-            self._mavlink_enc = MavlinkEncoder()
-            self._send_packet(self._mavlink_enc.heartbeat())
-            self._heartbeat_timer = QTimer(self, interval=1000)
-            self._heartbeat_timer.timeout.connect(self.__send_heartbeat)
-            self._heartbeat_timer.start()
 
         self.__build_ui()
         self._timer = QTimer(interval=10)
@@ -81,10 +90,15 @@ class FlightWindow(QWidget):
     def __build_ui(self) -> None:
         self._video_label = QLabel(self)
         self._video_label.setStyleSheet(f'background: {theme.BG_VIDEO};')
-        self._video_label.setAlignment(Qt.AlignCenter)
+        self._video_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self._back_btn = overlay_icon_btn('arrow_back.svg', self)
         self._back_btn.clicked.connect(self.__finish)
+
+        self._help_btn = overlay_btn('i', self, size=theme.OVERLAY_BTN_CORNER_ICON)
+        self._help_btn.setToolTip('Горячие клавиши и что означают показатели')
+        self._help_btn.clicked.connect(self.toggle_help)
+
 
         self._prev_btn = overlay_btn('◀', self)
         self._prev_btn.clicked.connect(self.__prev_cam)
@@ -92,12 +106,12 @@ class FlightWindow(QWidget):
         self._next_btn.clicked.connect(self.__next_cam)
 
         self._quality_lbl = QLabel('\u25cf  нет данных', self)
-        self._quality_lbl.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        self._quality_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         self._quality_lbl.setStyleSheet(self.__quality_qss(theme.TEXT_MUTED))
         self._quality_lbl.adjustSize()
 
         self._stale_lbl = QLabel('', self)
-        self._stale_lbl.setAlignment(Qt.AlignCenter)
+        self._stale_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._stale_lbl.setStyleSheet(f'''
             QLabel {{
                 background: rgba(0,0,0,0.60);
@@ -112,15 +126,15 @@ class FlightWindow(QWidget):
         self._stale_lbl.hide()
 
         self._arm_label = QLabel('DISARM', self)
-        self._arm_label.setAlignment(Qt.AlignCenter)
-        self._arm_label.setAttribute(Qt.WA_TranslucentBackground)
+        self._arm_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._arm_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._arm_label.setStyleSheet(_DISARM_STYLE)
 
         self._stick_left  = StickWidget('Тяга/Рыскание',  self, bg_alpha=160, label_font_px=18)
         self._stick_right = StickWidget('Тангаж/Крен',    self, bg_alpha=160, label_font_px=18)
 
         self.hint_lbl = QLabel('Клавиши  ←  →  для переключения камер', self)
-        self.hint_lbl.setAlignment(Qt.AlignCenter)
+        self.hint_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.hint_lbl.setStyleSheet(
             'color: rgba(255,255,255,0.40);'
             f'font-size: {theme.FONT_SIZE_SM - 2}px;'
@@ -128,7 +142,7 @@ class FlightWindow(QWidget):
         )
 
         self._lost_lbl = QLabel('⚠  ДЖОЙСТИК ОТКЛЮЧЁН', self)
-        self._lost_lbl.setAlignment(Qt.AlignCenter)
+        self._lost_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._lost_lbl.setStyleSheet(f"""
             QLabel {{
                 background: rgba(180,30,30,0.92);
@@ -154,60 +168,12 @@ class FlightWindow(QWidget):
             }}
         """
 
-        self._ping_lbl = QLabel('— мс', self)
-        self._ping_lbl.setAlignment(Qt.AlignCenter)
-        self._ping_lbl.setFixedSize(90, 26)
-        self._ping_lbl.setStyleSheet(corner_qss)
 
         self._battery_lbl = QLabel('—', self)
-        self._battery_lbl.setAlignment(Qt.AlignCenter)
+        self._battery_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._battery_lbl.setFixedSize(90, 26)
         self._battery_lbl.setStyleSheet(corner_qss)
         self._battery_lbl.hide()
-
-        if self._fc_kind == 'mavlink' and not self._passive:
-            self._mode_combo = QComboBox(self)
-            for name, code in PX4_MAIN_MODES.items():
-                self._mode_combo.addItem(name, code)
-            default_idx = list(PX4_MAIN_MODES.values()).index(self._current_main_mode)
-            self._mode_combo.setCurrentIndex(default_idx)
-            self._mode_combo.setFixedSize(140, 28)
-            self._mode_combo.setStyleSheet(f"""
-                QComboBox {{
-                    background: rgba(0,0,0,0.55);
-                    color: rgba(255,255,255,0.9);
-                    border: 1px solid rgba(255,255,255,0.15);
-                    border-radius: {theme.RADIUS_SM}px;
-                    padding: 2px 8px;
-                    font-size: {theme.FONT_SIZE_SM - 1}px;
-                }}
-                QComboBox::drop-down {{ border: none; width: 16px; }}
-                QComboBox QAbstractItemView {{
-                    background: #1f1f1f;
-                    color: white;
-                    selection-background-color: {theme.ACCENT};
-                }}
-            """)
-            self._mode_combo.currentIndexChanged.connect(self.__on_mode_picked)
-
-            self._reboot_btn = QPushButton('⟳ Reboot FC', self)
-            self._reboot_btn.setFixedSize(140, 28)
-            self._reboot_btn.setToolTip('Reboot PX4 autopilot')
-            self._reboot_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background: rgba(180,30,30,0.65);
-                    color: white;
-                    border: 1px solid rgba(255,255,255,0.20);
-                    border-radius: {theme.RADIUS_SM}px;
-                    font-size: {theme.FONT_SIZE_SM - 1}px;
-                    font-weight: 600;
-                }}
-                QPushButton:hover {{ background: rgba(220,40,40,0.85); }}
-                QPushButton:pressed {{ background: rgba(140,20,20,0.95); }}
-            """)
-            self._reboot_btn.clicked.connect(self.__on_reboot_clicked)
-        else:
-            self._reboot_btn: QPushButton | None = None
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         self.__reposition()
@@ -220,6 +186,8 @@ class FlightWindow(QWidget):
 
         self._video_label.setGeometry(0, 0, w, h)
         self._back_btn.move(_PAD, _PAD)
+        self._help_btn.move(_PAD + theme.OVERLAY_BTN_CORNER + 12,
+                            _PAD + (theme.OVERLAY_BTN_CORNER - self._help_btn.height()) // 2)
 
         side_sz = theme.OVERLAY_BTN_SIDE
         self._prev_btn.move(_PAD, (h - side_sz) // 2)
@@ -236,22 +204,12 @@ class FlightWindow(QWidget):
         arm_w = 100
         self._arm_label.setGeometry((w - arm_w) // 2, stick_y - 26, arm_w, 20)
 
-        self._ping_lbl.move(w - self._ping_lbl.width() - _PAD, h - self._ping_lbl.height() - _PAD)
         self._quality_lbl.move(_PAD, h - self._quality_lbl.height() - _PAD)
         self._stale_lbl.move((w - self._stale_lbl.width()) // 2, _PAD + theme.OVERLAY_BTN_CORNER + 34)
         self._battery_lbl.move(
             w - self._battery_lbl.width() - _PAD,
-            h - self._ping_lbl.height() - self._battery_lbl.height() - _PAD - 6,
+            h - self._battery_lbl.height() - _PAD,
         )
-
-        if self._mode_combo is not None:
-            self._mode_combo.move(w - self._mode_combo.width() - _PAD,
-                                   _PAD + theme.OVERLAY_BTN_CORNER + 8)
-            self._mode_combo.raise_()
-        if self._reboot_btn is not None:
-            self._reboot_btn.move(w - self._reboot_btn.width() - _PAD,
-                                  _PAD + theme.OVERLAY_BTN_CORNER + 8 + 32)
-            self._reboot_btn.raise_()
 
 
         self._lost_lbl.adjustSize()
@@ -270,16 +228,6 @@ class FlightWindow(QWidget):
     def __tick(self) -> None:
         self.__update_joystick()
         self.__update_video_frame()
-        self.__update_ping()
-
-    def __update_ping(self) -> None:
-        rtt = -1.0
-        if self._signalling is not None:
-            try:
-                rtt = float(self._signalling.peer_ping_ms)
-            except Exception:
-                rtt = -1.0
-        self._ping_lbl.setText('— мс' if rtt < 0 else f'{rtt:.0f} мс')
 
     def update_battery(self, percent: int, voltage: float) -> None:
         if voltage <= 0:
@@ -313,10 +261,7 @@ class FlightWindow(QWidget):
         if self._passive:
             return
 
-        if self._fc_kind == 'mavlink':
-            self.__tick_mavlink(thr, yaw, pitch, roll, armed)
-        else:
-            self.__tick_crsf(thr, yaw, pitch, roll, armed)
+        self.__tick_crsf(thr, yaw, pitch, roll, armed)
 
     def __handle_joystick_lost(self) -> None:
         if self._js_lost:
@@ -330,14 +275,11 @@ class FlightWindow(QWidget):
         self._lost_lbl.raise_()
 
         if self._fc_kind == 'mavlink':
-            logger.warning('[FlightWindow] джойстик отключён — шлём AUTO_RTL')
-            self._lost_lbl.setText('⚠  ДЖОЙСТИК ОТКЛЮЧЁН — ВКЛЮЧЕН RETURN-TO-LAUNCH')
-            self._rtl_sent = False
+            logger.warning('[FlightWindow] джойстик отключён — аварийный DISARM (MAVLink)')
+            self._lost_lbl.setText('⚠  СВЯЗЬ С ДЖОЙСТИКОМ ПОТЕРЯНА')
         else:
             logger.warning('[FlightWindow] джойстик отключён — аварийный DISARM (CRSF)')
             self._lost_lbl.setText('⚠  ДЖОЙСТИК ОТКЛЮЧЁН — ДРОН РАЗАРМИРУЕТСЯ')
-            if self._heartbeat_timer is not None:
-                self._heartbeat_timer.stop()
         self.__tick_emergency_failsafe()
 
     def __tick_emergency_failsafe(self) -> None:
@@ -345,16 +287,7 @@ class FlightWindow(QWidget):
         self._emerg_cnt = cnt
         if cnt % 5 != 0:
             return
-        if self._fc_kind == 'mavlink' and self._mavlink_enc is not None:
-            if self._rtl_sent:
-                return
-            try:
-                for _ in range(3):
-                    self._send_packet(self._mavlink_enc.failsafe_rtl())
-                self._rtl_sent = True
-                logger.info('[FlightWindow] AUTO_RTL отправлен на PX4')
-            except Exception as exc:
-                logger.debug('[FlightWindow] ошибка аварийной отправки mavlink RTL: %s', exc)
+        if self._fc_kind == 'mavlink':
             return
         try:
             self._send_packet(build_rc_frame(-1.0, 0.0, 0.0, 0.0, armed=False))
@@ -378,72 +311,6 @@ class FlightWindow(QWidget):
             self._last_armed = armed
         self._send_packet(packet)
 
-    def __tick_mavlink(self, thr: float, yaw: float, pitch: float,
-                       roll: float, armed: bool) -> None:
-        assert self._mavlink_enc is not None
-        if not self._mode_set_sent:
-            self._send_packet(self._mavlink_enc.set_mode(self._current_main_mode))
-            self._mode_set_sent = True
-
-        try:
-            mc = self._mavlink_enc.manual_control(thr, yaw, pitch, roll)
-        except Exception as exc:
-            logger.debug('[FlightWindow] ошибка кодирования MANUAL_CONTROL: %s', exc)
-            return
-        self._send_packet(mc)
-
-        if self._last_armed is None or armed != self._last_armed:
-            try:
-                self._send_packet(self._mavlink_enc.arm_disarm(armed, force=True))
-                logger.info('[FlightWindow] отправлена команда %s', 'ARM' if armed else 'DISARM')
-            except Exception as exc:
-                logger.warning('[FlightWindow] ошибка команды arm: %s', exc)
-            self._last_armed = armed
-
-    def __on_reboot_clicked(self) -> None:
-        if self._mavlink_enc is None:
-            return
-        reply = QMessageBox.question(
-            self, 'Reboot FC',
-            'Reboot the flight controller?\n\n'
-            'The command will only be sent if the drone is disarmed.',
-            QMessageBox.Yes | QMessageBox.Cancel,
-            QMessageBox.Cancel,
-        )
-        if reply != QMessageBox.Yes:
-            return
-        try:
-            self._send_packet(self._mavlink_enc.reboot_autopilot())
-            logger.info('[FlightWindow] отправлен PREFLIGHT_REBOOT_SHUTDOWN')
-        except Exception as exc:
-            logger.warning('[FlightWindow] ошибка отправки reboot: %s', exc)
-
-    def __on_mode_picked(self, idx: int) -> None:
-        if self._mode_combo is None or self._mavlink_enc is None:
-            return
-        main_mode = self._mode_combo.itemData(idx)
-        if main_mode is None:
-            return
-        try:
-            main_mode = int(main_mode)
-        except (TypeError, ValueError):
-            return
-        self._current_main_mode = main_mode
-        try:
-            self._send_packet(self._mavlink_enc.set_mode(main_mode))
-            logger.info('[FlightWindow] отправлен SET_MODE main=%d (%s)',
-                        main_mode, self._mode_combo.currentText())
-        except Exception as exc:
-            logger.warning('[FlightWindow] ошибка отправки SET_MODE: %s', exc)
-
-    def __send_heartbeat(self) -> None:
-        if self._mavlink_enc is None:
-            return
-        try:
-            self._send_packet(self._mavlink_enc.heartbeat())
-        except Exception as exc:
-            logger.debug('[FlightWindow] ошибка кодирования heartbeat: %s', exc)
-
     def _send_packet(self, packet: bytes) -> None:
         if not self._signalling:
             return
@@ -465,6 +332,22 @@ class FlightWindow(QWidget):
                 padding: 3px 10px;
             }}
         """
+
+    def toggle_help(self) -> None:
+        HelpDialog(self).exec()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        key = event.key()
+        if key == Qt.Key.Key_Escape:
+            self.__finish()
+        elif key == Qt.Key.Key_Left:
+            self.__prev_cam()
+        elif key == Qt.Key.Key_Right:
+            self.__next_cam()
+        elif key == Qt.Key.Key_I or event.text().lower() in ('i', 'ш'):
+            self.toggle_help()
+        else:
+            super().keyPressEvent(event)
 
     def update_quality(self, text: str, color: str) -> None:
         self._quality_lbl.setStyleSheet(self.__quality_qss(color))
@@ -489,13 +372,13 @@ class FlightWindow(QWidget):
             qimg = QImage(frame.data, fw, fh, ch * fw, QImage.Format.Format_BGR888)
             self._video_label.setPixmap(
                 QPixmap.fromImage(qimg).scaled(
-                    self._video_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation,
+                    self._video_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation,
                 )
             )
 
     def __finish(self) -> None:
         self._stop_streams()
-        if self._on_close:
+        if self._on_close:  # type: ignore[truthy-function]
             self._on_close()
         self.close()
 
@@ -505,10 +388,3 @@ class FlightWindow(QWidget):
 
     def _stop_streams(self) -> None:
         self._timer.stop()
-        if self._heartbeat_timer is not None:
-            self._heartbeat_timer.stop()
-        if self._mavlink_enc is not None and self._last_armed:
-            try:
-                self._send_packet(self._mavlink_enc.arm_disarm(False, force=True))
-            except Exception as exc:
-                logger.debug('[FlightWindow] ошибка финального disarm: %s', exc)

@@ -7,12 +7,10 @@ from mavixdesktop.ui.screens.joystick_setup import (
     JoystickSetupPage,
 )
 from mavixdesktop.ui.screens.settings_page import SettingsPage
-from mavixdesktop.ui.screens.token_page import TokenPage
 from mavixdesktop.ui.screens.widgets import StickWidget
 
 __all__ = [
     'Bridge',
-    'TokenPage',
     'DroneListPage',
     'DroneViewPage',
     'JoystickSetupPage',
