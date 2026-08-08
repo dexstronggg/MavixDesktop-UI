@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import websockets
 
@@ -21,12 +21,12 @@ if TYPE_CHECKING:
     from aiortc import MediaStreamTrack
 
 
-def _local_ice_servers() -> list[dict]:
-    servers: list[dict] = []
+def _local_ice_servers() -> list[dict[str, str]]:
+    servers: list[dict[str, str]] = []
     if settings.stun_server:
         servers.append({'urls': settings.stun_server})
     if settings.turn_server:
-        entry: dict = {'urls': settings.turn_server}
+        entry: dict[str, str] = {'urls': settings.turn_server}
         if settings.turn_username:
             entry['username'] = settings.turn_username
         if settings.turn_password:
@@ -56,35 +56,37 @@ class SessionCoordinator:
         self._mavlink: MavlinkRelay | None = None
         self._target_drone_id: str | None = None
         self._fc_kind: str = 'none'
-        self._latest_drones: list[dict] = []
-        self._latest_cameras: list[dict] = []
+        self._latest_drones: list[dict[str, Any]] = []
+        self._latest_cameras: list[dict[str, Any]] = []
         self._reconnect_drone_id: str | None = None
         self._connect_request_at: float | None = None
-        self.on_drones_changed: Callable[[list[dict]], None] | None = None
+        self.on_drones_changed: Callable[[list[dict[str, Any]]], None] | None = None
         self.on_fc_changed: Callable[[str, str], None] | None = None
-        self.on_cameras_received: Callable[[list[dict]], None] | None = None
+        self.on_cameras_received: Callable[[list[dict[str, Any]]], None] | None = None
         self.on_drone_offline: Callable[[str], None] | None = None
         self.on_connect_failed: Callable[[str], None] | None = None
         self.on_error: Callable[[str], None] | None = None
+        self.on_auth_expired: Callable[[], None] | None = None
         self.on_session_ended: Callable[[], None] | None = None
         self.on_battery_changed: Callable[[int, float], None] | None = None
         self.on_inbound_stats: Callable[[float, float], None] | None = None
-        self.on_board_stats: Callable[[dict], None] | None = None
-        self._stats_task: asyncio.Task | None = None
+        self.on_board_stats: Callable[[dict[str, Any]], None] | None = None
+        self._stats_task: asyncio.Task[None] | None = None
+        self._auth_failures = 0
 
     @property
     def fc_kind(self) -> str:
         return self._fc_kind
 
     @property
-    def drones(self) -> list[dict]:
+    def drones(self) -> list[dict[str, Any]]:
         return list(self._latest_drones)
 
     @property
-    def cameras(self) -> list[dict]:
+    def cameras(self) -> list[dict[str, Any]]:
         return list(self._latest_cameras)
 
-    async def send_bitrate_update(self, updates: list[dict]) -> None:
+    async def send_bitrate_update(self, updates: list[dict[str, Any]]) -> None:
         if self._manager is None or self._manager.channels is None:
             return
         config_ch = self._manager.channels.config
@@ -92,7 +94,7 @@ class SessionCoordinator:
             return
         config_ch.send_json({'type': 'bitrate', 'updates': updates})
 
-    async def send_params_update(self, updates: list[dict]) -> None:
+    async def send_params_update(self, updates: list[dict[str, Any]]) -> None:
         if self._manager is None or self._manager.channels is None:
             return
         config_ch = self._manager.channels.config
@@ -134,12 +136,29 @@ class SessionCoordinator:
                 await self._signal_client.listen(self._on_message)
             except websockets.exceptions.ConnectionClosed as exc:
                 logger.warning('[coord] сигналинг закрыт: %s', exc)
+                if exc.code in (4401, 1008):
+                    self._auth_failures += 1
+                    if self._auth_failures >= 3:
+                        logger.error('[coord] авторизация отклонена 3 раза подряд, прекращаем переподключение')
+                        await self._fire_auth_expired()
+                        break
+                else:
+                    self._auth_failures = 0
             except Exception as exc:
+                self._auth_failures = 0
                 logger.error('[coord] ошибка listen: %s', exc)
             finally:
                 await self._teardown_session()
                 await self._signal_client.disconnect()
             await asyncio.sleep(self._backoff.next_delay())
+
+    async def _fire_auth_expired(self) -> None:
+        if self.on_auth_expired is None:
+            return
+        try:
+            self.on_auth_expired()
+        except Exception as exc:
+            logger.warning('[coord] ошибка on_auth_expired: %s', exc)
 
     def stop(self) -> None:
         if self._stop_event is not None:
@@ -171,7 +190,7 @@ class SessionCoordinator:
             return
         packet.send_bytes(frame)
 
-    async def _on_message(self, msg: dict) -> None:
+    async def _on_message(self, msg: dict[str, Any]) -> None:
         kind = msg.get('type')
         match kind:
             case 'drones':
@@ -194,7 +213,7 @@ class SessionCoordinator:
                     await self._teardown_session()
                     if self.on_connect_failed is not None:
                         try:
-                            self.on_connect_failed(drone_id)
+                            self.on_connect_failed(cast(str, drone_id))
                         except Exception as exc:
                             logger.warning('[coord] ошибка on_connect_failed: %s', exc)
                     return
@@ -256,7 +275,7 @@ class SessionCoordinator:
                     except Exception as exc:
                         logger.warning('[coord] ошибка on_drone_offline: %s', exc)
 
-    async def _handle_sdp(self, msg: dict) -> None:
+    async def _handle_sdp(self, msg: dict[str, Any]) -> None:
         if self._manager is None:
             return
         drone_id = msg.get('drone_id')
@@ -268,7 +287,7 @@ class SessionCoordinator:
             await self._manager.handle_offer(drone_id, sdp)
             self._start_stats_collector()
 
-    async def _handle_ice(self, msg: dict) -> None:
+    async def _handle_ice(self, msg: dict[str, Any]) -> None:
         if self._manager is None:
             return
         drone_id = msg.get('drone_id')
@@ -276,7 +295,7 @@ class SessionCoordinator:
         if isinstance(drone_id, str) and isinstance(cand, dict):
             await self._manager.handle_ice(drone_id, cand)
 
-    async def _handle_auth_refreshed(self, msg: dict) -> None:
+    async def _handle_auth_refreshed(self, msg: dict[str, Any]) -> None:
         new_access = msg.get('access_token')
         if isinstance(new_access, str) and new_access:
             self._signal_client.update_access_token(new_access)
@@ -292,7 +311,7 @@ class SessionCoordinator:
             except Exception as exc:
                 logger.warning('[coord] не удалось сохранить refresh-токен: %s', exc)
 
-    async def _handle_auth_warning(self, msg: dict) -> None:
+    async def _handle_auth_warning(self, msg: dict[str, Any]) -> None:
         logger.info('[coord] срок авторизации истекает через %ss, обновляем', msg.get('seconds_left'))
         try:
             new_access = await self._refresh_now()
@@ -325,7 +344,7 @@ class SessionCoordinator:
         if hub.packet is not None:
             hub.packet.on_packet = self._on_packet_from_drone
 
-    async def _on_config_message_async(self, payload: dict | list) -> None:
+    async def _on_config_message_async(self, payload: dict[str, Any] | list[Any]) -> None:
         if not isinstance(payload, dict):
             return
         kind = payload.get('type')
@@ -366,7 +385,7 @@ class SessionCoordinator:
         except Exception as exc:
             logger.warning('[coord] ошибка on_inbound_stats: %s', exc)
 
-    def _handle_board_stats(self, payload: dict) -> None:
+    def _handle_board_stats(self, payload: dict[str, Any]) -> None:
         if self.on_board_stats is None:
             return
         try:
@@ -374,7 +393,7 @@ class SessionCoordinator:
         except Exception as exc:
             logger.warning('[coord] ошибка on_board_stats: %s', exc)
 
-    def _handle_battery_message(self, payload: dict) -> None:
+    def _handle_battery_message(self, payload: dict[str, Any]) -> None:
         try:
             percent = int(payload.get('percent', 0))
             voltage = float(payload.get('voltage', 0.0))
@@ -386,7 +405,7 @@ class SessionCoordinator:
             except Exception as exc:
                 logger.warning('[coord] ошибка on_battery_changed: %s', exc)
 
-    def _handle_command_ack_message(self, payload: dict) -> None:
+    def _handle_command_ack_message(self, payload: dict[str, Any]) -> None:
         cmd = payload.get('command', '?')
         result = payload.get('result', '?')
         if result == 'ACCEPTED':
@@ -394,7 +413,7 @@ class SessionCoordinator:
         else:
             logger.warning('[coord] FC REJECT %s: %s', cmd, result)
 
-    async def _handle_fc_message(self, payload: dict) -> None:
+    async def _handle_fc_message(self, payload: dict[str, Any]) -> None:
         kind = payload.get('kind') or 'none'
         name = payload.get('name') or ''
         if not isinstance(kind, str):
@@ -407,7 +426,7 @@ class SessionCoordinator:
             except Exception as exc:
                 logger.warning('[coord] ошибка on_fc_changed: %s', exc)
 
-    def _handle_cameras_message(self, payload: dict) -> None:
+    def _handle_cameras_message(self, payload: dict[str, Any]) -> None:
         cameras = payload.get('cameras')
         if not isinstance(cameras, list):
             return
@@ -418,7 +437,7 @@ class SessionCoordinator:
             except Exception as exc:
                 logger.warning('[coord] ошибка on_cameras_received: %s', exc)
 
-    def _on_config_message(self, payload: dict | list) -> None:
+    def _on_config_message(self, payload: dict[str, Any] | list[Any]) -> None:
         if self._loop is None:
             return
         self._loop.create_task(self._on_config_message_async(payload))

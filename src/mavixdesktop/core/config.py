@@ -18,6 +18,8 @@ user_config.apply_to_env()
 
 _USER_BASE = Path.home() / '.config' / 'mavixdesktop'
 
+DEFAULT_SIGNAL_URL = 'https://drone-mavix.ru'
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -27,7 +29,7 @@ class Settings(BaseSettings):
         extra='ignore',
     )
 
-    signal_url: str = Field(default='https://drone-mavix.ru', alias='SIGNAL_URL')
+    signal_url: str = Field(default=DEFAULT_SIGNAL_URL, alias='SIGNAL_URL')
     signal_ws_url: str = Field(default='', alias='SIGNAL_WS_URL')
 
     stun_server: str = Field(default='', alias='STUN_SERVER')
@@ -72,4 +74,5 @@ def reload_from_user_config() -> None:
     user_config.apply_to_env()
     fresh = Settings()
     for field_name in fresh.model_fields:
-        setattr(settings, field_name, getattr(fresh, field_name))
+        if field_name in user_config.EDITABLE_KEYS:
+            setattr(settings, field_name, getattr(fresh, field_name))

@@ -4,10 +4,11 @@ from __future__ import annotations
 import asyncio
 import threading
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
-from aiortc import VideoStreamTrack
+from aiortc import MediaStreamTrack, VideoStreamTrack
 from aiortc.mediastreams import MediaStreamError
+from av import VideoFrame
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
 
 from mavixdesktop.core.logger import logger
@@ -31,7 +32,7 @@ class VideoManager:
         self._on_frame_shown = on_frame_shown
 
         self._track_ids: list[str] = []
-        self._receive_tasks: list[asyncio.Task] = []
+        self._receive_tasks: list[asyncio.Task[None]] = []
         self._cam_index: int = 0
 
         self._lock = threading.Lock()
@@ -40,7 +41,7 @@ class VideoManager:
         self._delivering = False
 
         self._arrival = _FrameArrival()
-        self._arrival.arrived.connect(self._deliver, Qt.QueuedConnection)
+        self._arrival.arrived.connect(self._deliver, Qt.ConnectionType.QueuedConnection)
 
         self._decoded = 0
         self._rendered = 0
@@ -48,19 +49,20 @@ class VideoManager:
         self._stats_timer = QTimer(interval=self.STATS_INTERVAL_MS)
         self._stats_timer.timeout.connect(self._log_stats)
 
-    def on_track(self, track: VideoStreamTrack) -> None:
+    def on_track(self, track: MediaStreamTrack) -> None:
         if track.kind != 'video':
             return
-        self._track_ids.append(track.id)
+        with self._lock:
+            self._track_ids.append(track.id)
         logger.info('[video] трек получен: id=%s', track.id)
-        self._receive_tasks.append(asyncio.create_task(self._receive(track)))
+        self._receive_tasks.append(asyncio.create_task(self._receive(cast(VideoStreamTrack, track))))
 
     async def _receive(self, track: VideoStreamTrack) -> None:
         loop = asyncio.get_event_loop()
         try:
             while True:
-                frame = await track.recv()
-                img = await loop.run_in_executor(None, lambda f=frame: f.to_ndarray(format='bgr24'))
+                frame = cast(VideoFrame, await track.recv())
+                img = await loop.run_in_executor(None, cast(Callable[[], Any], lambda f=frame: f.to_ndarray(format='bgr24')))
                 self._publish(track.id, img)
         except asyncio.CancelledError:
             return
@@ -110,10 +112,10 @@ class VideoManager:
 
     def get_frame(self, cam_idx: int) -> Any:
         """Poll API for FlightWindow: returns a frame only if a new one arrived."""
-        if not self._track_ids:
-            return None
-        track_id = self._track_ids[min(cam_idx, len(self._track_ids) - 1)]
         with self._lock:
+            if not self._track_ids:
+                return None
+            track_id = self._track_ids[min(cam_idx, len(self._track_ids) - 1)]
             img = self._pending.pop(track_id, None)
             if img is not None:
                 self._rendered += 1
@@ -130,9 +132,10 @@ class VideoManager:
             logger.debug('[video] ошибка обработчика on_frame_shown: %s', exc)
 
     def shift_cam(self, delta: int) -> int:
-        if not self._track_ids:
-            return self._cam_index
-        self._cam_index = (self._cam_index + delta) % len(self._track_ids)
+        with self._lock:
+            if not self._track_ids:
+                return self._cam_index
+            self._cam_index = (self._cam_index + delta) % len(self._track_ids)
         if self._on_cam_changed:
             self._on_cam_changed(self._cam_index)
         self._schedule_active()
@@ -144,7 +147,8 @@ class VideoManager:
 
     @property
     def cam_count(self) -> int:
-        return len(self._track_ids)
+        with self._lock:
+            return len(self._track_ids)
 
     def start(self) -> None:
         with self._lock:

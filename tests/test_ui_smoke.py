@@ -106,15 +106,6 @@ def test_app_resumes_when_refresh_token_stored(qapp, monkeypatch):
     assert app.stack.currentWidget() is app.drone_list_page
 
 
-def test_token_page_constructs(qapp):
-    from mavixdesktop.ui.screens.token_page import TokenPage
-    page = TokenPage(
-        on_connect=lambda token: None,
-        cur_token='', cur_signal_url='', cur_stun='', cur_turn='',
-    )
-    assert page is not None
-
-
 def test_settings_page_ui_scale_slider(qapp, tmp_path, monkeypatch):
     from mavixdesktop.core import user_config
     monkeypatch.setattr(user_config, 'USER_CONFIG_PATH', tmp_path / 'config.json')
@@ -220,3 +211,161 @@ def test_flight_window_quality_overlays(qapp):
     assert '2.1' in window._stale_lbl.text()
     window.update_stale(0.0)
     assert window._stale_lbl.isHidden()
+
+
+def test_flight_window_joystick_lost_label_depends_on_fc_kind(qapp):
+    from mavixdesktop.ui.screens.flight_window import FlightWindow
+
+    class FakeJoystick:
+        def is_connected(self):
+            return False
+
+        def is_armed(self):
+            return False
+
+    for kind, expect_disarm in (('crsf', True), ('mavlink', False)):
+        window = FlightWindow(
+            joystick_input=FakeJoystick(), signalling=None,
+            get_frame=lambda idx: None, cam_count=lambda: 1,
+            loop=None, on_close=lambda: None, fc_kind=kind, passive=True,
+        )
+        window._FlightWindow__handle_joystick_lost()
+        text = window._lost_lbl.text()
+        if expect_disarm:
+            assert 'РАЗАРМИРУЕТСЯ' in text
+        else:
+            assert 'РАЗАРМИРУЕТСЯ' not in text
+            assert 'СВЯЗЬ С ДЖОЙСТИКОМ ПОТЕРЯНА' in text
+
+
+def test_flight_closed_stops_arm_listener(qapp, monkeypatch):
+    monkeypatch.setattr(
+        'mavixdesktop.ui.managers.connection.token_store.load',
+        lambda: (None, None),
+    )
+
+    from mavixdesktop.ui.app import App
+    app = App()
+    calls: list[str] = []
+    monkeypatch.setattr(app, '_stop_joystick_guard', lambda: calls.append('guard'))
+    monkeypatch.setattr(app, '_stop_arm_listener', lambda: calls.append('arm'))
+
+    app._handle_flight_closed()
+
+    assert calls == ['guard', 'arm']
+
+
+def test_settings_defaults_signal_url_matches_module_constant():
+    from mavixdesktop.core.config import DEFAULT_SIGNAL_URL
+    from mavixdesktop.ui.screens.settings_page import _DEFAULTS
+
+    assert _DEFAULTS['signal_url'] == DEFAULT_SIGNAL_URL
+
+
+def test_bitrate_input_is_bounded(qapp):
+    from mavixdesktop.ui.screens.drone_view.settings_bar import (
+        BITRATE_DEFAULT_KBS,
+        BITRATE_MAX_KBS,
+        BITRATE_MIN_KBS,
+        SettingsBar,
+    )
+    bar = SettingsBar(on_save=lambda: None, on_calibrate=lambda: None)
+
+    bar.bitrate_input.setText('2500')
+    assert bar.selected_bitrate() == 2500
+
+    bar.bitrate_input.setText('')
+    assert bar.selected_bitrate() == BITRATE_DEFAULT_KBS
+
+    bar.bitrate_input.setText('999999999')
+    assert bar.selected_bitrate() == BITRATE_MAX_KBS
+
+    bar.bitrate_input.setText('1')
+    assert bar.selected_bitrate() == BITRATE_MIN_KBS
+
+    validator = bar.bitrate_input.validator()
+    assert validator is not None
+    assert (validator.bottom(), validator.top()) == (BITRATE_MIN_KBS, BITRATE_MAX_KBS)
+
+
+def test_bitrate_out_of_range_is_flagged(qapp):
+    from mavixdesktop.ui.screens.drone_view.settings_bar import (
+        BITRATE_MAX_KBS,
+        BITRATE_MIN_KBS,
+        SettingsBar,
+    )
+    bar = SettingsBar(on_save=lambda: None, on_calibrate=lambda: None)
+
+    bar.bitrate_input.setText('2500')
+    assert bar.bitrate_hint.isHidden()
+    assert 'border' not in bar.bitrate_input.styleSheet()
+
+    bar.bitrate_input.setText('50')
+    assert not bar.bitrate_hint.isHidden(), 'значение вне диапазона должно подсвечиваться'
+    assert 'border' in bar.bitrate_input.styleSheet()
+    assert str(BITRATE_MIN_KBS) in bar.bitrate_hint.text()
+
+    bar.bitrate_input.setText('')
+    assert bar.bitrate_hint.isHidden(), 'пустое поле — ещё не ошибка, человек печатает'
+
+    bar.bitrate_input.setText('50')
+    assert bar.selected_bitrate() == BITRATE_MIN_KBS
+    assert bar.bitrate_input.text() == str(BITRATE_MIN_KBS), 'поле показывает реально применённое'
+
+    bar.bitrate_input.setText('99999')
+    assert bar.selected_bitrate() == BITRATE_MAX_KBS
+    assert bar.bitrate_input.text() == str(BITRATE_MAX_KBS)
+
+
+def test_help_dialog_fits_into_small_window(qapp):
+    from PySide6.QtWidgets import QWidget
+
+    from mavixdesktop.ui.screens.help_dialog import HelpDialog
+
+    for w, h in ((1920, 1080), (1280, 720), (800, 480), (640, 400)):
+        parent = QWidget()
+        parent.resize(w, h)
+        dlg = HelpDialog(parent)
+        assert dlg.width() <= w, f'справка шире окна {w}x{h}'
+        assert dlg.height() <= h, f'справка выше окна {w}x{h}'
+        assert dlg.close_btn.text() == '✕'
+
+
+def test_help_text_covers_every_metric_and_the_log_path(qapp):
+    from mavixdesktop.ui.screens import help_text
+
+    html = help_text.as_html()
+    for name, unit, _ in help_text.METRICS:
+        assert name in html, f'в справке нет показателя «{name}»'
+        assert unit in html, f'у показателя «{name}» не указана единица измерения'
+    assert 'stats_' in html and '.jsonl' in html, 'в справке нет пути к файлу статистики'
+    assert 'stats_report.py' in html
+    for key in ('S  /  Ы', 'I  /  Ш', 'Esc'):
+        assert key in html
+
+
+def test_hotkeys_work_in_both_layouts(qapp, monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeyEvent
+
+    from mavixdesktop.ui.screens.drone_view import DroneViewPage
+
+    page = DroneViewPage(
+        on_back=lambda: None, on_prev=lambda: None, on_next=lambda: None,
+        on_save=lambda: None, on_joystick_cfg=lambda: None,
+        on_takeoff=lambda: None, on_calibrate=lambda: None,
+    )
+    opened: list[str] = []
+    monkeypatch.setattr(page._video_panel, 'toggle_help', lambda: opened.append('help'))
+
+    def press(key: int, text: str) -> None:
+        page.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier, text))
+
+    press(Qt.Key.Key_S, 's')
+    assert not page._video_panel.stats_panel.isHidden(), 'латинская S не открыла таблицу'
+    press(0, 'ы')
+    assert page._video_panel.stats_panel.isHidden(), 'русская ы не закрыла таблицу'
+
+    press(Qt.Key.Key_I, 'i')
+    press(0, 'ш')
+    assert opened == ['help', 'help'], 'справка должна открываться и по i, и по ш'

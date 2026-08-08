@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from typing import cast
 
 from mavixdesktop.core.logger import logger
 
@@ -14,8 +15,8 @@ class _RelayProtocol(asyncio.DatagramProtocol):
         self._on_packet = on_packet
         self.transport: asyncio.DatagramTransport | None = None
 
-    def connection_made(self, transport: asyncio.DatagramTransport) -> None:
-        self.transport = transport
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self.transport = cast(asyncio.DatagramTransport, transport)
 
     def datagram_received(self, data: bytes, _addr: object) -> None:
         try:
@@ -54,7 +55,7 @@ class MavlinkRelay:
         loop = asyncio.get_running_loop()
         transport, protocol = await loop.create_datagram_endpoint(
             lambda: _RelayProtocol(self._dispatch),
-            local_addr=('0.0.0.0', self._bind_port),
+            local_addr=('127.0.0.1', self._bind_port),
             allow_broadcast=False,
         )
         self._transport = transport

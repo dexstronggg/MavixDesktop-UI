@@ -12,6 +12,5 @@ class Bridge(QObject):
     fc_info_received = Signal(str, str)
     drone_went_offline = Signal(str)
     connect_failed = Signal(str)
+    error_occurred = Signal(str)
     battery_updated = Signal(int, float)
-
-    speed_updated = Signal(float)

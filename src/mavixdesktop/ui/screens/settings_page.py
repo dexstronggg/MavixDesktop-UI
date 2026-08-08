@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -21,12 +22,12 @@ from PySide6.QtWidgets import (
 
 from mavixdesktop.core import config as config_module
 from mavixdesktop.core import user_config
-from mavixdesktop.core.config import settings
+from mavixdesktop.core.config import DEFAULT_SIGNAL_URL, settings
 from mavixdesktop.ui.screens.utils import svg_pixmap
 from mavixdesktop.ui.style import theme
 
-_DEFAULTS = {
-    'signal_url': 'http://localhost:8000',
+_DEFAULTS: dict[str, Any] = {
+    'signal_url': DEFAULT_SIGNAL_URL,
     'stun_server': '',
     'turn_server': '',
     'turn_username': '',
@@ -56,7 +57,7 @@ class SettingsPage(QWidget):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet('QScrollArea { background: transparent; border: none; }')
 
         body = QWidget()
@@ -163,7 +164,7 @@ class SettingsPage(QWidget):
             inp = QLineEdit()
             inp.setStyleSheet(theme.QSS_INPUT)
             inp.setPlaceholderText(placeholder)
-            inp.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            inp.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             row.addWidget(inp)
 
             self._inputs[key] = inp
@@ -202,21 +203,21 @@ class SettingsPage(QWidget):
         row = QHBoxLayout()
         row.setSpacing(theme.SPACE_MD)
 
-        slider = QSlider(Qt.Horizontal)
+        slider = QSlider(Qt.Orientation.Horizontal)
         slider.setMinimum(user_config.UI_SCALE_MIN)
         slider.setMaximum(user_config.UI_SCALE_MAX)
         slider.setSingleStep(user_config.UI_SCALE_STEP)
         slider.setPageStep(user_config.UI_SCALE_STEP * 2)
         slider.setTickInterval(user_config.UI_SCALE_STEP * 2)
-        slider.setTickPosition(QSlider.TicksBelow)
+        slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         slider.setStyleSheet(theme.QSS_SLIDER)
-        slider.setCursor(Qt.PointingHandCursor)
+        slider.setCursor(Qt.CursorShape.PointingHandCursor)
         slider.valueChanged.connect(self._on_ui_scale_changed)
         self._ui_scale_slider = slider
 
         value_label = QLabel(f'{user_config.UI_SCALE_DEFAULT} %')
         value_label.setMinimumWidth(56)
-        value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         value_label.setStyleSheet(
             f'color: {theme.ACCENT}; font-size: 15px; font-weight: 600;'
             f' font-family: {theme.FONT_FAMILY_MONO};'
@@ -323,8 +324,8 @@ class SettingsPage(QWidget):
         if self._ui_scale_value is not None:
             self._ui_scale_value.setText(f'{self._ui_scale_saved} %')
 
-    def _collect(self) -> dict:
-        values: dict = {key: inp.text().strip() for key, inp in self._inputs.items()}
+    def _collect(self) -> dict[str, Any]:
+        values: dict[str, Any] = {key: inp.text().strip() for key, inp in self._inputs.items()}
         if self._force_relay_cb is not None:
             values['force_relay'] = self._force_relay_cb.isChecked()
         if self._ui_scale_slider is not None:
@@ -338,9 +339,9 @@ class SettingsPage(QWidget):
             'Все поля будут заполнены значениями по умолчанию.\n'
             'Нажмите «Сохранить», чтобы применить.'
         )
-        confirm.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-        confirm.setDefaultButton(QMessageBox.Cancel)
-        if confirm.exec() != QMessageBox.Ok:
+        confirm.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        confirm.setDefaultButton(QMessageBox.StandardButton.Cancel)
+        if confirm.exec() != QMessageBox.StandardButton.Ok:
             return
         for key, inp in self._inputs.items():
             inp.setText(_DEFAULTS.get(key, ''))
@@ -390,14 +391,14 @@ class SettingsPage(QWidget):
 
     def _show_restart_required(self, scale: int) -> None:
         box = QMessageBox(self)
-        box.setIcon(QMessageBox.Information)
+        box.setIcon(QMessageBox.Icon.Information)
         box.setWindowTitle('Требуется перезапуск')
         box.setText(f'Масштаб интерфейса сохранён: {scale} %.')
         box.setInformativeText(
             'Он применится только после полного перезапуска приложения.\n'
             'Закройте Mavix и запустите снова.'
         )
-        box.setStandardButtons(QMessageBox.Ok)
+        box.setStandardButtons(QMessageBox.StandardButton.Ok)
         box.exec()
 
     def _show_error(self, message: str) -> None:

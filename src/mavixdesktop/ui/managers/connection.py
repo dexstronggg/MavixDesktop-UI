@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
+from typing import TYPE_CHECKING, Any, cast
 
 from PySide6.QtCore import QTimer
 
@@ -14,26 +15,31 @@ from mavixdesktop.server import token_store
 from mavixdesktop.server.api import ApiError, ApiSession
 from mavixdesktop.server.signal_client import SignalClient
 
+if TYPE_CHECKING:
+    from aiortc import MediaStreamTrack
+
+    from mavixdesktop.ui.screens.bridge import Bridge
+
 
 class ConnectionManager:
-    def __init__(self, bridge) -> None:
+    def __init__(self, bridge: Bridge) -> None:
         self._bridge = bridge
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         self._api: ApiSession | None = None
         self._signal: SignalClient | None = None
         self._coord: SessionCoordinator | None = None
-        self._on_inbound_stats = None
-        self._on_board_stats = None
-        self._coord_task: asyncio.Task | None = None
-        self._track_callback = None
-        self._reset_callback = None
+        self._on_inbound_stats: Callable[[float, float], None] | None = None
+        self._on_board_stats: Callable[[dict[str, Any]], None] | None = None
+        self._coord_task: asyncio.Task[None] | None = None
+        self._track_callback: Callable[[MediaStreamTrack], None] | None = None
+        self._reset_callback: Callable[[], None] | None = None
 
     @property
     def coordinator(self) -> SessionCoordinator | None:
         return self._coord
 
-    def set_track_callback(self, on_track, on_reset=None) -> None:
+    def set_track_callback(self, on_track: Callable[[MediaStreamTrack], None], on_reset: Callable[[], None] | None = None) -> None:
         self._track_callback = on_track
         self._reset_callback = on_reset
         if self._coord is not None:
@@ -211,19 +217,21 @@ class ConnectionManager:
         self._coord.on_session_ended = self._on_session_ended
         self._coord.on_drone_offline = self._emit_drone_offline
         self._coord.on_connect_failed = self._emit_connect_failed
+        self._coord.on_error = self._emit_error
+        self._coord.on_auth_expired = self._on_auth_expired
         self._coord.on_battery_changed = self._emit_battery
         self._coord.on_inbound_stats = self._on_inbound_stats
         self._coord.on_board_stats = self._on_board_stats
         self._coord_task = asyncio.create_task(self._coord.run())
 
-    def set_quality_sink(self, on_inbound, on_board) -> None:
+    def set_quality_sink(self, on_inbound: Callable[[float, float], None], on_board: Callable[[dict[str, Any]], None]) -> None:
         self._on_inbound_stats = on_inbound
         self._on_board_stats = on_board
         if self._coord is not None:
             self._coord.on_inbound_stats = on_inbound
             self._coord.on_board_stats = on_board
 
-    def _emit_drones(self, drones: list[dict]) -> None:
+    def _emit_drones(self, drones: list[dict[str, Any]]) -> None:
         try:
             self._bridge.client_list_updated.emit(drones)
         except Exception as exc:
@@ -235,7 +243,7 @@ class ConnectionManager:
         except Exception as exc:
             logger.warning('[connection] ошибка emit в bridge: %s', exc)
 
-    def _emit_cameras(self, cameras: list[dict]) -> None:
+    def _emit_cameras(self, cameras: list[dict[str, Any]]) -> None:
         try:
             self._bridge.config_received.emit(cameras)
         except Exception as exc:
@@ -260,13 +268,24 @@ class ConnectionManager:
         except Exception as exc:
             logger.warning('[connection] ошибка emit в bridge: %s', exc)
 
+    def _emit_error(self, message: str) -> None:
+        try:
+            self._bridge.error_occurred.emit(message)
+        except Exception as exc:
+            logger.warning('[connection] ошибка emit в bridge: %s', exc)
+
+    def _on_auth_expired(self) -> None:
+        logger.warning('[connection] авторизация отклонена сервером; чистим токен')
+        token_store.clear()
+        self._emit_login_failed('Сессия истекла, войдите заново')
+
     def _emit_battery(self, percent: int, voltage: float) -> None:
         try:
             self._bridge.battery_updated.emit(percent, voltage)
         except Exception as exc:
             logger.warning('[connection] ошибка emit в bridge: %s', exc)
 
-    def _submit(self, coro: Awaitable | None) -> None:
+    def _submit(self, coro: Awaitable[Any] | None) -> None:
         if coro is None or self._loop is None:
             return
-        asyncio.run_coroutine_threadsafe(coro, self._loop)
+        asyncio.run_coroutine_threadsafe(cast(Coroutine[Any, Any, Any], coro), self._loop)

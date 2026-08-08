@@ -43,6 +43,7 @@ def test_packet_send_when_closed_is_noop():
     pc = PacketChannel(ch)
     pc.send_bytes(b'\xAA')
     ch.send.assert_not_called()
+    assert pc.dropped == 1
 
 
 def test_packet_send_when_open():
@@ -50,6 +51,7 @@ def test_packet_send_when_open():
     pc = PacketChannel(ch)
     pc.send_bytes(b'\xAA\xBB')
     ch.send.assert_called_once_with(b'\xAA\xBB')
+    assert pc.dropped == 0
 
 
 def test_packet_send_swallows_errors():
@@ -57,6 +59,7 @@ def test_packet_send_swallows_errors():
     ch.send.side_effect = RuntimeError('boom')
     pc = PacketChannel(ch)
     pc.send_bytes(b'X')
+    assert pc.dropped == 1
 
 
 def test_packet_on_message_dispatches_to_handler():

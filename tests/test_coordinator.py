@@ -4,8 +4,11 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from websockets.exceptions import ConnectionClosed
+from websockets.frames import Close
 
 from mavixdesktop.coordinator import SessionCoordinator
+from mavixdesktop.core.backoff import ExponentialBackoff
 
 
 def _signal() -> MagicMock:
@@ -430,3 +433,77 @@ async def test_shutdown_tears_down_but_does_not_stop():
 
     mgr.close_async.assert_awaited_once()
     assert not c._stop_event.is_set()
+
+
+def _auth_refusal() -> ConnectionClosed:
+    return ConnectionClosed(
+        Close(1008, 'auth'), Close(1008, 'auth'), rcvd_then_sent=True,
+    )
+
+
+async def test_run_three_auth_refusals_fire_auth_expired_once():
+    sc = _signal()
+    sc.listen = AsyncMock(side_effect=[
+        _auth_refusal(), _auth_refusal(), _auth_refusal(),
+    ])
+    c = _coord(sc, _api())
+    c._backoff = ExponentialBackoff(initial=0.001, multiplier=1.0, cap=0.001)
+    fired: list = []
+    c.on_auth_expired = lambda: fired.append(True)
+
+    await asyncio.wait_for(c.run(), timeout=5)
+
+    assert fired == [True]
+    assert c._auth_failures == 3
+
+
+async def test_run_network_failures_do_not_fire_auth_expired():
+    sc = _signal()
+    sc.connect = AsyncMock(return_value=False)
+    c = _coord(sc, _api())
+    c._backoff = ExponentialBackoff(initial=0.001, multiplier=1.0, cap=0.001)
+    fired: list = []
+    c.on_auth_expired = lambda: fired.append(True)
+
+    task = asyncio.create_task(c.run())
+    for _ in range(200):
+        if sc.connect.await_count >= 3:
+            break
+        await asyncio.sleep(0.01)
+
+    assert sc.connect.await_count >= 3
+    assert fired == []
+    assert c._auth_failures == 0
+    c.stop()
+    await asyncio.wait_for(task, timeout=5)
+
+
+async def test_run_plain_close_resets_auth_failures_before_two_refusals():
+    sc = _signal()
+    seq = [
+        ConnectionClosed(None, None),
+        _auth_refusal(),
+        _auth_refusal(),
+    ]
+
+    def fake_listen(on_message):
+        if seq:
+            raise seq.pop(0)
+        raise ConnectionClosed(None, None)
+
+    sc.listen = AsyncMock(side_effect=fake_listen)
+    c = _coord(sc, _api())
+    c._backoff = ExponentialBackoff(initial=0.2, multiplier=1.0, cap=0.2)
+    fired: list = []
+    c.on_auth_expired = lambda: fired.append(True)
+
+    task = asyncio.create_task(c.run())
+    for _ in range(300):
+        if c._auth_failures == 2 and sc.connect.await_count == 3:
+            break
+        await asyncio.sleep(0.01)
+
+    assert c._auth_failures == 2
+    assert fired == []
+    c.stop()
+    await asyncio.wait_for(task, timeout=5)

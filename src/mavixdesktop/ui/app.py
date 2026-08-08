@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import platform
+import subprocess
 from datetime import date
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 from PySide6.QtCore import QThread, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -46,6 +48,9 @@ from mavixdesktop.ui.screens.joystick_setup import (
 from mavixdesktop.ui.screens.settings_page import SettingsPage
 from mavixdesktop.ui.state import SessionState
 
+if TYPE_CHECKING:
+    from mavixdesktop.joystick.input import JoystickInput
+
 
 class _QgcFindWorker(QThread):
     found = Signal(object)
@@ -79,8 +84,8 @@ class App(QMainWindow):
         self._nav_history: list[int] = []
         self._bridge = Bridge()
 
-        self._conn = (
-            DemoConnectionManager(bridge=self._bridge)
+        self._conn: ConnectionManager = (
+            cast(ConnectionManager, DemoConnectionManager(bridge=self._bridge))
             if demo else
             ConnectionManager(bridge=self._bridge)
         )
@@ -96,11 +101,9 @@ class App(QMainWindow):
         self._bridge.client_list_updated.connect(self._on_drones)
         self._bridge.fc_info_received.connect(self._on_fc_info)
         self._bridge.config_received.connect(self._on_cameras_received)
-        self._bridge.speed_updated.connect(
-            lambda rtt_ms: self.drone_view_page.update_ping(rtt_ms)
-        )
         self._bridge.drone_went_offline.connect(self._on_drone_went_offline)
         self._bridge.connect_failed.connect(self._on_connect_failed)
+        self._bridge.error_occurred.connect(self._on_server_error)
         self._bridge.battery_updated.connect(self._on_battery_updated)
         self._bridge.login_succeeded.connect(self._on_login_succeeded)
         self._bridge.login_failed.connect(self._on_login_failed)
@@ -118,7 +121,7 @@ class App(QMainWindow):
             on_open_settings=self._open_settings,
             on_delete_drone=self._handle_delete_drone,
         )
-        self.drone_view_page = DroneViewPage(
+        self.drone_view_page: DroneViewPage = DroneViewPage(
             on_back=self._handle_back_to_list,
             on_prev=lambda: self._video.shift_cam(-1),
             on_next=lambda: self._video.shift_cam(1),
@@ -146,21 +149,21 @@ class App(QMainWindow):
         if self.debug_page is not None:
             self.stack.addWidget(self.debug_page)
         self.setCentralWidget(self.stack)
-        self._settings_return_to = self.login_page
+        self._settings_return_to: QWidget = self.login_page
 
         self._flight_window: FlightWindow | None = None
         self._qgc_overlay: QGCLaunchingOverlay | None = None
         self._qgc_search_overlay: QGCSearchOverlay | None = None
         self._qgc_search_thread: _QgcFindWorker | None = None
         self._joystick_guard: JoystickGuard | None = None
-        self._joystick_guard_qgc_proc = None
+        self._joystick_guard_qgc_proc: subprocess.Popen[bytes] | None = None
         self._joystick_guard_timer = QTimer(interval=200)
         self._joystick_guard_timer.timeout.connect(self._tick_joystick_guard)
         self._ping_timer = QTimer(interval=200)
         self._ping_timer.timeout.connect(self._tick_ping)
         self._quality_timer = QTimer(interval=1000)
         self._quality_timer.timeout.connect(self._tick_quality)
-        self._arm_joystick = None
+        self._arm_joystick: JoystickInput | None = None
         self._arm_state = False
         self._arm_err_count = 0
         self._failsafe_sent = False
@@ -231,7 +234,7 @@ class App(QMainWindow):
         self.login_page.reset()
         self.stack.setCurrentWidget(self.login_page)
 
-    def _on_drones(self, drones: list[dict]) -> None:
+    def _on_drones(self, drones: list[dict[str, object]]) -> None:
         try:
             self.drone_list_page.update(drones)
         except Exception as exc:
@@ -278,7 +281,6 @@ class App(QMainWindow):
         self._quality.end_session()
         self.drone_view_page.update_stale(0.0)
         self._stop_arm_listener()
-        self.drone_view_page.update_ping(-1.0)
         self._conn.disconnect_drone()
         self._video.reset()
         self._state.reset()
@@ -315,12 +317,16 @@ class App(QMainWindow):
         if self.stack.currentWidget() is self.drone_view_page:
             self._handle_back_to_list()
 
+    def _on_server_error(self, message: str) -> None:
+        logger.warning('[app] ошибка сервера: %s', message)
+        QMessageBox.warning(self, 'Ошибка сервера', message or 'Неизвестная ошибка сервера')
+
     def _on_session_reset(self) -> None:
         self._video.clear_tracks()
         if self.stack.currentWidget() is self.drone_view_page:
             self.drone_view_page.set_calibration_visible(True)
 
-    def _on_cameras_received(self, cameras: list) -> None:
+    def _on_cameras_received(self, cameras: list[dict[str, object]]) -> None:
         self._state.cameras = cameras
         self.drone_view_page.save_btn.setEnabled(True)
         self._update_camera_settings_ui()
@@ -370,7 +376,7 @@ class App(QMainWindow):
             ]))
         self.drone_view_page.save_btn.setEnabled(True)
 
-    def _start_arm_listener(self, joystick_index: int, calibration: dict) -> None:
+    def _start_arm_listener(self, joystick_index: int, calibration: dict[str, Any]) -> None:
         from mavixdesktop.joystick.input import JoystickInput
         try:
             self._arm_joystick = JoystickInput(joystick_index, calibration)
@@ -464,7 +470,7 @@ class App(QMainWindow):
     def _handle_back_from_joystick(self) -> None:
         self._navigate_back()
 
-    def _handle_joystick_selected(self, joystick_index: int, calibration: dict) -> None:
+    def _handle_joystick_selected(self, joystick_index: int, calibration: dict[str, Any]) -> None:
         coord = self._conn.coordinator
         fc_kind = coord.fc_kind if coord is not None else 'crsf'
         if fc_kind == 'mavlink':
@@ -523,7 +529,7 @@ class App(QMainWindow):
         if self.debug_page is not None:
             self.debug_page.set_status(text)
 
-    def _launch_qgc_with_user_pick(self, sdl_config: str):
+    def _launch_qgc_with_user_pick(self, sdl_config: str) -> subprocess.Popen[bytes] | None:
         if platform.system() == 'Windows':
             filt = 'QGroundControl (QGroundControl*.exe);;Executable (*.exe);;All files (*)'
         else:
@@ -532,9 +538,9 @@ class App(QMainWindow):
             self, 'QGroundControl не найден',
             'QGroundControl не удалось найти автоматически.\n'
             'Указать путь к исполняемому файлу вручную?',
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes,
         )
-        if ans != QMessageBox.Yes:
+        if ans != QMessageBox.StandardButton.Yes:
             return None
         start_dir = str(Path.home())
         picked, _ = QFileDialog.getOpenFileName(
@@ -555,7 +561,7 @@ class App(QMainWindow):
             )
         return proc
 
-    def _open_flight_window(self, joystick_index: int, calibration: dict,
+    def _open_flight_window(self, joystick_index: int, calibration: dict[str, Any],
                             passive: bool = False) -> None:
         from mavixdesktop.joystick.input import JoystickInput
         js_input = JoystickInput(joystick_index, calibration)
@@ -581,6 +587,7 @@ class App(QMainWindow):
 
     def _handle_flight_closed(self) -> None:
         self._stop_joystick_guard()
+        self._stop_arm_listener()
         self._flight_window = None
         self.showNormal()
         self.raise_()
@@ -591,9 +598,9 @@ class App(QMainWindow):
     def _start_joystick_guard(
         self,
         joystick_index: int,
-        calibration: dict,
-        js=None,
-        qgc_proc=None,
+        calibration: dict[str, Any],
+        js: JoystickInput | None = None,
+        qgc_proc: subprocess.Popen[bytes] | None = None,
     ) -> None:
         fc_type = self._state.fc_type
         if fc_type not in ('crsf', 'mavlink'):
@@ -651,7 +658,6 @@ class App(QMainWindow):
             loop.call_soon_threadsafe(ping_ch.send_ping)
         rtt = ping_ch.last_rtt_ms if ping_ch.last_rtt_ms is not None else -1.0
         self._quality.add_rtt(rtt)
-        self._bridge.speed_updated.emit(rtt)
         self._tick_stale()
 
     def _tick_stale(self) -> None:
@@ -661,7 +667,7 @@ class App(QMainWindow):
         if self._flight_window is not None:
             self._flight_window.update_stale(seconds)
 
-    def _on_board_stats(self, payload: dict) -> None:
+    def _on_board_stats(self, payload: dict[str, Any]) -> None:
         try:
             self._quality.update_board(
                 bitrate_out_kbps=float(payload.get('bitrate_out_kbps', -1.0)),
@@ -672,7 +678,7 @@ class App(QMainWindow):
             logger.debug('[app] некорректный stats от борта: %s', exc)
 
     @staticmethod
-    def _stats_log_path():
+    def _stats_log_path() -> Path:
         return settings.log_path.parent / f'stats_{date.today()}.jsonl'
 
     def _tick_quality(self) -> None:
@@ -690,7 +696,7 @@ class _CoordinatorAdapter:
         self._conn = conn
 
     @property
-    def webrtc(self):
+    def webrtc(self) -> _CoordinatorAdapter:
         return self
 
     @property
@@ -702,7 +708,7 @@ class _CoordinatorAdapter:
         return ping_ch.last_rtt_ms if (ping_ch and ping_ch.last_rtt_ms is not None) else -1.0
 
     @property
-    def crsf_receiver(self):
+    def crsf_receiver(self) -> None:
         return None
 
     @property

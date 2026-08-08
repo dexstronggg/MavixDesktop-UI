@@ -5,7 +5,7 @@ import json
 import struct
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from mavixdesktop.core.logger import logger
 
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from aiortc import RTCDataChannel
 
 PacketHandler = Callable[[bytes], None]
-JsonHandler = Callable[[dict | list], None]
+JsonHandler = Callable[[dict[str, object] | list[object]], None]
 
 
 class _BaseChannel:
@@ -46,17 +46,38 @@ class _BaseChannel:
 class PacketChannel(_BaseChannel):
     LABEL = 'packet-channel'
 
+    _BUFFER_WARN_BYTES = 64 * 1024
+
     def __init__(self, channel: RTCDataChannel) -> None:
         super().__init__(channel)
         self.on_packet: PacketHandler | None = None
+        self.dropped: int = 0
+        self._drop_warnings = 0
+        self._buffer_warnings = 0
 
     def send_bytes(self, data: bytes) -> None:
         if not self.is_open:
+            self._count_drop()
             return
+        buffered = self._ch.bufferedAmount
+        if isinstance(buffered, int) and buffered > self._BUFFER_WARN_BYTES:
+            self._buffer_warnings += 1
+            if self._buffer_warnings == 1 or self._buffer_warnings % 50 == 0:
+                logger.warning(
+                    '[dc:packet] буфер отправки переполнен: %d байт, пакеты задерживаются',
+                    buffered,
+                )
         try:
             self._ch.send(data)
         except Exception as exc:
+            self._count_drop()
             logger.warning('[dc:packet] ошибка отправки: %s', exc)
+
+    def _count_drop(self) -> None:
+        self.dropped += 1
+        self._drop_warnings += 1
+        if self._drop_warnings == 1 or self._drop_warnings % 50 == 0:
+            logger.warning('[dc:packet] потеряно пакетов при отправке: %d', self.dropped)
 
     def _on_message(self, message: object) -> None:
         if not isinstance(message, (bytes, bytearray, memoryview)):
@@ -115,7 +136,7 @@ class ConfigChannel(_BaseChannel):
         self.on_message: JsonHandler | None = None
         self.on_opened: Callable[[], None] | None = None
 
-    def send_json(self, payload: dict | list) -> None:
+    def send_json(self, payload: dict[str, object] | list[object]) -> None:
         if not self.is_open:
             return
         try:
@@ -177,13 +198,26 @@ class DataChannelHub:
         if cls is None:
             logger.warning('[hub] неизвестный label data-канала: %s', channel.label)
             return False
+        old: _BaseChannel | None = None
+        if channel.label == PacketChannel.LABEL and self.packet is not None:
+            old = self.packet
+        elif channel.label == PingChannel.LABEL and self.ping is not None:
+            old = self.ping
+        elif channel.label == ConfigChannel.LABEL and self.config is not None:
+            old = self.config
         wrapped = cls(channel)
         if cls is PacketChannel:
-            self.packet = wrapped
+            self.packet = cast(PacketChannel, wrapped)
         elif cls is PingChannel:
-            self.ping = wrapped
+            self.ping = cast(PingChannel, wrapped)
         elif cls is ConfigChannel:
-            self.config = wrapped
+            self.config = cast(ConfigChannel, wrapped)
+        if old is not None and old._ch is not channel:
+            logger.info('[hub] закрываем старый data-канал %s при повторном attach', channel.label)
+            try:
+                old._ch.close()
+            except Exception as exc:
+                logger.warning('[hub] ошибка закрытия старого канала: %s', exc)
         return True
 
     def close(self) -> None:
