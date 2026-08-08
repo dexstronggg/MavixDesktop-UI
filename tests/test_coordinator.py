@@ -600,3 +600,44 @@ async def test_run_plain_close_resets_auth_failures_before_two_refusals():
     assert fired == []
     c.stop()
     await asyncio.wait_for(task, timeout=5)
+
+
+async def test_request_keyframe_sends_message_and_throttles():
+    sc = _signal()
+    c = _coord(sc, _api())
+    hub = MagicMock()
+    hub.config = MagicMock()
+    hub.config.send_json = MagicMock()
+    c._manager = MagicMock(channels=hub)
+
+    await c.request_keyframe()
+    hub.config.send_json.assert_called_once_with({'type': 'keyframe'})
+
+    await c.request_keyframe()
+    assert hub.config.send_json.call_count == 1
+
+
+async def test_request_keyframe_without_session_is_noop():
+    sc = _signal()
+    c = _coord(sc, _api())
+    await c.request_keyframe()
+    # no exception
+
+
+async def test_send_focus_sends_device_index():
+    sc = _signal()
+    c = _coord(sc, _api())
+    hub = MagicMock()
+    hub.config = MagicMock()
+    hub.config.send_json = MagicMock()
+    c._manager = MagicMock(channels=hub)
+
+    await c.send_focus(2)
+    hub.config.send_json.assert_called_once_with({'type': 'focus', 'device_index': 2})
+
+
+async def test_send_focus_without_session_is_noop():
+    sc = _signal()
+    c = _coord(sc, _api())
+    await c.send_focus(2)
+    # no exception

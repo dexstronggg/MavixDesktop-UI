@@ -33,6 +33,7 @@ from mavixdesktop.ui.managers.demo_connection import DemoConnectionManager
 from mavixdesktop.ui.managers.quality import (
     STALE_FRAME_MS,
     LinkQuality,
+    LinkSnapshot,
     format_quality_line,
     format_stats_table,
 )
@@ -92,6 +93,7 @@ class App(QMainWindow):
             ConnectionManager(bridge=self._bridge)
         )
         self._quality = LinkQuality()
+        self._last_freeze_count = 0
         self._video = VideoManager(
             on_frame=lambda img: self.drone_view_page.show_frame(img),
             on_cam_changed=self._on_cam_changed,
@@ -290,6 +292,7 @@ class App(QMainWindow):
         self._conn.select_drone(drone_id)
         self._video.start()
         self._quality.start_session(log_path=self._stats_log_path())
+        self._last_freeze_count = 0
         self._ping_timer.start()
         self._quality_timer.start()
         self._drone_list_refresh_timer.stop()
@@ -353,6 +356,7 @@ class App(QMainWindow):
         self._state.cameras = cameras
         self.drone_view_page.save_btn.setEnabled(True)
         self._update_camera_settings_ui()
+        self._send_focus(self._video.cam_index)
 
     def _on_fc_info(self, fc_type: str, fc_name: str) -> None:
         self._state.fc_type = fc_type
@@ -363,6 +367,22 @@ class App(QMainWindow):
     def _on_cam_changed(self, cam_index: int) -> None:
         self._state.cam_index = cam_index
         self._update_camera_settings_ui()
+        self._send_focus(cam_index)
+
+    def _send_focus(self, cam_index: int) -> None:
+        cameras = self._state.cameras
+        if not cameras or cam_index >= len(cameras):
+            return
+        cam = cameras[cam_index]
+        if not isinstance(cam, dict):
+            return
+        device_index = cam.get('device_index', cam_index)
+        if isinstance(device_index, bool) or not isinstance(device_index, int):
+            return
+        coord = self._conn.coordinator
+        if coord is None:
+            return
+        self._conn._submit(coord.send_focus(device_index))
 
     def _update_camera_settings_ui(self) -> None:
         cameras = self._state.cameras
@@ -711,6 +731,17 @@ class App(QMainWindow):
         self.drone_view_page.set_stats_text(format_stats_table(snap))
         if self._flight_window is not None:
             self._flight_window.update_quality(*format_quality_line(snap))
+        self._maybe_request_keyframe(snap)
+
+    def _maybe_request_keyframe(self, snap: LinkSnapshot) -> None:
+        freeze_grew = snap.freeze_count > self._last_freeze_count
+        self._last_freeze_count = snap.freeze_count
+        if snap.loss_pct <= 2.0 and not freeze_grew:
+            return
+        coord = self._conn.coordinator
+        if coord is None:
+            return
+        self._conn._submit(coord.request_keyframe())
 
 
 

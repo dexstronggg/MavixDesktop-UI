@@ -21,6 +21,8 @@ from mavixdesktop.webrtc.stats import StatsCollector
 if TYPE_CHECKING:
     from aiortc import MediaStreamTrack
 
+_KEYFRAME_MIN_INTERVAL_S = 2.0
+
 
 def _local_ice_servers() -> list[dict[str, str]]:
     servers: list[dict[str, str]] = []
@@ -62,6 +64,7 @@ class SessionCoordinator:
         self._latest_cameras: list[dict[str, Any]] = []
         self._reconnect_drone_id: str | None = None
         self._connect_request_at: float | None = None
+        self._last_keyframe_ts: float | None = None
         self.on_drones_changed: Callable[[list[dict[str, Any]]], None] | None = None
         self.on_fc_changed: Callable[[str, str], None] | None = None
         self.on_cameras_received: Callable[[list[dict[str, Any]]], None] | None = None
@@ -111,6 +114,30 @@ class SessionCoordinator:
         if config_ch is None:
             return
         config_ch.send_json({'type': 'calibrate'})
+
+    async def request_keyframe(self) -> None:
+        now = time.monotonic()
+        if (
+            self._last_keyframe_ts is not None
+            and now - self._last_keyframe_ts < _KEYFRAME_MIN_INTERVAL_S
+        ):
+            return
+        if self._manager is None or self._manager.channels is None:
+            return
+        config_ch = self._manager.channels.config
+        if config_ch is None:
+            return
+        self._last_keyframe_ts = now
+        config_ch.send_json({'type': 'keyframe'})
+        logger.info('[coord] запрошен ключевой кадр на борту')
+
+    async def send_focus(self, device_index: int) -> None:
+        if self._manager is None or self._manager.channels is None:
+            return
+        config_ch = self._manager.channels.config
+        if config_ch is None:
+            return
+        config_ch.send_json({'type': 'focus', 'device_index': device_index})
 
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
