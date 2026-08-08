@@ -1,6 +1,7 @@
 """Owns one PeerSession + its DataChannelHub at a time."""
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
@@ -44,7 +45,9 @@ class WebRTCManager:
     def start_session(self, drone_id: str) -> None:
         if self._peer is not None:
             logger.warning('[manager] сессия уже активна (drone=%s), завершаем', self._peer.drone_id)
+            old_peer = self._peer
             self.end_session()
+            asyncio.ensure_future(old_peer.close())
         logger.info('[manager] запускаем сессию с drone=%s', drone_id)
         self._peer = PeerSession(drone_id, ice_servers=self._ice_servers)
         self._channels = DataChannelHub()

@@ -47,9 +47,11 @@ def load() -> dict[str, Any]:
 def save(values: dict[str, Any]) -> None:
     USER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     tmp = USER_CONFIG_PATH.with_suffix('.json.tmp')
-    with tmp.open('w', encoding='utf-8') as f:
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as f:
         json.dump(values, f, indent=2, ensure_ascii=False)
         f.write('\n')
+    os.chmod(tmp, 0o600)
     os.replace(tmp, USER_CONFIG_PATH)
 
 

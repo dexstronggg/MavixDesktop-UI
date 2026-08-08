@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, cast
@@ -51,6 +52,7 @@ class SessionCoordinator:
         self.on_track = on_track
 
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._loop_thread: threading.Thread | None = None
         self._stop_event: asyncio.Event | None = None
         self._manager: WebRTCManager | None = None
         self._mavlink: MavlinkRelay | None = None
@@ -112,6 +114,7 @@ class SessionCoordinator:
 
     async def run(self) -> None:
         self._loop = asyncio.get_running_loop()
+        self._loop_thread = threading.current_thread()
         self._stop_event = asyncio.Event()
         ice_servers = _local_ice_servers()
         if ice_servers:
@@ -174,6 +177,8 @@ class SessionCoordinator:
     async def request_disconnect(self) -> None:
         if self._target_drone_id is None:
             return
+        self._reconnect_drone_id = None
+        self._connect_request_at = None
         await self._signal_client.send({
             'type': 'disconnect', 'drone_id': self._target_drone_id,
         })
@@ -188,9 +193,19 @@ class SessionCoordinator:
         packet = self._manager.channels.packet
         if packet is None:
             return
-        packet.send_bytes(frame)
+        if (
+            self._loop is not None
+            and self._loop_thread is not None
+            and threading.current_thread() is not self._loop_thread
+        ):
+            self._loop.call_soon_threadsafe(packet.send_bytes, frame)
+        else:
+            packet.send_bytes(frame)
 
     async def _on_message(self, msg: dict[str, Any]) -> None:
+        if not isinstance(msg, dict):
+            logger.debug('[coord] игнорируем не-dict сообщение сигналинга: %r', type(msg).__name__)
+            return
         kind = msg.get('type')
         match kind:
             case 'drones':
@@ -248,6 +263,7 @@ class SessionCoordinator:
     async def _handle_drones(self, drones: object) -> None:
         if not isinstance(drones, list):
             return
+        drones = [d for d in drones if isinstance(d, dict)]
         self._latest_drones = drones
         if self.on_drones_changed is not None:
             try:
@@ -362,6 +378,10 @@ class SessionCoordinator:
             armed = bool(payload.get('armed', False))
             cm = int(payload.get('custom_mode', 0))
             logger.info('[coord] FC armed=%s custom_mode=0x%08x', armed, cm)
+        elif kind == 'statustext':
+            text = payload.get('text')
+            if isinstance(text, str):
+                logger.info('[coord] statustext от дрона: %s', text)
         else:
             logger.debug('[coord] неизвестный тип config-канала: %s', kind)
 
@@ -451,11 +471,24 @@ class SessionCoordinator:
                     bind_port=settings.qgc_bind_port,
                 )
                 self._mavlink.set_packet_callback(self._on_qgc_packet)
-                await self._mavlink.start()
+                try:
+                    await self._mavlink.start()
+                except OSError as exc:
+                    logger.warning('[coord] не удалось запустить MAVLink-relay: %s', exc)
+                    self._mavlink = None
+                    self._notify_error('Could not bind to UDP port 14550, проверьте, не занят ли порт')
         else:
             if self._mavlink is not None:
                 await self._mavlink.stop()
                 self._mavlink = None
+
+    def _notify_error(self, message: str) -> None:
+        if self.on_error is None:
+            return
+        try:
+            self.on_error(message)
+        except Exception as exc:
+            logger.warning('[coord] ошибка колбэка on_error: %s', exc)
 
     def _on_packet_from_drone(self, data: bytes) -> None:
         if self._fc_kind == 'mavlink' and self._mavlink is not None:

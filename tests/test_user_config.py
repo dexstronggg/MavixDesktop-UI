@@ -69,3 +69,9 @@ def test_apply_does_not_override_explicit_env(config_path, monkeypatch):
     _write(config_path, {'ui_scale': 130})
     user_config.apply_ui_scale_to_env()
     assert os.environ['QT_SCALE_FACTOR'] == '2.0'
+
+
+def test_save_writes_file_with_0600(config_path):
+    user_config.save({'ui_scale': 110})
+    assert (config_path.stat().st_mode & 0o777) == 0o600
+    assert json.loads(config_path.read_text(encoding='utf-8')) == {'ui_scale': 110}

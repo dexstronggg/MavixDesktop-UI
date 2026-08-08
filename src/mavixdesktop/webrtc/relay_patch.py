@@ -13,21 +13,24 @@ def enable_relay_only() -> None:
     if _applied:
         return
 
-    from aioice.ice import Connection as _AioiceConnection
-    from aioice.ice import TransportPolicy
-    from aiortc import rtcicetransport
+    try:
+        from aioice.ice import Connection as _AioiceConnection
+        from aioice.ice import TransportPolicy
+        from aiortc import rtcicetransport
 
-    def _relay_wanted(kwargs: dict[str, object]) -> bool:
-        from mavixdesktop.core.config import settings
-        return bool(getattr(settings, 'force_relay', False)) and kwargs.get('turn_server') is not None
+        def _relay_wanted(kwargs: dict[str, object]) -> bool:
+            from mavixdesktop.core.config import settings
+            return bool(getattr(settings, 'force_relay', False)) and kwargs.get('turn_server') is not None
 
-    class _RelayConnection(_AioiceConnection):
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            if 'transport_policy' not in kwargs and _relay_wanted(kwargs):
-                kwargs['transport_policy'] = TransportPolicy.RELAY
-                logger.info('[ice] ICE Connection форсирован в transport_policy=RELAY (нативный relay-only)')
-            super().__init__(*args, **kwargs)
+        class _RelayConnection(_AioiceConnection):
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                if 'transport_policy' not in kwargs and _relay_wanted(kwargs):
+                    kwargs['transport_policy'] = TransportPolicy.RELAY
+                    logger.info('[ice] ICE Connection форсирован в transport_policy=RELAY (нативный relay-only)')
+                super().__init__(*args, **kwargs)
 
-    rtcicetransport.Connection = _RelayConnection  # type: ignore[attr-defined]
-    _applied = True
-    logger.info('[ice] relay-хук aiortc установлен')
+        rtcicetransport.Connection = _RelayConnection  # type: ignore[attr-defined]
+        _applied = True
+        logger.info('[ice] relay-хук aiortc установлен')
+    except Exception as exc:
+        logger.error('[webrtc] relay-патч aiortc не применился: %s', exc)

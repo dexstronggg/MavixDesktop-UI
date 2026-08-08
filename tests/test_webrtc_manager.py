@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 from mavixdesktop.webrtc.manager import WebRTCManager
@@ -34,6 +35,21 @@ async def test_start_session_replaces_existing(monkeypatch):
     mgr.start_session('drone-1')
     mgr.start_session('drone-2')
     assert mgr.active_drone_id is not None
+
+
+async def test_start_session_closes_previous_peer(monkeypatch):
+    peer1 = _build_peer_mock()
+    peer2 = _build_peer_mock()
+    peers = iter([peer1, peer2])
+    monkeypatch.setattr(
+        'mavixdesktop.webrtc.manager.PeerSession',
+        lambda drone_id, ice_servers=None: next(peers),
+    )
+    mgr = WebRTCManager(send=AsyncMock())
+    mgr.start_session('drone-1')
+    mgr.start_session('drone-2')
+    await asyncio.sleep(0)
+    peer1.close.assert_awaited_once()
 
 
 async def test_end_session_clears():

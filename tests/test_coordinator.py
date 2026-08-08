@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -67,6 +68,43 @@ async def test_request_disconnect_sends_and_tears_down():
     await c.request_disconnect()
     sc.send.assert_awaited_with({'type': 'disconnect', 'drone_id': 'drone-A'})
     mgr.close_async.assert_awaited_once()
+
+
+async def test_request_disconnect_clears_reconnect_state():
+    sc = _signal()
+    c = _coord(sc, _api())
+    mgr = MagicMock()
+    mgr.close_async = AsyncMock()
+    c._manager = mgr
+    c._target_drone_id = 'drone-A'
+    c._reconnect_drone_id = 'drone-A'
+    c._connect_request_at = 123.0
+    await c.request_disconnect()
+    assert c._reconnect_drone_id is None
+    assert c._connect_request_at is None
+
+
+async def test_on_message_non_dict_is_ignored():
+    sc = _signal()
+    c = _coord(sc, _api())
+    await c._on_message(['not', 'a', 'dict'])
+    sc.send.assert_not_awaited()
+    assert c.drones == []
+
+
+async def test_handle_drones_filters_non_dict_entries():
+    sc = _signal()
+    c = _coord(sc, _api())
+    received: list = []
+    c.on_drones_changed = received.append
+
+    await c._on_message({
+        'type': 'drones',
+        'drones': ['garbage', {'drone_id': 'a', 'online': True}, None, 42],
+    })
+
+    assert c.drones == [{'drone_id': 'a', 'online': True}]
+    assert received == [[{'drone_id': 'a', 'online': True}]]
 
 
 async def test_handle_drones_updates_list_and_callback():
@@ -202,6 +240,31 @@ async def test_send_joystick_packet_when_session_routes_to_packet_channel():
     packet_mock.send_bytes.assert_called_once_with(b'\xAA\xBB')
 
 
+async def test_send_joystick_packet_from_foreign_thread_uses_loop_dispatch():
+    sc = _signal()
+    c = _coord(sc, _api())
+    packet_mock = MagicMock()
+    hub = MagicMock(packet=packet_mock, ping=None, config=None)
+    c._manager = MagicMock(channels=hub)
+    loop_mock = MagicMock()
+    c._loop = loop_mock
+    c._loop_thread = threading.Thread()
+    c.send_joystick_packet(b'\xAA')
+    loop_mock.call_soon_threadsafe.assert_called_once_with(packet_mock.send_bytes, b'\xAA')
+    packet_mock.send_bytes.assert_not_called()
+
+
+async def test_send_joystick_packet_from_loop_thread_is_direct():
+    sc = _signal()
+    c = _coord(sc, _api())
+    packet_mock = MagicMock()
+    hub = MagicMock(packet=packet_mock, ping=None, config=None)
+    c._manager = MagicMock(channels=hub)
+    c._loop_thread = threading.current_thread()
+    c.send_joystick_packet(b'\xBB')
+    packet_mock.send_bytes.assert_called_once_with(b'\xBB')
+
+
 async def test_qgc_packet_routes_to_data_channel():
     sc = _signal()
     c = _coord(sc, _api())
@@ -249,6 +312,36 @@ async def test_config_message_non_dict_ignored():
     c = _coord(sc, _api())
     c.on_fc_changed = lambda *a: pytest.fail('should not fire')
     await c._on_config_message_async([1, 2, 3])
+
+
+async def test_config_message_statustext_logs(caplog):
+    sc = _signal()
+    c = _coord(sc, _api())
+    with caplog.at_level('INFO', logger='mavixdesktop'):
+        await c._on_config_message_async({'type': 'statustext', 'text': 'EKF не сходится'})
+    assert any('statustext от дрона: EKF не сходится' in r.message for r in caplog.records)
+
+
+async def test_config_message_statustext_non_str_ignored():
+    sc = _signal()
+    c = _coord(sc, _api())
+    c.on_error = lambda _: pytest.fail('should not fire')
+    await c._on_config_message_async({'type': 'statustext', 'text': 123})
+
+
+async def test_apply_fc_kind_mavlink_start_oserror_resets_relay(monkeypatch):
+    sc = _signal()
+    c = _coord(sc, _api())
+    errors: list[str] = []
+    c.on_error = errors.append
+    relay_mock = MagicMock()
+    relay_mock.start = AsyncMock(side_effect=OSError('Address already in use'))
+    monkeypatch.setattr('mavixdesktop.coordinator.MavlinkRelay', lambda **kw: relay_mock)
+
+    await c._apply_fc_kind('mavlink')
+
+    assert c._mavlink is None
+    assert errors == ['Could not bind to UDP port 14550, проверьте, не занят ли порт']
 
 
 async def test_cameras_message_stores_list_and_fires_callback():

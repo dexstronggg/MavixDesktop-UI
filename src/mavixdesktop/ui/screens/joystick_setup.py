@@ -512,7 +512,7 @@ class QGCLaunchingOverlay(QDialog):
         )
         lay.addWidget(lbl)
 
-        self._timer = QTimer(interval=200)
+        self._timer = QTimer(interval=500)
         self._timer.timeout.connect(self.__check)
         self._timer.start()
 
@@ -535,7 +535,7 @@ class QGCLaunchingOverlay(QDialog):
     def __qgc_window_visible(self) -> bool:
         try:
             result = subprocess.run(
-                ['wmctrl', '-lp'], capture_output=True, text=True, timeout=1,
+                ['wmctrl', '-lp'], capture_output=True, text=True, timeout=0.5,
             )
             if result.returncode != 0:
                 return False
@@ -555,7 +555,7 @@ class QGCLaunchingOverlay(QDialog):
         try:
             result = subprocess.run(
                 ['pgrep', '-P', str(self._qgc_proc.pid)],
-                capture_output=True, text=True, timeout=1,
+                capture_output=True, text=True, timeout=0.5,
             )
             if result.returncode == 0:
                 pids.update(result.stdout.split())
