@@ -89,6 +89,17 @@ def test_app_constructs_without_login(qapp, monkeypatch):
     assert app.stack.currentWidget() is app.login_page
 
 
+def test_app_close_without_session(qapp, monkeypatch):
+    monkeypatch.setattr(
+        'mavixdesktop.ui.managers.connection.token_store.load',
+        lambda: (None, None),
+    )
+
+    from mavixdesktop.ui.app import App
+    app = App()
+    app.close()
+
+
 def test_app_resumes_when_refresh_token_stored(qapp, monkeypatch):
     monkeypatch.setattr(
         'mavixdesktop.ui.managers.connection.token_store.load',
