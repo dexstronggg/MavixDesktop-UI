@@ -88,6 +88,7 @@ src/mavixdesktop/
 ├── webrtc/
 │   ├── peer.py          # PeerSession — WebRTC-сессия (answerer)
 │   ├── manager.py       # WebRTCManager — управление сессией
+│   ├── jitter_patch.py  # Патч JitterBuffer aiortc (deadline для потерянных пакетов)
 │   └── channels.py      # PacketChannel, PingChannel, ConfigChannel
 ├── fc/
 │   ├── crsf.py          # Кодирование CRSF
@@ -131,7 +132,18 @@ src/mavixdesktop/
      переподключения).
 3. Передача пакетов FC и обработка сообщений `config-channel`
    (`fc`, `cameras`, `battery`, `command_ack`, `fc_armed`, `stats`,
-   `statustext` — дрон → GCS).
+   `statustext` — дрон → GCS; `bitrate`, `params`, `calibrate`,
+   `keyframe`, `focus` — GCS → дрон). Форматы GCS → дрон:
+   - `bitrate`: `{'type': 'bitrate', 'updates': [{'device_index': N, 'bitrate_kbs': B}, ...]}`;
+   - `params`: `{'type': 'params', 'updates': [{'device_index': N, 'param_index': I}, ...]}`;
+   - `calibrate`: `{'type': 'calibrate'}`;
+   - `keyframe`: `{'type': 'keyframe'}` — запрос ключевого кадра при
+     потерях > 2 % или росте числа фризов (троттлинг 2 с);
+   - `focus`: `{'type': 'focus', 'device_index': N}` — активная камера
+     (борт сбрасывает остальные через `valve`).
+   В `stats` борта дополнительно приходит `ice_type`
+   (`host`/`srflx`/`relay`/`unknown`) — тип ICE-пары для диагностики
+   пути трафика.
 4. Запуск/останов `MavlinkRelay` в зависимости от типа FC.
 
 #### 4.2.2. Модуль WebRTC-сессии (`webrtc/`)
@@ -147,6 +159,17 @@ Data-каналы создаются дроном, передаются клие
 `pc.on('datachannel')`. По метке (`label`) идентифицируются как
 `packet`, `ping`, `config` и оборачиваются соответствующими классами
 из `channels.py`.
+
+Для приёма видео `peer.py` при создании `RTCPeerConnection` подменяет
+`aiortc` JitterBuffer на `DeadlineJitterBuffer` (`webrtc/jitter_patch.py`).
+Причина: в aiortc потерянный RTP-пакет останавливает выдачу кадров до
+переполнения буфера (до ~0,5 с на 30 к/с) — `_remove_frame` упирается в
+дыру и не сдвигает `origin`. Патч (только видео, `is_video=True`) даёт
+дыре deadline 200 мс на ретрансмиссию (RTX/NACK), после чего отбрасывает
+неполный кадр, сдвигает `origin` дальше и возвращает PLI-флаг (запрос
+ключевого кадра). При идеальной сети поведение идентично оригиналу.
+Подмена обёрнута в `try/except` — если aiortc изменится, патч просто не
+применится, приложение работает дальше.
 
 #### 4.2.3. Модуль пользовательского интерфейса (`ui/`)
 
