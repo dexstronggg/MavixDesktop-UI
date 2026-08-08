@@ -55,7 +55,7 @@ class DemoConnectionManager:
     def set_quality_sink(self, on_inbound: Callable[[float, float], None], on_board: Callable[[dict[str, Any]], None]) -> None:
         return
 
-    def set_track_callback(self, on_track: Callable[[MediaStreamTrack], None], on_reset: Callable[[], None] | None = None) -> None:
+    def set_track_callback(self, on_track: Callable[[MediaStreamTrack], None]) -> None:
         return None
 
     def login(self, email: str, password: str) -> None:

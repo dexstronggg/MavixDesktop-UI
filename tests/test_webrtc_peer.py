@@ -17,15 +17,17 @@ def test_build_configuration_no_servers():
     assert cfg.iceServers == []
 
 
-def test_build_configuration_keeps_stun_when_relay_off(monkeypatch):
+def test_build_configuration_keeps_all_servers_when_relay_off(monkeypatch):
     from mavixdesktop.core.config import settings as s
     monkeypatch.setattr(s, 'force_relay', False, raising=False)
     cfg = _build_configuration([
         {'urls': 'stun:stun.example:3478'},
         {'urls': 'turn:turn.example:3478', 'username': 'a', 'credential': 'b'},
     ])
-    assert len(cfg.iceServers) == 1
+    assert len(cfg.iceServers) == 2
     assert cfg.iceServers[0].urls == 'stun:stun.example:3478'
+    assert cfg.iceServers[1].username == 'a'
+    assert cfg.iceServers[1].credential == 'b'
 
 
 def test_build_configuration_keeps_turn_when_relay_on(monkeypatch):

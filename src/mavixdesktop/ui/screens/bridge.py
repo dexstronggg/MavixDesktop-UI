@@ -6,6 +6,7 @@ from PySide6.QtCore import QObject, Signal
 class Bridge(QObject):
     login_succeeded = Signal()
     login_failed = Signal(str)
+    session_reset = Signal()
 
     client_list_updated = Signal(list)
     config_received = Signal(list)

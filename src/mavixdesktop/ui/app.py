@@ -1,6 +1,7 @@
 """Main Qt window of MavixDesktop."""
 from __future__ import annotations
 
+import asyncio
 import platform
 import subprocess
 from datetime import date
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from PySide6.QtCore import QThread, QTimer, Signal
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QFileDialog,
     QMainWindow,
@@ -96,7 +98,7 @@ class App(QMainWindow):
             on_frame_shown=self._quality.on_frame_shown,
         )
         self._conn.set_quality_sink(self._quality.update_inbound, self._on_board_stats)
-        self._conn.set_track_callback(self._video.on_track, on_reset=self._on_session_reset)
+        self._conn.set_track_callback(self._video.on_track)
 
         self._bridge.client_list_updated.connect(self._on_drones)
         self._bridge.fc_info_received.connect(self._on_fc_info)
@@ -107,6 +109,7 @@ class App(QMainWindow):
         self._bridge.battery_updated.connect(self._on_battery_updated)
         self._bridge.login_succeeded.connect(self._on_login_succeeded)
         self._bridge.login_failed.connect(self._on_login_failed)
+        self._bridge.session_reset.connect(self._on_session_reset)
 
         self.login_page = LoginPage(
             on_login=self._handle_login,
@@ -183,6 +186,26 @@ class App(QMainWindow):
             self._drone_list_refresh_timer.start()
         else:
             self.stack.setCurrentWidget(self.login_page)
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        self._send_disconnect_on_close()
+        super().closeEvent(event)
+
+    def _send_disconnect_on_close(self) -> None:
+        conn = self._conn
+        if not isinstance(conn, ConnectionManager):
+            return
+        coord = conn.coordinator
+        if coord is None or coord._target_drone_id is None:
+            return
+        loop = conn._loop
+        if loop is None:
+            return
+        try:
+            fut = asyncio.run_coroutine_threadsafe(coord.request_disconnect(), loop)
+            fut.result(timeout=0.5)
+        except Exception as exc:
+            logger.debug('[app] не удалось отправить disconnect при закрытии: %s', exc)
 
     def _tick_drone_list_refresh(self) -> None:
         if self.stack.currentWidget() is self.drone_list_page:

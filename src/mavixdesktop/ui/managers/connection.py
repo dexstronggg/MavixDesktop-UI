@@ -33,15 +33,13 @@ class ConnectionManager:
         self._on_board_stats: Callable[[dict[str, Any]], None] | None = None
         self._coord_task: asyncio.Task[None] | None = None
         self._track_callback: Callable[[MediaStreamTrack], None] | None = None
-        self._reset_callback: Callable[[], None] | None = None
 
     @property
     def coordinator(self) -> SessionCoordinator | None:
         return self._coord
 
-    def set_track_callback(self, on_track: Callable[[MediaStreamTrack], None], on_reset: Callable[[], None] | None = None) -> None:
+    def set_track_callback(self, on_track: Callable[[MediaStreamTrack], None]) -> None:
         self._track_callback = on_track
-        self._reset_callback = on_reset
         if self._coord is not None:
             self._coord.on_track = on_track
 
@@ -67,6 +65,8 @@ class ConnectionManager:
         token_store.clear()
         if self._coord is not None:
             self._coord.stop()
+        if self._loop is not None:
+            asyncio.run_coroutine_threadsafe(self._shutdown_coordinator(), self._loop)
 
     def request_drone_list(self) -> None:
         self._submit(self._coord.request_drone_list() if self._coord else None)
@@ -222,7 +222,37 @@ class ConnectionManager:
         self._coord.on_battery_changed = self._emit_battery
         self._coord.on_inbound_stats = self._on_inbound_stats
         self._coord.on_board_stats = self._on_board_stats
+        if self._coord_task is not None and not self._coord_task.done():
+            self._coord_task.cancel()
+            try:
+                await self._coord_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                logger.warning('[connection] предыдущая сессия завершилась с ошибкой: %s', exc)
         self._coord_task = asyncio.create_task(self._coord.run())
+
+    async def _shutdown_coordinator(self) -> None:
+        task = self._coord_task
+        if task is None or task.done():
+            return
+        if self._coord is not None:
+            self._coord.stop()
+        signal = self._signal
+        if signal is not None:
+            try:
+                await signal.disconnect()
+            except Exception as exc:
+                logger.warning('[connection] ошибка отключения сигналинга: %s', exc)
+        try:
+            await asyncio.wait_for(task, timeout=3)
+        except asyncio.CancelledError:
+            return
+        except TimeoutError:
+            logger.warning('[connection] координатор не завершился за 3 секунды')
+        if self._coord_task is task:
+            self._coord_task = None
+            self._coord = None
 
     def set_quality_sink(self, on_inbound: Callable[[float, float], None], on_board: Callable[[dict[str, Any]], None]) -> None:
         self._on_inbound_stats = on_inbound
@@ -250,11 +280,10 @@ class ConnectionManager:
             logger.warning('[connection] ошибка emit в bridge: %s', exc)
 
     def _on_session_ended(self) -> None:
-        if self._reset_callback is not None:
-            try:
-                self._reset_callback()
-            except Exception as exc:
-                logger.warning('[connection] ошибка reset-колбэка: %s', exc)
+        try:
+            self._bridge.session_reset.emit()
+        except Exception as exc:
+            logger.warning('[connection] ошибка emit в bridge: %s', exc)
 
     def _emit_drone_offline(self, drone_id: str) -> None:
         try:

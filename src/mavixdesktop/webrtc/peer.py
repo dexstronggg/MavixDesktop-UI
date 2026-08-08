@@ -85,7 +85,7 @@ def _entry_scheme(entry: dict[str, Any]) -> str:
 
 def _build_configuration(ice_servers: list[dict[str, Any]]) -> RTCConfiguration:
     use_relay = bool(getattr(settings, 'force_relay', False))
-    mode = 'RELAY (только TURN)' if use_relay else 'DIRECT (только STUN)'
+    mode = 'RELAY (только TURN)' if use_relay else 'DIRECT (STUN+TURN)'
     logger.info('[ice/config] режим=%s, force_relay=%s, получено %d ICE-сервер(ов)',
                 mode, use_relay, len(ice_servers))
     servers: list[RTCIceServer] = []
@@ -95,12 +95,8 @@ def _build_configuration(ice_servers: list[dict[str, Any]]) -> RTCConfiguration:
             continue
         scheme = _entry_scheme(entry)
         is_turn = scheme in ('turn', 'turns')
-        is_stun = scheme in ('stun', 'stuns')
         if use_relay and not is_turn:
             logger.info('[ice/config] пропускаем non-TURN (%s) — force_relay включён', urls)
-            continue
-        if not use_relay and not is_stun:
-            logger.info('[ice/config] пропускаем non-STUN (%s) — force_relay выключен', urls)
             continue
         username = entry.get('username')
         credential = entry.get('credential')
