@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import websockets
 from websockets.asyncio.client import connect as ws_connect
@@ -51,12 +51,12 @@ class SignalClient:
         finally:
             self._conn = None
 
-    async def send(self, payload: dict) -> None:
+    async def send(self, payload: dict[str, Any]) -> None:
         if self._conn is None:
             raise RuntimeError('signal-клиент не подключён')
         await self._conn.send(json.dumps(payload))
 
-    async def listen(self, on_message: Callable[[dict], Awaitable[None]]) -> None:
+    async def listen(self, on_message: Callable[[dict[str, Any]], Awaitable[None]]) -> None:
         if self._conn is None:
             raise RuntimeError('signal-клиент не подключён')
         async for raw in self._conn:

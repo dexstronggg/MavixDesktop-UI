@@ -4,9 +4,19 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Callable
+from typing import cast
 
-from PySide6.QtCore import QPointF, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QRadialGradient
+from PySide6.QtCore import QEvent, QObject, QPointF, QSize, Qt, QTimer
+from PySide6.QtGui import (
+    QColor,
+    QFocusEvent,
+    QIcon,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPen,
+    QRadialGradient,
+)
 from PySide6.QtWidgets import (
     QFrame,
     QGraphicsDropShadowEffect,
@@ -33,7 +43,7 @@ class _AuthBackground(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName('authBg')
-        self.setAttribute(Qt.WA_StyledBackground, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
 
         self._t0 = time.monotonic()
         self._timer = QTimer(self)
@@ -41,9 +51,9 @@ class _AuthBackground(QWidget):
         self._timer.timeout.connect(self.update)
         self._timer.start()
 
-    def paintEvent(self, event) -> None:
+    def paintEvent(self, event: QPaintEvent) -> None:
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
         p.fillRect(self.rect(), QColor(theme.BG))
 
@@ -52,7 +62,7 @@ class _AuthBackground(QWidget):
         min_side = min(w, h)
         t = time.monotonic() - self._t0
 
-        p.setPen(Qt.NoPen)
+        p.setPen(Qt.PenStyle.NoPen)
         for bx, by, ax, ay, period, phase, rad_pct, rgba in self._BLOBS:
             cx = (bx + ax * math.sin(2 * math.pi * t / period + phase)) / 100.0 * w
             cy = (by + ay * math.cos(2 * math.pi * t / period + phase * 1.2)) / 100.0 * h
@@ -73,7 +83,7 @@ class _IconLineEdit(QFrame):
         super().__init__(parent)
         self.setObjectName('iconInput')
         self.setMinimumHeight(44)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self._normal_qss = f"""
             QFrame#iconInput {{
@@ -127,19 +137,19 @@ class _IconLineEdit(QFrame):
             self.input.setEchoMode(QLineEdit.EchoMode.Password)
         layout.addWidget(self.input, 1)
 
-        self.input.focusInEvent = self._wrap_focus_in(self.input.focusInEvent)
-        self.input.focusOutEvent = self._wrap_focus_out(self.input.focusOutEvent)
+        self.input.focusInEvent = self._wrap_focus_in(self.input.focusInEvent)  # type: ignore[method-assign]
+        self.input.focusOutEvent = self._wrap_focus_out(self.input.focusOutEvent)  # type: ignore[method-assign]
 
-    def _wrap_focus_in(self, orig):
-        def handler(event) -> None:
+    def _wrap_focus_in(self, orig: Callable[[QFocusEvent], None]) -> Callable[[QFocusEvent], None]:
+        def handler(event: QFocusEvent) -> None:
             self.setProperty('focused', True)
             self.style().unpolish(self)
             self.style().polish(self)
             orig(event)
         return handler
 
-    def _wrap_focus_out(self, orig):
-        def handler(event) -> None:
+    def _wrap_focus_out(self, orig: Callable[[QFocusEvent], None]) -> Callable[[QFocusEvent], None]:
+        def handler(event: QFocusEvent) -> None:
             self.setProperty('focused', False)
             self.style().unpolish(self)
             self.style().polish(self)
@@ -148,7 +158,7 @@ class _IconLineEdit(QFrame):
 
 
 class _Spinner(QWidget):
-    def __init__(self, size: int = 16, color: QColor | None = None, parent=None) -> None:
+    def __init__(self, size: int = 16, color: QColor | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFixedSize(size, size)
         self._size = size
@@ -157,7 +167,7 @@ class _Spinner(QWidget):
         self._timer = QTimer(self)
         self._timer.setInterval(16)
         self._timer.timeout.connect(self._tick)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.hide()
 
     def start(self) -> None:
@@ -172,11 +182,11 @@ class _Spinner(QWidget):
         self._angle = (self._angle + 8) % 360
         self.update()
 
-    def paintEvent(self, event) -> None:
+    def paintEvent(self, event: QPaintEvent) -> None:
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         pen = QPen(self._color, 2)
-        pen.setCapStyle(Qt.RoundCap)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         p.setPen(pen)
         rect = self.rect().adjusted(2, 2, -2, -2)
         p.drawArc(rect, -self._angle * 16, 270 * 16)
@@ -218,7 +228,7 @@ class LoginPage(QWidget):
         bar.addStretch()
         gear = QPushButton()
         gear.setFixedSize(36, 36)
-        gear.setCursor(Qt.PointingHandCursor)
+        gear.setCursor(Qt.CursorShape.PointingHandCursor)
         gear.setIcon(QIcon(svg_pixmap('tune.svg', 20, color=theme.TEXT_MUTED)))
         gear.setIconSize(QSize(20, 20))
         gear.setToolTip('Настройки')
@@ -281,7 +291,7 @@ class LoginPage(QWidget):
         layout.addLayout(brand_row)
 
         title = QLabel('Вход в систему')
-        title.setAlignment(Qt.AlignCenter)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY}; background: transparent;'
             f'font-size: {theme.FONT_SIZE_TITLE}px; font-weight: 700;'
@@ -290,7 +300,7 @@ class LoginPage(QWidget):
         layout.addWidget(title)
 
         subtitle = QLabel('Введите данные вашего аккаунта')
-        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtitle.setStyleSheet(
             f'color: {theme.TEXT_MUTED}; background: transparent;'
             f'font-size: {theme.FONT_SIZE_SM}px;'
@@ -312,12 +322,12 @@ class LoginPage(QWidget):
         self._show_pw_btn.setIcon(self._icon_pixmap_as_icon('eye.svg', 18))
         self._show_pw_btn.setFixedSize(30, 30)
         self._show_pw_btn.setCheckable(True)
-        self._show_pw_btn.setCursor(Qt.PointingHandCursor)
+        self._show_pw_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._show_pw_btn.setToolTip('Показать пароль')
-        self._show_pw_btn.setFocusPolicy(Qt.NoFocus)
+        self._show_pw_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._show_pw_btn.setStyleSheet(theme.QSS_BUTTON_ICON)
         self._show_pw_btn.toggled.connect(self._toggle_password_visibility)
-        self._password_wrap.layout().addWidget(self._show_pw_btn)
+        cast(QHBoxLayout, self._password_wrap.layout()).addWidget(self._show_pw_btn)
         layout.addWidget(self._password_wrap)
 
         self.error = QLabel('')
@@ -333,7 +343,7 @@ class LoginPage(QWidget):
         layout.addWidget(self.error)
 
         self._submit_btn = QPushButton('Войти')
-        self._submit_btn.setCursor(Qt.PointingHandCursor)
+        self._submit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._submit_btn.setMinimumHeight(46)
         self._submit_btn.setStyleSheet(theme.QSS_BUTTON_PRIMARY)
         self._submit_btn.clicked.connect(self._submit)
@@ -346,18 +356,18 @@ class LoginPage(QWidget):
         forgot_row.setContentsMargins(0, 4, 0, 0)
         forgot_row.addStretch()
         self._forgot_link = QLabel('Забыли пароль?')
-        self._forgot_link.setCursor(Qt.PointingHandCursor)
+        self._forgot_link.setCursor(Qt.CursorShape.PointingHandCursor)
         self._forgot_link.setStyleSheet(
             f'color: {theme.TEXT_MUTED}; background: transparent;'
             f'font-size: {theme.FONT_SIZE_SM}px;'
         )
-        self._forgot_link.mousePressEvent = self._on_forgot_clicked
+        self._forgot_link.mousePressEvent = self._on_forgot_clicked  # type: ignore[method-assign]
         forgot_row.addWidget(self._forgot_link)
         forgot_row.addStretch()
         layout.addLayout(forgot_row)
 
         self._forgot_msg = QLabel('')
-        self._forgot_msg.setAlignment(Qt.AlignCenter)
+        self._forgot_msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._forgot_msg.setWordWrap(True)
         self._forgot_msg.setStyleSheet(
             f'color: {theme.ACCENT}; background: transparent;'
@@ -368,10 +378,10 @@ class LoginPage(QWidget):
 
         return card
 
-    def eventFilter(self, obj, event) -> bool:
+    def eventFilter(self, obj: QObject | None, event: QEvent) -> bool:
         if obj is self._submit_btn:
             from PySide6.QtCore import QEvent as _QE
-            if event.type() in (_QE.Resize, _QE.Show):
+            if event.type() in (_QE.Type.Resize, _QE.Type.Show):
                 btn_h = self._submit_btn.height()
                 self._busy_spinner.move(18, (btn_h - self._busy_spinner.height()) // 2)
         return False
@@ -406,7 +416,7 @@ class LoginPage(QWidget):
         self._show_pw_btn.setEnabled(not busy)
         self._forgot_link.setEnabled(not busy)
 
-    def _on_forgot_clicked(self, _event) -> None:
+    def _on_forgot_clicked(self, _event: QMouseEvent) -> None:
         if not self._submit_btn.isEnabled():
             return
         email = self.email.text().strip()

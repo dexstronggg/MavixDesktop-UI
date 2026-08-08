@@ -7,6 +7,7 @@ import os
 import sys
 import threading
 from types import TracebackType
+from typing import cast
 
 _FORMAT = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
 _MAX_BYTES = 10 * 1024 * 1024
@@ -84,7 +85,10 @@ def install_exception_hooks() -> None:
         name = args.thread.name if args.thread is not None else '?'
         logger.critical(
             'необработанное исключение в потоке %s', name,
-            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+            exc_info=cast(
+                tuple[type[BaseException], BaseException, TracebackType | None],
+                (args.exc_type, args.exc_value, args.exc_traceback),
+            ),
         )
 
     sys.excepthook = _main_hook

@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Any
 
 
 class JoystickInput:
     AXES: Iterable[str] = ('thr', 'yaw', 'pitch', 'roll')
 
-    def __init__(self, joystick_index: int, calibration: dict, pump_events: bool = True) -> None:
+    def __init__(self, joystick_index: int, calibration: dict[str, Any], pump_events: bool = True) -> None:
         import pygame
         pygame.joystick.init()
         self._joystick_index = joystick_index
@@ -19,7 +20,7 @@ class JoystickInput:
         self._arm_btn_prev = 0
         self._disarm_seen = False
         try:
-            self._instance_id = self._js.get_instance_id()
+            self._instance_id: int | None = self._js.get_instance_id()
         except Exception:
             self._instance_id = None
         self._connected = True

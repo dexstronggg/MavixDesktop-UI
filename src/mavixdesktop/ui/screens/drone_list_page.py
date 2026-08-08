@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from PySide6.QtCore import QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
@@ -61,7 +62,7 @@ def _icon_button(icon_name: str | None, text: str,
     btn = QPushButton(text, parent)
     if icon_name is not None:
         btn.setIcon(QIcon(svg_pixmap(icon_name, 16, color=theme.TEXT_PRIMARY)))
-    btn.setCursor(Qt.PointingHandCursor)
+    btn.setCursor(Qt.CursorShape.PointingHandCursor)
     btn.setStyleSheet(theme.QSS_BUTTON_SECONDARY)
     btn.setMinimumHeight(36)
     return btn
@@ -86,7 +87,7 @@ _STATUS_LABELS = {
 
 def _dim_pixmap(src: QPixmap, opacity: float = 0.3) -> QPixmap:
     result = QPixmap(src.size())
-    result.fill(Qt.transparent)
+    result.fill(Qt.GlobalColor.transparent)
     p = QPainter(result)
     p.setOpacity(opacity)
     p.drawPixmap(0, 0, src)
@@ -118,7 +119,7 @@ class DroneCard(AnimatedCard):
 
         self.setFixedSize(_CARD_W, _CARD_H)
         if self._ready:
-            self.setCursor(Qt.PointingHandCursor)
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         hover_border = self._bar_color
         self._style_normal = f"""
@@ -139,17 +140,17 @@ class DroneCard(AnimatedCard):
         self.setStyleSheet(self._style_normal)
 
         layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignCenter)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setSpacing(6)
         layout.setContentsMargins(12, 18, 12, 14)
 
         icon_lbl = QLabel()
-        icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon_lbl.setPixmap(icon_pixmap if self._ready else _dim_pixmap(icon_pixmap))
         icon_lbl.setStyleSheet('background: transparent; border: none;')
 
         name_lbl = QLabel(f'Дрон №{index + 1}')
-        name_lbl.setAlignment(Qt.AlignCenter)
+        name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name_lbl.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY if self._ready else theme.TEXT_DISABLED};'
             f'font-size: {theme.FONT_SIZE_SM}px; font-weight: 600;'
@@ -157,7 +158,7 @@ class DroneCard(AnimatedCard):
         )
 
         id_lbl = QLabel(_truncate_id(drone_id))
-        id_lbl.setAlignment(Qt.AlignCenter)
+        id_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         id_lbl.setStyleSheet(
             f'color: {theme.TEXT_MUTED if self._ready else theme.TEXT_DISABLED};'
             f'font-size: {theme.FONT_SIZE_SM - 1}px;'
@@ -166,7 +167,7 @@ class DroneCard(AnimatedCard):
         )
 
         status_chip = QLabel(_STATUS_LABELS.get(status, status))
-        status_chip.setAlignment(Qt.AlignCenter)
+        status_chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
         chip_color = _STATUS_COLORS.get(status, theme.TEXT_MUTED)
         chip_rgba = self._hex_to_rgba(chip_color, 0.14)
         status_chip.setStyleSheet(
@@ -180,7 +181,7 @@ class DroneCard(AnimatedCard):
         status_wrap = QWidget()
         status_wrap.setStyleSheet('background: transparent; border: none;')
         sw = QHBoxLayout(status_wrap)
-        sw.setAlignment(Qt.AlignCenter)
+        sw.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sw.setContentsMargins(0, 0, 0, 0)
         sw.addWidget(status_chip)
 
@@ -191,7 +192,7 @@ class DroneCard(AnimatedCard):
 
         self._dots_btn = QPushButton(self)
         self._dots_btn.setFixedSize(28, 28)
-        self._dots_btn.setCursor(Qt.PointingHandCursor)
+        self._dots_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._dots_btn.setIcon(QIcon(svg_pixmap('three_dots.svg', 16, color=theme.TEXT_MUTED)))
         self._dots_btn.setIconSize(QSize(16, 16))
         self._dots_btn.setToolTip('Действия')
@@ -213,7 +214,7 @@ class DroneCard(AnimatedCard):
 
     def _confirm_delete(self) -> None:
         box = QMessageBox(self)
-        box.setIcon(QMessageBox.Warning)
+        box.setIcon(QMessageBox.Icon.Warning)
         box.setWindowTitle('Удалить дрон?')
         box.setText(
             'Дрон будет полностью удалён с сервера. Он исчезнет из вашего '
@@ -224,8 +225,8 @@ class DroneCard(AnimatedCard):
             'установщик MavixBoard со страницы «Программы» и переустановить '
             'на Raspberry Pi — старый токен после удаления станет невалидным.'
         )
-        delete_btn = box.addButton('Удалить', QMessageBox.DestructiveRole)
-        cancel_btn = box.addButton('Отмена', QMessageBox.RejectRole)
+        delete_btn = box.addButton('Удалить', QMessageBox.ButtonRole.DestructiveRole)
+        cancel_btn = box.addButton('Отмена', QMessageBox.ButtonRole.RejectRole)
         box.setDefaultButton(cancel_btn)
         box.exec()
         if box.clickedButton() is delete_btn:
@@ -247,7 +248,7 @@ class DroneCard(AnimatedCard):
         self._animate_bar(1000 if effective else 0)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        if self._ready and event.button() == Qt.LeftButton:
+        if self._ready and event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self._drone_id)
         super().mousePressEvent(event)
 
@@ -364,12 +365,12 @@ class _DocsHint(QWidget):
         lay.addWidget(sep)
 
         link = QLabel('Как зарегистрировать дрон — см. документацию')
-        link.setCursor(Qt.PointingHandCursor)
+        link.setCursor(Qt.CursorShape.PointingHandCursor)
         link.setStyleSheet(
             f'color: {theme.ACCENT}; font-size: {theme.FONT_SIZE_SM}px;'
             f'text-decoration: underline;'
         )
-        link.mousePressEvent = self._open_docs
+        link.mousePressEvent = self._open_docs  # type: ignore[method-assign]
         lay.addWidget(link)
 
         lay.addStretch()
@@ -428,7 +429,7 @@ class DroneListPage(QWidget):
 
         gear_btn = QPushButton(top_bar)
         gear_btn.setFixedSize(40, 38)
-        gear_btn.setCursor(Qt.PointingHandCursor)
+        gear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         gear_btn.setIcon(QIcon(svg_pixmap('tune.svg', 18, color=theme.TEXT_MUTED)))
         gear_btn.setIconSize(QSize(18, 18))
         gear_btn.setToolTip('Настройки')
@@ -485,11 +486,11 @@ class DroneListPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidget(self._grid)
         scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         self._empty = QLabel('Дроны не найдены\n\nПодождите, список обновляется автоматически')
-        self._empty.setAlignment(Qt.AlignCenter)
+        self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty.setStyleSheet(
             f'color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_BASE}px;'
         )
@@ -509,7 +510,7 @@ class DroneListPage(QWidget):
         super().hideEvent(event)
         self._refresh_timer.stop()
 
-    def update(self, drones: list) -> None:
+    def update(self, drones: list[dict[str, Any]]) -> None:  # type: ignore[override]
         if not drones:
             self._stats.set_counts(0, 0, 0, 0)
             self._empty.show()

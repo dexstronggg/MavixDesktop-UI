@@ -30,10 +30,10 @@ RTT_WARN_MS = 150.0
 RTT_BAD_MS = 400.0
 RTT_GROWTH_WARN = 1.5
 RTT_GROWTH_BAD = 3.0
+RTT_GROWTH_MIN_MS = 50.0
 FREEZE_WARN_RATIO = 0.01
 FREEZE_BAD_RATIO = 0.05
 STALE_FRAME_MS = 300.0
-OUT_RATIO_WARN = 0.7
 
 
 @dataclass(frozen=True)
@@ -187,19 +187,20 @@ class LinkQuality:
 
     @staticmethod
     def _level(snap: LinkSnapshot) -> str:
+        # множитель роста учитываем только на заметных задержках: втрое от 1 мс ничего не значит
+        growth = snap.rtt_growth if snap.rtt_p95_ms >= RTT_GROWTH_MIN_MS else 1.0
         if (
             snap.loss_pct > LOSS_BAD_PCT
             or (snap.rtt_p95_ms >= 0 and snap.rtt_p95_ms > RTT_BAD_MS)
-            or snap.rtt_growth >= RTT_GROWTH_BAD
+            or growth >= RTT_GROWTH_BAD
             or snap.freeze_ratio > FREEZE_BAD_RATIO
         ):
             return LEVEL_BAD
         if (
             snap.loss_pct > LOSS_WARN_PCT
             or (snap.rtt_p95_ms >= 0 and snap.rtt_p95_ms > RTT_WARN_MS)
-            or snap.rtt_growth >= RTT_GROWTH_WARN
+            or growth >= RTT_GROWTH_WARN
             or snap.freeze_ratio > FREEZE_WARN_RATIO
-            or (0 <= snap.out_ratio < OUT_RATIO_WARN)
         ):
             return LEVEL_WARN
         return LEVEL_OK
@@ -286,9 +287,6 @@ def format_stats_table(snap: LinkSnapshot) -> str:
         ('рост задержки', f'x{snap.rtt_growth:.1f}'),
         ('замирания', f'{snap.freeze_count} шт / {snap.freeze_ms / 1000.0:.1f} с'),
         ('доля замираний (10 с)', f'{snap.freeze_ratio * 100:.1f} %'),
-        ('исходящий с борта', num(snap.bitrate_out_kbps / 1000.0, 'Мбит/с')),
-        ('заказано энкодеру', num(snap.encoder_kbps / 1000.0, 'Мбит/с')),
-        ('энкодер выдаёт', '—' if snap.out_ratio < 0 else f'{snap.out_ratio * 100:.0f} %'),
         ('запросов ключевого кадра', str(snap.pli)),
     ]
     width = max(len(name) for name, _ in rows)

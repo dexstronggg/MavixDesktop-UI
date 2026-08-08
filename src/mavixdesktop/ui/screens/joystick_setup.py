@@ -5,6 +5,8 @@ import json
 import subprocess
 import time
 from collections.abc import Callable
+from pathlib import Path
+from typing import Any, cast
 
 import pygame
 from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
@@ -50,15 +52,15 @@ class JoystickManager:
 
 class JoystickCalibration:
     @staticmethod
-    def save(cal: dict, joystick_name: str):
+    def save(cal: dict[str, Any], joystick_name: str) -> Path:
         return joystick_calibration.save(cal, joystick_name, data_dir=settings.data_path)
 
     @staticmethod
-    def load(joystick_name: str):
+    def load(joystick_name: str) -> dict[str, Any] | None:
         return joystick_calibration.load(joystick_name, data_dir=settings.data_path)
 
     @staticmethod
-    def validate(data: dict) -> tuple[bool, str]:
+    def validate(data: dict[str, Any]) -> tuple[bool, str]:
         return joystick_calibration.validate(data)
 
 
@@ -110,7 +112,7 @@ class _StepProgress(QWidget):
 
     def paintEvent(self, event: QPaintEvent) -> None:
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         accent = QColor(theme.ACCENT)
         halo = QColor(accent)
         halo.setAlpha(72)
@@ -124,17 +126,17 @@ class _StepProgress(QWidget):
         done = self._current >= self._TOTAL
         for i in range(self._TOTAL):
             if done or i < self._current:
-                p.setPen(Qt.NoPen)
+                p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(accent)
                 p.drawEllipse(x, y, d, d)
             elif i == self._current:
-                p.setPen(Qt.NoPen)
+                p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(halo)
                 p.drawEllipse(x - pad, y - pad, d + 2 * pad, d + 2 * pad)
                 p.setBrush(accent)
                 p.drawEllipse(x, y, d, d)
             else:
-                p.setPen(Qt.NoPen)
+                p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(future)
                 p.drawEllipse(x, y, d, d)
             x += d + gap
@@ -156,7 +158,7 @@ class _PopupRow(AnimatedCard):
                  parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFixedHeight(42)
-        self.setCursor(Qt.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._callback = callback
 
         self.setStyleSheet('background: transparent; border: none;')
@@ -170,15 +172,16 @@ class _PopupRow(AnimatedCard):
         lay.addWidget(lbl)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             self._callback()
         super().mousePressEvent(event)
 
 
 class _CardMenu(QFrame):
-    def __init__(self, items: list, parent: QWidget | None = None) -> None:
-        super().__init__(parent, Qt.Popup | Qt.FramelessWindowHint)
-        self.setAttribute(Qt.WA_StyledBackground, True)
+    def __init__(self, items: list[tuple[str, Callable[[], None]]],
+                 parent: QWidget | None = None) -> None:
+        super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(f"""
             QFrame {{
                 background: {theme.BG_SURFACE};
@@ -190,7 +193,7 @@ class _CardMenu(QFrame):
         lay.setContentsMargins(0, 6, 0, 6)
         lay.setSpacing(2)
         for text, callback in items:
-            row = _PopupRow(text, lambda cb=callback: (cb(), self.close()))
+            row = _PopupRow(text, cast(Callable[[], None], lambda cb=callback: (cb(), self.close())))
             row.setMinimumWidth(230)
             lay.addWidget(row)
         self.adjustSize()
@@ -210,7 +213,7 @@ class JoystickCard(AnimatedCard):
         self._active_menu = None
 
         self.setFixedSize(_CARD_W, _CARD_H)
-        self.setCursor(Qt.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         self._style_normal = f"""
             QWidget#jsCard {{
@@ -234,13 +237,13 @@ class JoystickCard(AnimatedCard):
         lay.setContentsMargins(14, 14, 14, 6)
 
         icon_lbl = QLabel()
-        icon_lbl.setAlignment(Qt.AlignCenter)
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon_lbl.setPixmap(svg_pixmap('joystick.svg', _ICON_SZ, color=theme.ACCENT))
         icon_lbl.setStyleSheet('background: transparent; border: none;')
-        icon_lbl.setAttribute(Qt.WA_TranslucentBackground, True)
+        icon_lbl.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
         name_lbl = QLabel(name)
-        name_lbl.setAlignment(Qt.AlignCenter)
+        name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name_lbl.setWordWrap(True)
         name_lbl.setFixedHeight(34)
         name_lbl.setStyleSheet(
@@ -251,7 +254,7 @@ class JoystickCard(AnimatedCard):
         status_row = QWidget()
         status_row.setStyleSheet('background: transparent; border: none;')
         sr = QHBoxLayout(status_row)
-        sr.setAlignment(Qt.AlignCenter)
+        sr.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sr.setSpacing(6)
         sr.setContentsMargins(0, 0, 0, 0)
 
@@ -288,10 +291,10 @@ class JoystickCard(AnimatedCard):
             b.setIcon(QIcon(svg_pixmap(ic, 18, color=theme.TEXT_PRIMARY)))
             b.setIconSize(QSize(18, 18))
             b.setText(label)
-            b.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+            b.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
             b.setFixedHeight(52)
-            b.setCursor(Qt.PointingHandCursor)
-            b.setFocusPolicy(Qt.NoFocus)
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             b.setAutoRaise(True)
             b.setStyleSheet(f"""
                 QToolButton {{
@@ -322,7 +325,7 @@ class JoystickCard(AnimatedCard):
         self._animate_bar(1000 if hovered else 0)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self._index)
         super().mousePressEvent(event)
 
@@ -335,13 +338,13 @@ class _JoystickGrid(CardGrid):
 
 class _StickPreviewDialog(QDialog):
     def __init__(self, joystick_index: int, joystick_name: str,
-                 calibration: dict, parent: QWidget | None = None,
-                 on_takeoff: Callable[[int, dict], None] | None = None) -> None:
+                 calibration: dict[str, Any], parent: QWidget | None = None,
+                 on_takeoff: Callable[[int, dict[str, Any]], None] | None = None) -> None:
         super().__init__(parent)
         self._on_takeoff = on_takeoff
         self._joystick_index = joystick_index
         self._calibration = calibration
-        self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.FramelessWindowHint)
         self.setFixedSize(340, 270 if on_takeoff else 180)
         self.setStyleSheet(f"""
             QDialog {{
@@ -432,9 +435,9 @@ class QGCSearchOverlay(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowFlags(
-            Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+            Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
         )
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setModal(False)
         self.setFixedSize(360, 80)
         self.setStyleSheet(f"""
@@ -448,7 +451,7 @@ class QGCSearchOverlay(QDialog):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(20, 18, 20, 18)
         self._label = QLabel('Ищу QGroundControl')
-        self._label.setAlignment(Qt.AlignCenter)
+        self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._label.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY}; font-size: {theme.FONT_SIZE_BASE}px;'
             'font-weight: 600; background: transparent;'
@@ -473,19 +476,19 @@ class QGCSearchOverlay(QDialog):
         self._dots = (self._dots + 1) % 4
         self._label.setText('Ищу QGroundControl' + '.' * self._dots)
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: QCloseEvent) -> None:
         self._timer.stop()
         super().closeEvent(event)
 
 
 class QGCLaunchingOverlay(QDialog):
-    def __init__(self, qgc_proc: subprocess.Popen,
+    def __init__(self, qgc_proc: subprocess.Popen[bytes],
                  parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowFlags(
-            Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+            Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
         )
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setModal(False)
         self.setFixedSize(360, 80)
         self.setStyleSheet(f"""
@@ -502,7 +505,7 @@ class QGCLaunchingOverlay(QDialog):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(20, 18, 20, 18)
         lbl = QLabel('Открываю QGroundControl…')
-        lbl.setAlignment(Qt.AlignCenter)
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY}; font-size: {theme.FONT_SIZE_BASE}px;'
             'font-weight: 600; background: transparent;'
@@ -560,7 +563,7 @@ class QGCLaunchingOverlay(QDialog):
             pass
         return pids
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: QCloseEvent) -> None:
         self._timer.stop()
         super().closeEvent(event)
 
@@ -569,7 +572,7 @@ class JoystickSetupPage(QWidget):
     DEMO_JOYSTICK_NAME = 'Демо-контроллер (Mock)'
 
     def __init__(self, on_back: Callable[[], None],
-                 on_takeoff: Callable[[int, dict], None] | None = None,
+                 on_takeoff: Callable[[int, dict[str, Any]], None] | None = None,
                  demo: bool = False) -> None:
         super().__init__()
         self._joystick_names: list[str] | None = None
@@ -588,13 +591,13 @@ class JoystickSetupPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidget(self._grid)
         scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         self._empty = QLabel(
             'Контроллеры не найдены\n\nПодключите джойстик по USB —\nсписок обновится автоматически'
         )
-        self._empty.setAlignment(Qt.AlignCenter)
+        self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty.setStyleSheet(
             f'color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_BASE}px;'
         )
@@ -689,7 +692,7 @@ class JoystickSetupPage(QWidget):
         self._grid.set_cards(cards)
 
     def _on_card_clicked(self, index: int) -> None:
-        name = self._joystick_names[index]
+        name = cast(list[str], self._joystick_names)[index]
         takeoff_cb = self._on_takeoff if self._fc_type in ('crsf', 'mavlink') else None
         saved = JoystickCalibration.load(name)
         if saved:
@@ -698,19 +701,19 @@ class JoystickSetupPage(QWidget):
             dlg.exec()
         else:
             cal_dlg = JoystickCalibrationDialog(index, name, parent=self)
-            if cal_dlg.exec() == QDialog.Accepted and cal_dlg.calibration:
+            if cal_dlg.exec() == QDialog.DialogCode.Accepted and cal_dlg.calibration:
                 self._refresh(force=True)
                 dlg = _StickPreviewDialog(index, name, cal_dlg.calibration, parent=self,
                                           on_takeoff=takeoff_cb)
                 dlg.exec()
 
     def _on_card_action(self, index: int, action: str) -> None:
-        name = self._joystick_names[index]
+        name = cast(list[str], self._joystick_names)[index]
         if action == 'file':
             self._load_from_file(index, name)
         elif action == 'calibrate':
             dlg = JoystickCalibrationDialog(index, name, parent=self)
-            if dlg.exec() == QDialog.Accepted and dlg.calibration:
+            if dlg.exec() == QDialog.DialogCode.Accepted and dlg.calibration:
                 self._refresh(force=True)
         elif action == 'file_save':
             self._save_to_file(index, name)
@@ -766,11 +769,11 @@ class JoystickCalibrationDialog(QDialog):
         self.setWindowTitle('Калибровка джойстика')
         self.setMinimumWidth(460)
         self._step = 0
-        self._data: dict = {}
+        self._data: dict[str, Any] = {}
         self._joystick_name = joystick_name
-        self.calibration: dict | None = None
-        self._arm_btn_states: list | None = None
-        self._arm_axis_states: list | None = None
+        self.calibration: dict[str, Any] | None = None
+        self._arm_btn_states: list[bool] | None = None
+        self._arm_axis_states: list[bool] | None = None
 
         pygame.joystick.init()
         self._js = pygame.joystick.Joystick(joystick_index)
@@ -794,7 +797,7 @@ class JoystickCalibrationDialog(QDialog):
 
         self._instruction = QLabel()
         self._instruction.setWordWrap(True)
-        self._instruction.setAlignment(Qt.AlignCenter)
+        self._instruction.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._instruction.setStyleSheet('font-size: 13px; padding: 8px;')
         layout.addWidget(self._instruction)
 
@@ -812,7 +815,7 @@ class JoystickCalibrationDialog(QDialog):
         pygame.event.pump()
         return [self._js.get_axis(i) for i in range(self._js.get_numaxes())]
 
-    def _detect_axis(self, vals: list[float], exclude: set) -> int:
+    def _detect_axis(self, vals: list[float], exclude: set[int | None]) -> int:
         center = self._data.get('center', [0.0] * len(vals))
         deltas = [(abs(vals[i] - center[i]), i) for i in range(len(vals)) if i not in exclude]
         return max(deltas)[1] if deltas else 0
@@ -821,7 +824,7 @@ class JoystickCalibrationDialog(QDialog):
         vals = self._read_axes()
         n = len(vals)
 
-        def get_val(ax_key, max_key, default_idx):
+        def get_val(ax_key: str, max_key: str, default_idx: int) -> float:
             ax = self._data.get(ax_key)
             idx = ax if ax is not None else default_idx
             v = vals[idx] if idx < n else 0.0
@@ -907,7 +910,7 @@ class JoystickCalibrationDialog(QDialog):
                 return
         elif self._step == _STEP_DONE:
             self._build_calibration()
-            path = JoystickCalibration.save(self.calibration, self._joystick_name)
+            path = JoystickCalibration.save(cast(dict[str, Any], self.calibration), self._joystick_name)
             self._poll_timer.stop()
             QMessageBox.information(
                 self, 'Калибровка сохранена',

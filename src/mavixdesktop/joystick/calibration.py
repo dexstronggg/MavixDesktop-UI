@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 from mavixdesktop.core.config import settings
 
@@ -25,24 +26,24 @@ def _path(joystick_name: str, data_dir: Path | None = None) -> Path:
     return base / f'{_safe_name(joystick_name)}.json'
 
 
-def save(cal: dict, joystick_name: str, data_dir: Path | None = None) -> Path:
+def save(cal: dict[str, Any], joystick_name: str, data_dir: Path | None = None) -> Path:
     target = _path(joystick_name, data_dir)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(cal, indent=2))
     return target
 
 
-def load(joystick_name: str, data_dir: Path | None = None) -> dict | None:
+def load(joystick_name: str, data_dir: Path | None = None) -> dict[str, Any] | None:
     target = _path(joystick_name, data_dir)
     if not target.exists():
         return None
     try:
-        return json.loads(target.read_text())
+        return cast(dict[str, Any], json.loads(target.read_text()))
     except (OSError, ValueError):
         return None
 
 
-def validate(data: dict) -> tuple[bool, str]:
+def validate(data: dict[str, Any]) -> tuple[bool, str]:
     missing = REQUIRED_KEYS - set(data.keys())
     if missing:
         return False, f'Missing keys: {", ".join(sorted(missing))}'

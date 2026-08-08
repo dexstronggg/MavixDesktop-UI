@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import numpy as np
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap, QResizeEvent
@@ -14,29 +18,30 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mavixdesktop.ui.screens.help_dialog import HelpDialog
 from mavixdesktop.ui.screens.utils import overlay_btn, overlay_icon_btn
 from mavixdesktop.ui.style import theme
 
 
 class VideoPanel(QWidget):
-    def __init__(self, on_prev: Callable[[], None], on_next: Callable[[], None],
+    def __init__(self, on_prev: Callable[[], object], on_next: Callable[[], object],
                  on_back: Callable[[], None], on_joy: Callable[[], None],
                  on_takeoff: Callable[[], None]) -> None:
         super().__init__()
 
         self.video = QLabel(self)
-        self.video.setAlignment(Qt.AlignCenter)
+        self.video.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.video.setStyleSheet(f'background: {theme.BG_VIDEO};')
 
         self.__build_controls(on_prev, on_next, on_back, on_joy, on_takeoff)
-        self.__build_speed_overlay()
+        self.__build_battery_overlay()
         self.__build_quality_overlays()
         self.__build_labels()
         self.__build_calibration_overlay()
         self.__build_error_overlay()
         self.__reposition(800, 600)
 
-    def __build_controls(self, on_prev: Callable[[], None], on_next: Callable[[], None],
+    def __build_controls(self, on_prev: Callable[[], object], on_next: Callable[[], object],
                          on_back: Callable[[], None], on_joy: Callable[[], None],
                          on_takeoff: Callable[[], None]) -> None:
         self.back_btn = overlay_icon_btn('arrow_back.svg', self)
@@ -46,6 +51,10 @@ class VideoPanel(QWidget):
         self.joy_btn = overlay_icon_btn('joystick.svg', self)
         self.joy_btn.setToolTip('Настройка джойстика')
         self.joy_btn.clicked.connect(on_joy)
+
+        self.help_btn = overlay_btn('i', self, size=theme.OVERLAY_BTN_CORNER_ICON)
+        self.help_btn.setToolTip('Горячие клавиши и что означают показатели')
+        self.help_btn.clicked.connect(self.toggle_help)
 
         s = theme.OVERLAY_BTN_SIDE
         self.prev_btn = overlay_btn('◀', self, size=s)
@@ -62,11 +71,11 @@ class VideoPanel(QWidget):
         self.takeoff_btn.clicked.connect(on_takeoff)
         self.__style_takeoff(False)
 
-    def __build_speed_overlay(self) -> None:
-        self.speed_overlay = QLabel('— мс', self)
-        self.speed_overlay.setAlignment(Qt.AlignCenter)
-        self.speed_overlay.setFixedSize(90, 26)
-        corner_qss = f"""
+    def __build_battery_overlay(self) -> None:
+        self.battery_overlay = QLabel('—', self)
+        self.battery_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.battery_overlay.setFixedSize(90, 26)
+        self.battery_overlay.setStyleSheet(f"""
             QLabel {{
                 background: rgba(0,0,0,0.45);
                 color: rgba(255,255,255,0.85);
@@ -76,23 +85,17 @@ class VideoPanel(QWidget):
                 font-family: monospace;
                 padding: 0 8px;
             }}
-        """
-        self.speed_overlay.setStyleSheet(corner_qss)
-
-        self.battery_overlay = QLabel('—', self)
-        self.battery_overlay.setAlignment(Qt.AlignCenter)
-        self.battery_overlay.setFixedSize(90, 26)
-        self.battery_overlay.setStyleSheet(corner_qss)
+        """)
         self.battery_overlay.hide()
 
     def __build_quality_overlays(self) -> None:
         self.quality_overlay = QLabel('—', self)
-        self.quality_overlay.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        self.quality_overlay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         self.quality_overlay.setStyleSheet(self.__quality_qss(theme.TEXT_MUTED))
         self.quality_overlay.adjustSize()
 
         self.stale_overlay = QLabel('', self)
-        self.stale_overlay.setAlignment(Qt.AlignCenter)
+        self.stale_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.stale_overlay.setStyleSheet(f"""
             QLabel {{
                 background: rgba(0,0,0,0.60);
@@ -107,7 +110,7 @@ class VideoPanel(QWidget):
         self.stale_overlay.hide()
 
         self.stats_panel = QLabel('', self)
-        self.stats_panel.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+        self.stats_panel.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.stats_panel.setStyleSheet(f"""
             QLabel {{
                 background: rgba(0,0,0,0.72);
@@ -120,6 +123,9 @@ class VideoPanel(QWidget):
             }}
         """)
         self.stats_panel.hide()
+
+    def toggle_help(self) -> None:
+        HelpDialog(self.window()).exec()
 
     @staticmethod
     def __quality_qss(color: str) -> str:
@@ -177,7 +183,7 @@ class VideoPanel(QWidget):
         layout.setSpacing(14)
 
         label = QLabel('Идёт калибровка камеры…\nЭто может занять продолжительное время', self.calib_overlay)
-        label.setAlignment(Qt.AlignCenter)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY};'
             f' font-size: {theme.FONT_SIZE_BASE}px;'
@@ -207,7 +213,7 @@ class VideoPanel(QWidget):
 
     def __build_error_overlay(self) -> None:
         self.error_overlay = QLabel('', self)
-        self.error_overlay.setAlignment(Qt.AlignCenter)
+        self.error_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.error_overlay.setWordWrap(True)
         self.error_overlay.setStyleSheet(f"""
             QLabel {{
@@ -234,7 +240,7 @@ class VideoPanel(QWidget):
 
     def __build_labels(self) -> None:
         self.warn_lbl = QLabel('⚠  Смена настроек во время полёта недоступна', self)
-        self.warn_lbl.setAlignment(Qt.AlignCenter)
+        self.warn_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.warn_lbl.setStyleSheet(f"""
             QLabel {{
                 background: rgba(0,0,0,0.50);
@@ -248,7 +254,7 @@ class VideoPanel(QWidget):
         self.warn_lbl.adjustSize()
 
         self.hint_lbl = QLabel('Клавиши  ←  →  для переключения камер', self)
-        self.hint_lbl.setAlignment(Qt.AlignCenter)
+        self.hint_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.hint_lbl.setStyleSheet(
             'color: rgba(255,255,255,0.40);'
             f'font-size: {theme.FONT_SIZE_SM - 2}px;'
@@ -293,6 +299,7 @@ class VideoPanel(QWidget):
 
         self.back_btn.move(16, 16)
         self.joy_btn.move(w - c - 16, 16)
+        self.help_btn.move(w - c - 16 - self.help_btn.width() - 12, 16 + (c - self.help_btn.height()) // 2)
         self.warn_lbl.adjustSize()
         self.warn_lbl.move((w - self.warn_lbl.width()) // 2, 16)
 
@@ -301,10 +308,9 @@ class VideoPanel(QWidget):
 
         self.takeoff_btn.move((w - self.takeoff_btn.width()) // 2, h - self.takeoff_btn.height() - 56)
 
-        self.speed_overlay.move(w - self.speed_overlay.width() - 16, h - self.speed_overlay.height() - 16)
         self.battery_overlay.move(
             w - self.battery_overlay.width() - 16,
-            h - self.speed_overlay.height() - self.battery_overlay.height() - 22,
+            h - self.battery_overlay.height() - 16,
         )
 
         self.calib_overlay.move(
@@ -325,12 +331,12 @@ class VideoPanel(QWidget):
         self.hint_lbl.setFixedWidth(hw)
         self.hint_lbl.move((w - hw) // 2, h - 24)
 
-    def show_frame(self, img) -> None:
+    def show_frame(self, img: np.ndarray[Any, Any]) -> None:
         h, w, ch = img.shape
         qimg = QImage(img.data, w, h, ch * w, QImage.Format.Format_BGR888)
         self.video.setPixmap(
             QPixmap.fromImage(qimg).scaled(
-                self.video.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+                self.video.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
             )
         )
         if self.calib_overlay.isVisible():
@@ -340,10 +346,6 @@ class VideoPanel(QWidget):
         self.calib_overlay.setVisible(visible)
         if visible:
             self.calib_overlay.raise_()
-
-    def update_ping_overlay(self, rtt_ms: float) -> None:
-        text = '— мс' if rtt_ms < 0 else f'{rtt_ms:.0f} мс'
-        self.speed_overlay.setText(text)
 
     def update_battery_overlay(self, percent: int, voltage: float) -> None:
         if voltage <= 0:

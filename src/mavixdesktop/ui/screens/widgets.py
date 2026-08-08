@@ -25,7 +25,7 @@ class StickWidget(QWidget):
 
     def paintEvent(self, event: QPaintEvent) -> None:
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
 
         bg = QColor(theme.BG_INPUT)
@@ -43,7 +43,7 @@ class StickWidget(QWidget):
 
         cx = int((self._x + 1) / 2 * (w - 12)) + 6
         cy = int((1 - (self._y + 1) / 2) * (h - 12)) + 6
-        p.setPen(Qt.NoPen)
+        p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(theme.CYAN))
         p.drawEllipse(cx - 6, cy - 6, 12, 12)
 

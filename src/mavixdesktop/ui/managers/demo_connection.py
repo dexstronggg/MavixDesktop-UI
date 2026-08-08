@@ -1,9 +1,17 @@
 """Demo connection manager — stub for UI testing without a server."""
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
+
 from PySide6.QtCore import QTimer
 
 from mavixdesktop.core.logger import logger
+
+if TYPE_CHECKING:
+    from aiortc import MediaStreamTrack
+
+    from mavixdesktop.ui.screens.bridge import Bridge
 
 _MOCK_DRONES = [
     {'drone_id': 'demo-online-0001', 'online': True},
@@ -30,24 +38,24 @@ _MOCK_FC = ('crsf', 'Демо-FC (Betaflight)')
 
 
 class DemoConnectionManager:
-    def __init__(self, bridge) -> None:
+    def __init__(self, bridge: Bridge) -> None:
         self._bridge = bridge
         self._loop = None
         logger.info('[demo] connection manager активирован; реальных вызовов сервера нет')
 
     @property
-    def coordinator(self):
+    def coordinator(self) -> None:
         return None
 
-    def delete_drone(self, drone_id: str, on_done=None) -> None:
+    def delete_drone(self, drone_id: str, on_done: Callable[[str | None], None] | None = None) -> None:
         logger.info('[demo] delete_drone(%s) — no-op', drone_id)
         if on_done is not None:
             on_done(None)
 
-    def set_quality_sink(self, on_inbound, on_board) -> None:
+    def set_quality_sink(self, on_inbound: Callable[[float, float], None], on_board: Callable[[dict[str, Any]], None]) -> None:
         return
 
-    def set_track_callback(self, on_track, on_reset=None) -> None:
+    def set_track_callback(self, on_track: Callable[[MediaStreamTrack], None], on_reset: Callable[[], None] | None = None) -> None:
         return None
 
     def login(self, email: str, password: str) -> None:

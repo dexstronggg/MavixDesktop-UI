@@ -20,14 +20,14 @@ class DebugPage(QWidget):
         super().__init__()
 
         title = QLabel('Debug-режим')
-        title.setAlignment(Qt.AlignCenter)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY}; font-size: {theme.FONT_SIZE_TITLE}px;'
             'font-weight: 700; background: transparent;'
         )
 
         subtitle = QLabel('Ручная проверка функций без борта и сервера')
-        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         subtitle.setStyleSheet(
             f'color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_SM}px;'
             'background: transparent;'
@@ -39,7 +39,7 @@ class DebugPage(QWidget):
         launch_btn.clicked.connect(on_launch_qgc)
 
         self._status = QLabel('')
-        self._status.setAlignment(Qt.AlignCenter)
+        self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status.setStyleSheet(
             f'color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_SM}px;'
             'background: transparent;'

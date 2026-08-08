@@ -5,6 +5,7 @@ import contextlib
 import json
 import os
 from pathlib import Path
+from typing import Any, Protocol, cast
 
 from mavixdesktop.core.config import settings
 from mavixdesktop.core.logger import logger
@@ -13,21 +14,27 @@ _REFRESH_KEY = 'refresh_token'
 _EMAIL_KEY = 'email'
 
 
+class _Keyring(Protocol):
+    def set_password(self, service_name: str, username: str, password: str) -> None: ...
+    def get_password(self, service_name: str, username: str) -> str | None: ...
+    def delete_password(self, service_name: str, username: str) -> None: ...
+
+
 def _file_path() -> Path:
     return settings.config_dir / 'tokens.json'
 
 
-def _read_file() -> dict:
+def _read_file() -> dict[str, Any]:
     p = _file_path()
     if not p.exists():
         return {}
     try:
-        return json.loads(p.read_text())
+        return cast(dict[str, Any], json.loads(p.read_text()))
     except (OSError, ValueError):
         return {}
 
 
-def _write_file(data: dict) -> None:
+def _write_file(data: dict[str, Any]) -> None:
     p = _file_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -36,10 +43,10 @@ def _write_file(data: dict) -> None:
     os.chmod(p, 0o600)
 
 
-def _keyring() -> object | None:
+def _keyring() -> _Keyring | None:
     try:
         import keyring
-        return keyring
+        return cast(_Keyring, keyring)
     except ImportError:
         return None
 

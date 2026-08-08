@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import platform
+from typing import Any
 
 
 def list_joysticks() -> list[str]:
@@ -14,7 +15,7 @@ def list_joysticks() -> list[str]:
     ]
 
 
-def build_sdl_config(cal: dict, name: str, guid: str) -> str:
+def build_sdl_config(cal: dict[str, Any], name: str, guid: str) -> str:
     def axis_str(sdl_key: str, cal_key: str, inverted: bool) -> str:
         ax = cal.get(f'axis_{cal_key}', 0)
         suffix = '~' if inverted else ''

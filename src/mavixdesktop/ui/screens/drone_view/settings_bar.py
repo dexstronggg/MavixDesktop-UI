@@ -2,10 +2,28 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any, cast
 
-from PySide6.QtCore import QEvent, QModelIndex, QObject, QPoint, QSize, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPaintEvent, QPen
+from PySide6.QtCore import (
+    QEvent,
+    QModelIndex,
+    QObject,
+    QPersistentModelIndex,
+    QPoint,
+    QSize,
+    Qt,
+)
+from PySide6.QtGui import (
+    QColor,
+    QIcon,
+    QIntValidator,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+    QPen,
+)
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QHBoxLayout,
     QLabel,
@@ -20,6 +38,10 @@ from PySide6.QtWidgets import (
 from mavixdesktop.ui.screens.utils import svg_pixmap
 from mavixdesktop.ui.style import theme
 
+BITRATE_MIN_KBS = 100
+BITRATE_MAX_KBS = 20000
+BITRATE_DEFAULT_KBS = 2000
+
 
 class _PopupItemDelegate(QStyledItemDelegate):
     _HIGHLIGHT_BG = QColor(34, 211, 238, 30)
@@ -32,11 +54,11 @@ class _PopupItemDelegate(QStyledItemDelegate):
         self._hover_index = QModelIndex(index) if index is not None else QModelIndex()
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem,
-              index: QModelIndex) -> None:
+              index: QModelIndex | QPersistentModelIndex) -> None:
         painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-        is_selected = bool(option.state & QStyle.State_Selected)
+        is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
         is_hover = (self._hover_index.isValid()
                     and self._hover_index.row() == index.row())
         is_active = is_selected or is_hover
@@ -44,30 +66,30 @@ class _PopupItemDelegate(QStyledItemDelegate):
         if is_active:
             painter.fillRect(option.rect, self._HIGHLIGHT_BG)
 
-        text = str(index.data(Qt.DisplayRole) or '')
+        text = str(index.data(Qt.ItemDataRole.DisplayRole) or '')
         text_rect = option.rect.adjusted(12, 0, -12, 0)
         text_color = QColor(theme.ACCENT) if is_active else QColor(theme.TEXT_PRIMARY)
         painter.setPen(text_color)
-        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, text)
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
         painter.restore()
 
 
 class _HoverTracker(QObject):
-    def __init__(self, view: QWidget, delegate: _PopupItemDelegate) -> None:
+    def __init__(self, view: QAbstractItemView, delegate: _PopupItemDelegate) -> None:
         super().__init__(view)
         self._view = view
         self._delegate = delegate
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
-        if event.type() == QEvent.MouseMove:
+        if event.type() == QEvent.Type.MouseMove:
             try:
-                pos = event.position().toPoint()
+                pos = cast(QMouseEvent, event).position().toPoint()
             except AttributeError:
-                pos = event.pos()
+                pos = cast(QMouseEvent, event).pos()
             index = self._view.indexAt(pos)
             self._delegate.set_hover_index(index)
             self._view.viewport().update()
-        elif event.type() in (QEvent.Leave, QEvent.HoverLeave):
+        elif event.type() in (QEvent.Type.Leave, QEvent.Type.HoverLeave):
             self._delegate.set_hover_index(QModelIndex())
             self._view.viewport().update()
         return False
@@ -108,7 +130,8 @@ class _BoundedComboBox(QComboBox):
     """
 
     def __init__(self, *args: object, **kwargs: object) -> None:
-        super().__init__(*args, **kwargs)
+        super().__init__(*cast(tuple[QWidget | None, ...], args),
+                         **cast(dict[str, Any], kwargs))
         self._popup_delegate = _PopupItemDelegate(self)
         self.view().setItemDelegate(self._popup_delegate)
         self._hover_tracker = _HoverTracker(self.view(), self._popup_delegate)
@@ -118,10 +141,10 @@ class _BoundedComboBox(QComboBox):
     def paintEvent(self, event: QPaintEvent) -> None:
         super().paintEvent(event)
         p = QPainter(self)
-        p.setRenderHint(QPainter.Antialiasing, True)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         pen = QPen(QColor(theme.TEXT_MUTED), 1.5)
-        pen.setCapStyle(Qt.RoundCap)
-        pen.setJoinStyle(Qt.RoundJoin)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         p.setPen(pen)
         r = self.rect()
         cx = r.right() - 12
@@ -135,15 +158,15 @@ class _BoundedComboBox(QComboBox):
         if view is None:
             return
         view.setMouseTracking(True)
-        view.setAttribute(Qt.WA_Hover, True)
+        view.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         viewport = view.viewport()
         if viewport is not None:
             viewport.setMouseTracking(True)
-            viewport.setAttribute(Qt.WA_Hover, True)
+            viewport.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
         view.setStyleSheet(self._POPUP_VIEW_QSS)
         container = view.parentWidget()
         if container is not None and container is not view:
-            container.setAttribute(Qt.WA_StyledBackground, True)
+            container.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
             container.setStyleSheet(self._POPUP_CONTAINER_QSS)
 
     def showPopup(self) -> None:
@@ -209,7 +232,7 @@ class SettingsBar(QWidget):
         """)
         self.setFixedHeight(72)
 
-        self._params: list = []
+        self._params: list[dict[str, Any]] = []
         self.__build(on_save, on_calibrate)
 
     def __build(self, on_save: Callable[[], None],
@@ -242,23 +265,35 @@ class SettingsBar(QWidget):
         self.resolution_box.setMinimumWidth(140)
         self.resolution_box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.resolution_box.currentIndexChanged.connect(self._on_resolution_changed)
-        self.resolution_box.setCursor(Qt.PointingHandCursor)
-        self.resolution_box.view().setCursor(Qt.PointingHandCursor)
+        self.resolution_box.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.resolution_box.view().setCursor(Qt.CursorShape.PointingHandCursor)
         layout.addWidget(self.resolution_box)
 
         layout.addWidget(self.__muted('FPS'))
         self.fps_box = _BoundedComboBox()
         self.fps_box.setMinimumWidth(70)
-        self.fps_box.setCursor(Qt.PointingHandCursor)
-        self.fps_box.view().setCursor(Qt.PointingHandCursor)
+        self.fps_box.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.fps_box.view().setCursor(Qt.CursorShape.PointingHandCursor)
         layout.addWidget(self.fps_box)
 
         layout.addWidget(self.__muted('Битрейт'))
         self.bitrate_input = QLineEdit()
+        self.bitrate_input.setValidator(QIntValidator(BITRATE_MIN_KBS, BITRATE_MAX_KBS))
+        self.bitrate_input.setToolTip(f'от {BITRATE_MIN_KBS} до {BITRATE_MAX_KBS} кбит/с')
         self.bitrate_input.setPlaceholderText('kbps')
         self.bitrate_input.setFixedWidth(80)
-        self.bitrate_input.setCursor(Qt.PointingHandCursor)
+        self.bitrate_input.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.bitrate_input.textChanged.connect(self._on_bitrate_text_changed)
         layout.addWidget(self.bitrate_input)
+
+        self.bitrate_hint = QLabel('')
+        self.bitrate_hint.setStyleSheet(
+            f'color: {theme.STATUS_ERROR};'
+            f'font-size: {theme.FONT_SIZE_SM - 2}px;'
+            'background: transparent;'
+        )
+        self.bitrate_hint.hide()
+        layout.addWidget(self.bitrate_hint)
 
         self.calibrate_btn = QPushButton('⟳ Калибровка камер')
         self.calibrate_btn.setFixedHeight(36)
@@ -330,7 +365,7 @@ class SettingsBar(QWidget):
             self.fc_status_label.setText(f'FC: {fc_name} (MAVLink)')
         self.warn_label.setVisible(fc_type == 'crsf')
 
-    def update_camera(self, camera: dict) -> None:
+    def update_camera(self, camera: dict[str, Any]) -> None:
         self._params = camera.get('params', [])
         param_index = camera.get('param_index', 0)
         bitrate = camera.get('bitrate_kbs', 1000)
@@ -360,7 +395,8 @@ class SettingsBar(QWidget):
         self.bitrate_input.setText(str(bitrate))
         self.save_btn.setEnabled(True)
 
-    def _fill_fps(self, resolution: tuple[int, int] | None, cur_param: dict | None) -> None:
+    def _fill_fps(self, resolution: tuple[int, int] | None,
+                  cur_param: dict[str, Any] | None) -> None:
         if resolution is None:
             return
         w, h = resolution
@@ -384,7 +420,37 @@ class SettingsBar(QWidget):
         if res:
             self._fill_fps(res, None)
 
-    def get_selected_params(self):
+    @staticmethod
+    def parse_bitrate(text: str) -> tuple[int, bool]:
+        """Возвращает (применимое значение, было ли оно допустимым)."""
+        try:
+            value = int(text)
+        except ValueError:
+            return BITRATE_DEFAULT_KBS, False
+        clamped = max(BITRATE_MIN_KBS, min(BITRATE_MAX_KBS, value))
+        return clamped, clamped == value
+
+    def selected_bitrate(self) -> int:
+        value, valid = self.parse_bitrate(self.bitrate_input.text())
+        if not valid:
+            self.bitrate_input.setText(str(value))
+        return value
+
+    def _on_bitrate_text_changed(self, text: str) -> None:
+        if not text.strip():
+            self._set_bitrate_valid(True, '')
+            return
+        _, valid = self.parse_bitrate(text)
+        self._set_bitrate_valid(valid, f'{BITRATE_MIN_KBS}…{BITRATE_MAX_KBS}')
+
+    def _set_bitrate_valid(self, valid: bool, hint: str) -> None:
+        self.bitrate_input.setStyleSheet(
+            '' if valid else f'border: 1px solid {theme.STATUS_ERROR};'
+        )
+        self.bitrate_hint.setText('' if valid else hint)
+        self.bitrate_hint.setVisible(not valid)
+
+    def get_selected_params(self) -> tuple[int | None, int | None]:
         res = self.resolution_box.currentData()
         fps = self.fps_box.currentData()
         if res is None or fps is None:
@@ -392,9 +458,5 @@ class SettingsBar(QWidget):
         w, h = res
         for i, p in enumerate(self._params):
             if p['width'] == w and p['height'] == h and p['fps'] == fps:
-                try:
-                    bitrate = int(self.bitrate_input.text())
-                except ValueError:
-                    bitrate = 1000
-                return i, bitrate
+                return i, self.selected_bitrate()
         return None, None

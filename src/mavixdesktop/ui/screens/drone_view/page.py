@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
+import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QVBoxLayout, QWidget
@@ -12,14 +14,14 @@ from mavixdesktop.ui.screens.drone_view.video_panel import VideoPanel
 
 
 class DroneViewPage(QWidget):
-    def __init__(self, on_back: Callable[[], None], on_prev: Callable[[], None],
-                 on_next: Callable[[], None], on_save: Callable[[], None],
+    def __init__(self, on_back: Callable[[], None], on_prev: Callable[[], object],
+                 on_next: Callable[[], object], on_save: Callable[[], None],
                  on_joystick_cfg: Callable[[], None], on_takeoff: Callable[[], None],
                  on_calibrate: Callable[[], None]) -> None:
         super().__init__()
         self._on_prev = on_prev
         self._on_next = on_next
-        self.setFocusPolicy(Qt.StrongFocus)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         root = QVBoxLayout(self)
         root.setSpacing(0)
@@ -40,24 +42,23 @@ class DroneViewPage(QWidget):
         self.calibrate_btn = self._settings_bar.calibrate_btn
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        if event.key() == Qt.Key_Left:
+        if event.key() == Qt.Key.Key_Left:
             self._on_prev()
-        elif event.key() == Qt.Key_Right:
+        elif event.key() == Qt.Key.Key_Right:
             self._on_next()
-        elif event.key() == Qt.Key_S:
+        elif event.key() == Qt.Key.Key_S or event.text().lower() in ('s', 'ы'):
             self._video_panel.toggle_stats_panel()
+        elif event.key() == Qt.Key.Key_I or event.text().lower() in ('i', 'ш'):
+            self._video_panel.toggle_help()
         else:
             super().keyPressEvent(event)
 
-    def show_frame(self, img) -> None:
+    def show_frame(self, img: np.ndarray[Any, Any]) -> None:
         self._video_panel.show_frame(img)
 
     def update_fc_status(self, fc_type: str, fc_name: str) -> None:
         self._settings_bar.update_fc_status(fc_type, fc_name)
         self._video_panel.set_fc(fc_type or 'none')
-
-    def update_ping(self, rtt_ms: float) -> None:
-        self._video_panel.update_ping_overlay(rtt_ms)
 
     def update_quality(self, text: str, color: str) -> None:
         self._video_panel.update_quality(text, color)
@@ -71,10 +72,10 @@ class DroneViewPage(QWidget):
     def update_battery(self, percent: int, voltage: float) -> None:
         self._video_panel.update_battery_overlay(percent, voltage)
 
-    def update_camera_settings(self, camera: dict) -> None:
+    def update_camera_settings(self, camera: dict[str, Any]) -> None:
         self._settings_bar.update_camera(camera)
 
-    def get_selected_params(self):
+    def get_selected_params(self) -> tuple[int | None, int | None]:
         return self._settings_bar.get_selected_params()
 
     def set_calibration_visible(self, visible: bool) -> None:

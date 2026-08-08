@@ -61,7 +61,7 @@ class StatsCollector:
         self._previous: _Totals | None = None
 
     async def poll_once(self) -> None:
-        report = await self._pc.getStats()
+        report = await self._pc.getStats()  # type: ignore[attr-defined]
         current = read_totals(report, self._clock())
         previous, self._previous = self._previous, current
         if previous is None:

@@ -1,7 +1,7 @@
 """Render numpy ndarray (BGR24) frames in QLabel via QImage/QPixmap."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
@@ -20,7 +20,7 @@ class VideoWidget(QLabel):
         self.setStyleSheet('background-color: black;')
         self.setText('no video')
 
-    def show_frame(self, img: np.ndarray) -> None:
+    def show_frame(self, img: np.ndarray[Any, np.dtype[np.uint8]]) -> None:
         if img is None:
             return
         if img.ndim != 3 or img.shape[2] != 3:

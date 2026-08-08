@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from mavixdesktop.core.logger import logger
 from mavixdesktop.webrtc.channels import DataChannelHub
@@ -12,12 +12,12 @@ if TYPE_CHECKING:
     from aiortc import MediaStreamTrack, RTCDataChannel
 
 
-SignalSender = Callable[[dict], Awaitable[None]]
+SignalSender = Callable[[dict[str, Any]], Awaitable[None]]
 TrackHandler = Callable[['MediaStreamTrack'], None]
 
 
 class WebRTCManager:
-    def __init__(self, send: SignalSender, ice_servers: list[dict] | None = None) -> None:
+    def __init__(self, send: SignalSender, ice_servers: list[dict[str, Any]] | None = None) -> None:
         self._send = send
         self._ice_servers = ice_servers or []
         self._peer: PeerSession | None = None
@@ -38,7 +38,7 @@ class WebRTCManager:
     def peer_connection(self) -> object | None:
         return self._peer.pc if self._peer is not None else None
 
-    def update_ice_servers(self, ice_servers: list[dict]) -> None:
+    def update_ice_servers(self, ice_servers: list[dict[str, Any]]) -> None:
         self._ice_servers = list(ice_servers)
 
     def start_session(self, drone_id: str) -> None:
@@ -62,7 +62,7 @@ class WebRTCManager:
         if self.on_session_ended is not None:
             self.on_session_ended()
 
-    async def handle_offer(self, drone_id: str, sdp: dict) -> None:
+    async def handle_offer(self, drone_id: str, sdp: dict[str, Any]) -> None:
         if not self._guard(drone_id):
             return
         sdp_text = sdp.get('sdp') if isinstance(sdp, dict) else None
@@ -77,7 +77,7 @@ class WebRTCManager:
             'sdp': {'type': 'answer', 'sdp': answer_sdp},
         })
 
-    async def handle_ice(self, drone_id: str, candidate: dict) -> None:
+    async def handle_ice(self, drone_id: str, candidate: dict[str, Any]) -> None:
         if not self._guard(drone_id):
             return
         assert self._peer is not None

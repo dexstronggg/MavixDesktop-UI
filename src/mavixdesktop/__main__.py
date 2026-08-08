@@ -7,6 +7,7 @@ import contextlib
 import os
 import signal
 import sys
+from typing import TYPE_CHECKING, cast
 
 from mavixdesktop.coordinator import SessionCoordinator
 from mavixdesktop.core.config import settings
@@ -20,6 +21,10 @@ from mavixdesktop.core.logger import (
 from mavixdesktop.server import token_store
 from mavixdesktop.server.api import ApiError, ApiSession
 from mavixdesktop.server.signal_client import SignalClient
+
+if TYPE_CHECKING:
+    from PySide6.QtCore import QEvent, QObject
+    from PySide6.QtWidgets import QApplication
 
 
 def _init_dirs() -> None:
@@ -80,7 +85,7 @@ def _server_reachable(timeout_sec: float = 2.0) -> bool:
     url = settings.http_url.rstrip('/') + '/api/v1/health'
     try:
         with urllib.request.urlopen(url, timeout=timeout_sec) as resp:
-            return 200 <= resp.status < 400
+            return cast(bool, 200 <= resp.status < 400)
     except Exception as exc:
         logger.info('[bootstrap] проверка health не удалась: %s', exc)
         return False
@@ -92,15 +97,15 @@ class _PointingCursorFilter:
         from PySide6.QtWidgets import QPushButton
 
         class _Filter(QObject):
-            def eventFilter(self, obj, event):
+            def eventFilter(self, obj: QObject | None, event: QEvent) -> bool:
                 from PySide6.QtCore import QEvent, Qt
-                if event.type() == QEvent.Polish and isinstance(obj, QPushButton):
-                    obj.setCursor(Qt.PointingHandCursor)
+                if event.type() == QEvent.Type.Polish and isinstance(obj, QPushButton):
+                    obj.setCursor(Qt.CursorShape.PointingHandCursor)
                 return False
 
         self._filter = _Filter()
 
-    def attach_to(self, app) -> None:
+    def attach_to(self, app: QApplication) -> None:
         app.installEventFilter(self._filter)
 
 
@@ -110,8 +115,8 @@ class _BoundedToolTipFilter:
         from PySide6.QtWidgets import QToolTip, QWidget
 
         class _Filter(QObject):
-            def eventFilter(self, obj, event):
-                if event.type() != QEvent.ToolTip:
+            def eventFilter(self, obj: QObject | None, event: QEvent) -> bool:
+                if event.type() != QEvent.Type.ToolTip:
                     return False
                 if not isinstance(obj, QWidget):
                     return False
@@ -122,9 +127,9 @@ class _BoundedToolTipFilter:
                 if win is None:
                     return False
                 try:
-                    cursor_global = event.globalPos()
+                    cursor_global = event.globalPos()  # type: ignore[attr-defined]
                 except AttributeError:
-                    cursor_global = event.globalPosition().toPoint()
+                    cursor_global = event.globalPosition().toPoint()  # type: ignore[attr-defined]
 
                 win_top_left = win.mapToGlobal(QPoint(0, 0))
                 win_bottom_y = win_top_left.y() + win.height()
@@ -140,7 +145,7 @@ class _BoundedToolTipFilter:
 
         self._filter = _Filter()
 
-    def attach_to(self, app) -> None:
+    def attach_to(self, app: QApplication) -> None:
         app.installEventFilter(self._filter)
 
 
@@ -175,16 +180,16 @@ def _run_gui(demo: bool = False) -> int:
     app.setWindowIcon(app_icon)
     app.setStyle('Fusion')
     font = QFont('Inter')
-    font.setStyleStrategy(QFont.PreferAntialias)
+    font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
     font.setPixelSize(theme.FONT_SIZE_BASE)
     app.setFont(font)
     app.setStyleSheet(theme.QSS_GLOBAL)
     cursor_filter = _PointingCursorFilter()
     cursor_filter.attach_to(app)
-    app._mavix_cursor_filter = cursor_filter
+    app._mavix_cursor_filter = cursor_filter  # type: ignore[attr-defined]
     tooltip_filter = _BoundedToolTipFilter()
     tooltip_filter.attach_to(app)
-    app._mavix_tooltip_filter = tooltip_filter
+    app._mavix_tooltip_filter = tooltip_filter  # type: ignore[attr-defined]
 
     window = App(demo=demo, debug=settings.debug)
     window.showMaximized()

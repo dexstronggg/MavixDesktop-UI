@@ -120,13 +120,39 @@ def test_staleness_grows_between_frames(quality, clock):
     assert quality.snapshot().staleness_ms == pytest.approx(750.0, rel=0.01)
 
 
-def test_board_underdelivery_is_warn(quality, clock):
+def test_board_underdelivery_is_recorded_but_does_not_colour_the_light(quality, clock):
+    """Показатель ушёл из таблицы на экране, но пишется в файл — значит светофор им не красим."""
     quality.update_inbound(1200.0, 0.0)
     quality.add_rtt(40.0)
     quality.update_board(bitrate_out_kbps=1200.0, encoder_kbps=2500.0, pli=0)
     snap = quality.snapshot()
     assert snap.out_ratio == pytest.approx(0.48, rel=0.05)
-    assert snap.level == LEVEL_WARN
+    assert snap.level == LEVEL_OK
+
+
+def test_growth_on_tiny_rtt_does_not_raise_alarm(quality, clock):
+    """Пинг 1 -> 4 мс это «рост втрое», но по сути ничего не произошло."""
+    quality.update_inbound(1000.0, 0.0)
+    for _ in range(20):
+        clock.advance(0.2)
+        quality.add_rtt(1.0)
+    for _ in range(20):
+        clock.advance(0.2)
+        quality.add_rtt(4.0)
+    snap = quality.snapshot()
+    assert snap.rtt_growth >= 3.0, 'сам множитель считается как раньше'
+    assert snap.level == LEVEL_OK, 'но на единицах миллисекунд он не должен красить плашку'
+
+
+def test_growth_on_real_latency_still_alarms(quality, clock):
+    quality.update_inbound(1000.0, 0.0)
+    for _ in range(20):
+        clock.advance(0.2)
+        quality.add_rtt(60.0)
+    for _ in range(20):
+        clock.advance(0.2)
+        quality.add_rtt(240.0)
+    assert quality.snapshot().level == LEVEL_BAD
 
 
 def test_pli_accumulates(quality):

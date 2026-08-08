@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
 class SessionState:
-    cameras: list = field(default_factory=list)
+    cameras: list[dict[str, Any]] = field(default_factory=list)
     cam_index: int = 0
     fc_type: str = 'none'
     fc_name: str = ''

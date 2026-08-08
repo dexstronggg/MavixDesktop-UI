@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 import aiohttp
 
 from mavixdesktop.core.config import settings
@@ -27,12 +29,12 @@ class ApiSession:
                 if r.status != 200:
                     return False
                 data = await r.json()
-                return data.get('status') == 'ok'
+                return cast(bool, data.get('status') == 'ok')
         except aiohttp.ClientError as exc:
             logger.debug('[api] ошибка проверки health: %s', exc)
             return False
 
-    async def login(self, email: str, password: str) -> dict:
+    async def login(self, email: str, password: str) -> dict[str, Any]:
         async with self._session.post(
             f'{settings.http_url}/api/v1/auth/login',
             json={'email': email, 'password': password},
@@ -40,9 +42,9 @@ class ApiSession:
             data = await r.json()
             if r.status != 200:
                 raise ApiError(data.get('detail', 'вход не удался'))
-            return data
+            return cast(dict[str, Any], data)
 
-    async def refresh(self, refresh_token: str) -> dict:
+    async def refresh(self, refresh_token: str) -> dict[str, Any]:
         async with self._session.post(
             f'{settings.http_url}/api/v1/auth/refresh',
             json={'refresh_token': refresh_token},
@@ -50,9 +52,9 @@ class ApiSession:
             data = await r.json()
             if r.status != 200:
                 raise ApiError(data.get('detail', 'обновление токена не удалось'))
-            return data
+            return cast(dict[str, Any], data)
 
-    async def password_reset_request(self, email: str) -> dict:
+    async def password_reset_request(self, email: str) -> dict[str, Any]:
         async with self._session.post(
             f'{settings.http_url}/api/v1/auth/password-reset/request',
             json={'email': email},
@@ -63,9 +65,9 @@ class ApiSession:
                 data = {}
             if r.status != 200:
                 raise ApiError(data.get('detail', 'запрос восстановления пароля не удался'))
-            return data
+            return cast(dict[str, Any], data)
 
-    async def ice_servers(self) -> list[dict]:
+    async def ice_servers(self) -> list[dict[str, Any]]:
         try:
             async with self._session.get(f'{settings.http_url}/api/v1/ice-servers') as r:
                 if r.status != 200:
