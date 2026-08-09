@@ -1,4 +1,5 @@
 """Joystick setup screen: list, calibration, and stick preview."""
+
 from __future__ import annotations
 
 import json
@@ -53,7 +54,9 @@ class JoystickManager:
 class JoystickCalibration:
     @staticmethod
     def save(cal: dict[str, Any], joystick_name: str) -> Path:
-        return joystick_calibration.save(cal, joystick_name, data_dir=settings.data_path)
+        return joystick_calibration.save(
+            cal, joystick_name, data_dir=settings.data_path
+        )
 
     @staticmethod
     def load(joystick_name: str) -> dict[str, Any] | None:
@@ -66,17 +69,17 @@ class JoystickCalibration:
 
 _build_sdl_config = build_sdl_config
 
-_STEP_CENTER    = 0
-_STEP_THR_MAX   = 1
-_STEP_THR_MIN   = 2
-_STEP_YAW_MAX   = 3
-_STEP_YAW_MIN   = 4
+_STEP_CENTER = 0
+_STEP_THR_MAX = 1
+_STEP_THR_MIN = 2
+_STEP_YAW_MAX = 3
+_STEP_YAW_MIN = 4
 _STEP_PITCH_MAX = 5
 _STEP_PITCH_MIN = 6
-_STEP_ROLL_MAX  = 7
-_STEP_ROLL_MIN  = 8
-_STEP_ARM       = 9
-_STEP_DONE      = 10
+_STEP_ROLL_MAX = 7
+_STEP_ROLL_MIN = 8
+_STEP_ARM = 9
+_STEP_DONE = 10
 
 _STEPS = [
     'Step 1/10: Set all sticks to CENTER -> Next',
@@ -143,19 +146,20 @@ class _StepProgress(QWidget):
         p.end()
 
 
-_CARD_W  = 220
-_CARD_H  = 200
+_CARD_W = 220
+_CARD_H = 200
 _ICON_SZ = 56
-_GAP     = 20
+_GAP = 20
 
 
 class _PopupRow(AnimatedCard):
     _ANIM_DURATION = 200
-    _BAR_RADIUS    = theme.RADIUS_SM
-    _BAR_HEIGHT    = 2
+    _BAR_RADIUS = theme.RADIUS_SM
+    _BAR_HEIGHT = 2
 
-    def __init__(self, text: str, callback: Callable[[], None],
-                 parent: QWidget | None = None) -> None:
+    def __init__(
+        self, text: str, callback: Callable[[], None], parent: QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self.setFixedHeight(42)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -178,9 +182,12 @@ class _PopupRow(AnimatedCard):
 
 
 class _CardMenu(QFrame):
-    def __init__(self, items: list[tuple[str, Callable[[], None]]],
-                 parent: QWidget | None = None) -> None:
-        super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+    def __init__(
+        self, items: list[tuple[str, Callable[[], None]]], parent: QWidget | None = None
+    ) -> None:
+        super().__init__(
+            parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(f"""
             QFrame {{
@@ -193,7 +200,9 @@ class _CardMenu(QFrame):
         lay.setContentsMargins(0, 6, 0, 6)
         lay.setSpacing(2)
         for text, callback in items:
-            row = _PopupRow(text, cast(Callable[[], None], lambda cb=callback: (cb(), self.close())))
+            row = _PopupRow(
+                text, cast(Callable[[], None], lambda cb=callback: (cb(), self.close()))
+            )
             row.setMinimumWidth(230)
             lay.addWidget(row)
         self.adjustSize()
@@ -205,7 +214,7 @@ class _CardMenu(QFrame):
 
 class JoystickCard(AnimatedCard):
     clicked = Signal(int)
-    action  = Signal(int, str)
+    action = Signal(int, str)
 
     def __init__(self, index: int, name: str, calibrated: bool) -> None:
         super().__init__()
@@ -283,9 +292,9 @@ class JoystickCard(AnimatedCard):
 
         self._action_buttons: list[QToolButton] = []
         for ic, label, sub in [
-            ('tune.svg',   'Калибровка', 'calibrate'),
-            ('upload.svg', 'Загрузить',  'file'),
-            ('save.svg',   'Сохранить',  'file_save'),
+            ('tune.svg', 'Калибровка', 'calibrate'),
+            ('upload.svg', 'Загрузить', 'file'),
+            ('save.svg', 'Сохранить', 'file_save'),
         ]:
             b = QToolButton()
             b.setIcon(QIcon(svg_pixmap(ic, 18, color=theme.TEXT_PRIMARY)))
@@ -314,7 +323,9 @@ class JoystickCard(AnimatedCard):
                     color: {theme.ACCENT};
                 }}
             """)
-            b.clicked.connect(lambda _checked=False, s=sub: self.action.emit(self._index, s))
+            b.clicked.connect(
+                lambda _checked=False, s=sub: self.action.emit(self._index, s)
+            )
             ar.addWidget(b, 1)
             self._action_buttons.append(b)
 
@@ -333,13 +344,18 @@ class JoystickCard(AnimatedCard):
 class _JoystickGrid(CardGrid):
     CARD_W = _CARD_W
     CARD_H = _CARD_H
-    GAP    = _GAP
+    GAP = _GAP
 
 
 class _StickPreviewDialog(QDialog):
-    def __init__(self, joystick_index: int, joystick_name: str,
-                 calibration: dict[str, Any], parent: QWidget | None = None,
-                 on_takeoff: Callable[[int, dict[str, Any]], None] | None = None) -> None:
+    def __init__(
+        self,
+        joystick_index: int,
+        joystick_name: str,
+        calibration: dict[str, Any],
+        parent: QWidget | None = None,
+        on_takeoff: Callable[[int, dict[str, Any]], None] | None = None,
+    ) -> None:
         super().__init__(parent)
         self._on_takeoff = on_takeoff
         self._joystick_index = joystick_index
@@ -435,7 +451,9 @@ class QGCSearchOverlay(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowFlags(
-            Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+            Qt.WindowType.Tool
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setModal(False)
@@ -482,11 +500,14 @@ class QGCSearchOverlay(QDialog):
 
 
 class QGCLaunchingOverlay(QDialog):
-    def __init__(self, qgc_proc: subprocess.Popen[bytes],
-                 parent: QWidget | None = None) -> None:
+    def __init__(
+        self, qgc_proc: subprocess.Popen[bytes], parent: QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowFlags(
-            Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+            Qt.WindowType.Tool
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setModal(False)
@@ -535,7 +556,10 @@ class QGCLaunchingOverlay(QDialog):
     def __qgc_window_visible(self) -> bool:
         try:
             result = subprocess.run(
-                ['wmctrl', '-lp'], capture_output=True, text=True, timeout=0.5,
+                ['wmctrl', '-lp'],
+                capture_output=True,
+                text=True,
+                timeout=0.5,
             )
             if result.returncode != 0:
                 return False
@@ -555,7 +579,9 @@ class QGCLaunchingOverlay(QDialog):
         try:
             result = subprocess.run(
                 ['pgrep', '-P', str(self._qgc_proc.pid)],
-                capture_output=True, text=True, timeout=0.5,
+                capture_output=True,
+                text=True,
+                timeout=0.5,
             )
             if result.returncode == 0:
                 pids.update(result.stdout.split())
@@ -571,9 +597,12 @@ class QGCLaunchingOverlay(QDialog):
 class JoystickSetupPage(QWidget):
     DEMO_JOYSTICK_NAME = 'Демо-контроллер (Mock)'
 
-    def __init__(self, on_back: Callable[[], None],
-                 on_takeoff: Callable[[int, dict[str, Any]], None] | None = None,
-                 demo: bool = False) -> None:
+    def __init__(
+        self,
+        on_back: Callable[[], None],
+        on_takeoff: Callable[[int, dict[str, Any]], None] | None = None,
+        demo: bool = False,
+    ) -> None:
         super().__init__()
         self._joystick_names: list[str] | None = None
         self._joystick_cal_states: list[bool] = []
@@ -669,7 +698,11 @@ class JoystickSetupPage(QWidget):
             names = [self.DEMO_JOYSTICK_NAME]
 
         cal_states = [bool(JoystickCalibration.load(name)) for name in names]
-        if not force and names == self._joystick_names and cal_states == self._joystick_cal_states:
+        if (
+            not force
+            and names == self._joystick_names
+            and cal_states == self._joystick_cal_states
+        ):
             return
         self._joystick_names = names
         self._joystick_cal_states = cal_states
@@ -696,15 +729,17 @@ class JoystickSetupPage(QWidget):
         takeoff_cb = self._on_takeoff if self._fc_type in ('crsf', 'mavlink') else None
         saved = JoystickCalibration.load(name)
         if saved:
-            dlg = _StickPreviewDialog(index, name, saved, parent=self,
-                                      on_takeoff=takeoff_cb)
+            dlg = _StickPreviewDialog(
+                index, name, saved, parent=self, on_takeoff=takeoff_cb
+            )
             dlg.exec()
         else:
             cal_dlg = JoystickCalibrationDialog(index, name, parent=self)
             if cal_dlg.exec() == QDialog.DialogCode.Accepted and cal_dlg.calibration:
                 self._refresh(force=True)
-                dlg = _StickPreviewDialog(index, name, cal_dlg.calibration, parent=self,
-                                          on_takeoff=takeoff_cb)
+                dlg = _StickPreviewDialog(
+                    index, name, cal_dlg.calibration, parent=self, on_takeoff=takeoff_cb
+                )
                 dlg.exec()
 
     def _on_card_action(self, index: int, action: str) -> None:
@@ -737,15 +772,17 @@ class JoystickSetupPage(QWidget):
         JoystickCalibration.save(data, name)
         self._refresh(force=True)
         QMessageBox.information(
-            self, 'Калибровка загружена',
-            f'Калибровка для «{name}» успешно загружена и сохранена.'
+            self,
+            'Калибровка загружена',
+            f'Калибровка для «{name}» успешно загружена и сохранена.',
         )
 
     def _save_to_file(self, index: int, name: str) -> None:
         cal = JoystickCalibration.load(name)
         if not cal:
-            QMessageBox.warning(self, 'Нет калибровки',
-                                f'Джойстик «{name}» не откалиброван.')
+            QMessageBox.warning(
+                self, 'Нет калибровки', f'Джойстик «{name}» не откалиброван.'
+            )
             return
         path, _ = QFileDialog.getSaveFileName(
             self, 'Сохранить калибровку', f'{name}.json', 'JSON (*.json)'
@@ -758,13 +795,13 @@ class JoystickSetupPage(QWidget):
         except Exception as exc:
             QMessageBox.critical(self, 'Ошибка сохранения', str(exc))
             return
-        QMessageBox.information(self, 'Сохранено',
-                                f'Калибровка сохранена в:\n{path}')
+        QMessageBox.information(self, 'Сохранено', f'Калибровка сохранена в:\n{path}')
 
 
 class JoystickCalibrationDialog(QDialog):
-    def __init__(self, joystick_index: int, joystick_name: str,
-                 parent: QWidget | None = None) -> None:
+    def __init__(
+        self, joystick_index: int, joystick_name: str, parent: QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle('Калибровка джойстика')
         self.setMinimumWidth(460)
@@ -817,7 +854,9 @@ class JoystickCalibrationDialog(QDialog):
 
     def _detect_axis(self, vals: list[float], exclude: set[int | None]) -> int:
         center = self._data.get('center', [0.0] * len(vals))
-        deltas = [(abs(vals[i] - center[i]), i) for i in range(len(vals)) if i not in exclude]
+        deltas = [
+            (abs(vals[i] - center[i]), i) for i in range(len(vals)) if i not in exclude
+        ]
         return max(deltas)[1] if deltas else 0
 
     def _poll(self) -> None:
@@ -834,13 +873,17 @@ class JoystickCalibrationDialog(QDialog):
                     v = -v
             return v
 
-        self._stick_l.set_position(get_val('axis_yaw', 'yaw_max', 0),
-                                   get_val('axis_thr', 'thr_max', 1))
-        self._stick_r.set_position(get_val('axis_roll', 'roll_max', 2),
-                                   get_val('axis_pitch', 'pitch_max', 3))
+        self._stick_l.set_position(
+            get_val('axis_yaw', 'yaw_max', 0), get_val('axis_thr', 'thr_max', 1)
+        )
+        self._stick_r.set_position(
+            get_val('axis_roll', 'roll_max', 2), get_val('axis_pitch', 'pitch_max', 3)
+        )
 
         if self._step == _STEP_ARM:
-            arm_captured = 'arm_button_index' in self._data or 'arm_axis_index' in self._data
+            arm_captured = (
+                'arm_button_index' in self._data or 'arm_axis_index' in self._data
+            )
             if not arm_captured:
                 if self._arm_btn_states is not None:
                     for i in range(self._js.get_numbuttons()):
@@ -852,10 +895,15 @@ class JoystickCalibrationDialog(QDialog):
                             )
                             self._next_btn.setText(f'Next (button {i})')
                             break
-                if 'arm_axis_index' not in self._data and self._arm_axis_states is not None:
+                if (
+                    'arm_axis_index' not in self._data
+                    and self._arm_axis_states is not None
+                ):
                     excluded = {
-                        self._data.get('axis_thr'), self._data.get('axis_yaw'),
-                        self._data.get('axis_pitch'), self._data.get('axis_roll'),
+                        self._data.get('axis_thr'),
+                        self._data.get('axis_yaw'),
+                        self._data.get('axis_pitch'),
+                        self._data.get('axis_roll'),
                     }
                     for i in range(self._js.get_numaxes()):
                         if i in excluded:
@@ -891,30 +939,42 @@ class JoystickCalibrationDialog(QDialog):
         elif self._step == _STEP_YAW_MIN:
             self._data['yaw_min'] = vals[self._data['axis_yaw']]
         elif self._step == _STEP_PITCH_MAX:
-            axis = self._detect_axis(vals, {self._data.get('axis_thr'), self._data.get('axis_yaw')})
+            axis = self._detect_axis(
+                vals, {self._data.get('axis_thr'), self._data.get('axis_yaw')}
+            )
             self._data['axis_pitch'] = axis
             self._data['pitch_max'] = vals[axis]
             self._data['pitch_center'] = center[axis]
         elif self._step == _STEP_PITCH_MIN:
             self._data['pitch_min'] = vals[self._data['axis_pitch']]
         elif self._step == _STEP_ROLL_MAX:
-            axis = self._detect_axis(vals, {self._data.get('axis_thr'), self._data.get('axis_yaw'),
-                                            self._data.get('axis_pitch')})
+            axis = self._detect_axis(
+                vals,
+                {
+                    self._data.get('axis_thr'),
+                    self._data.get('axis_yaw'),
+                    self._data.get('axis_pitch'),
+                },
+            )
             self._data['axis_roll'] = axis
             self._data['roll_max'] = vals[axis]
             self._data['roll_center'] = center[axis]
         elif self._step == _STEP_ROLL_MIN:
             self._data['roll_min'] = vals[self._data['axis_roll']]
         elif self._step == _STEP_ARM:
-            if 'arm_button_index' not in self._data and 'arm_axis_index' not in self._data:
+            if (
+                'arm_button_index' not in self._data
+                and 'arm_axis_index' not in self._data
+            ):
                 return
         elif self._step == _STEP_DONE:
             self._build_calibration()
-            path = JoystickCalibration.save(cast(dict[str, Any], self.calibration), self._joystick_name)
+            path = JoystickCalibration.save(
+                cast(dict[str, Any], self.calibration), self._joystick_name
+            )
             self._poll_timer.stop()
             QMessageBox.information(
-                self, 'Калибровка сохранена',
-                f'Настройки джойстика сохранены:\n{path}'
+                self, 'Калибровка сохранена', f'Настройки джойстика сохранены:\n{path}'
             )
             self.accept()
             return
@@ -922,8 +982,12 @@ class JoystickCalibrationDialog(QDialog):
         self._step += 1
         if self._step == _STEP_ARM:
             pygame.event.pump()
-            self._arm_btn_states = [self._js.get_button(i) for i in range(self._js.get_numbuttons())]
-            self._arm_axis_states = [self._js.get_axis(i) > 0.5 for i in range(self._js.get_numaxes())]
+            self._arm_btn_states = [
+                self._js.get_button(i) for i in range(self._js.get_numbuttons())
+            ]
+            self._arm_axis_states = [
+                self._js.get_axis(i) > 0.5 for i in range(self._js.get_numaxes())
+            ]
         self._next_btn.setText('Далее')
         self._update_ui()
 
@@ -936,25 +1000,25 @@ class JoystickCalibrationDialog(QDialog):
     def _build_calibration(self) -> None:
         c = self._data
         self.calibration = {
-            'axis_thr':   c.get('axis_thr',   2),
-            'axis_yaw':   c.get('axis_yaw',   3),
+            'axis_thr': c.get('axis_thr', 2),
+            'axis_yaw': c.get('axis_yaw', 3),
             'axis_pitch': c.get('axis_pitch', 1),
-            'axis_roll':  c.get('axis_roll',  0),
-            'thr_min':    c.get('thr_min',   -1.0),
-            'thr_max':    c.get('thr_max',    1.0),
+            'axis_roll': c.get('axis_roll', 0),
+            'thr_min': c.get('thr_min', -1.0),
+            'thr_max': c.get('thr_max', 1.0),
             'thr_center': c.get('thr_center', 0.0),
-            'yaw_min':    c.get('yaw_min',   -1.0),
-            'yaw_max':    c.get('yaw_max',    1.0),
+            'yaw_min': c.get('yaw_min', -1.0),
+            'yaw_max': c.get('yaw_max', 1.0),
             'yaw_center': c.get('yaw_center', 0.0),
-            'pitch_min':    c.get('pitch_min',   -1.0),
-            'pitch_max':    c.get('pitch_max',    1.0),
+            'pitch_min': c.get('pitch_min', -1.0),
+            'pitch_max': c.get('pitch_max', 1.0),
             'pitch_center': c.get('pitch_center', 0.0),
-            'roll_min':    c.get('roll_min',   -1.0),
-            'roll_max':    c.get('roll_max',    1.0),
+            'roll_min': c.get('roll_min', -1.0),
+            'roll_max': c.get('roll_max', 1.0),
             'roll_center': c.get('roll_center', 0.0),
             'arm_button_index': c.get('arm_button_index', 0),
-            'arm_type':         c.get('arm_type', 'button'),
-            'arm_axis_index':   c.get('arm_axis_index', None),
+            'arm_type': c.get('arm_type', 'button'),
+            'arm_axis_index': c.get('arm_axis_index', None),
         }
         try:
             guid = self._js.get_guid()

@@ -1,4 +1,5 @@
 """Entry point: python -m mavixdesktop."""
+
 from __future__ import annotations
 
 import argparse
@@ -35,7 +36,9 @@ def _init_dirs() -> None:
     install_exception_hooks()
 
 
-async def _authenticate_headless(api: ApiSession, email: str | None, password: str | None) -> tuple[str, str]:
+async def _authenticate_headless(
+    api: ApiSession, email: str | None, password: str | None
+) -> tuple[str, str]:
     stored_email, stored_refresh = token_store.load()
     if stored_refresh:
         try:
@@ -65,7 +68,10 @@ async def _run_headless(email: str | None, password: str | None) -> None:
     api = await ApiSession.create()
     try:
         if not await api.health():
-            logger.error('[bootstrap] сигнальный сервер недоступен по адресу %s', settings.http_url)
+            logger.error(
+                '[bootstrap] сигнальный сервер недоступен по адресу %s',
+                settings.http_url,
+            )
             return
         access, refresh = await _authenticate_headless(api, email, password)
         signal_client = SignalClient(url=settings.ws_url, access_token=access)
@@ -82,6 +88,7 @@ async def _run_headless(email: str | None, password: str | None) -> None:
 def _server_reachable(timeout_sec: float = 2.0) -> bool:
     import urllib.error
     import urllib.request
+
     url = settings.http_url.rstrip('/') + '/api/v1/health'
     try:
         with urllib.request.urlopen(url, timeout=timeout_sec) as resp:
@@ -99,6 +106,7 @@ class _PointingCursorFilter:
         class _Filter(QObject):
             def eventFilter(self, obj: QObject | None, event: QEvent) -> bool:
                 from PySide6.QtCore import QEvent, Qt
+
                 if event.type() == QEvent.Type.Polish and isinstance(obj, QPushButton):
                     obj.setCursor(Qt.CursorShape.PointingHandCursor)
                 return False
@@ -208,14 +216,20 @@ def _run_gui(demo: bool = False) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog='mavixdesktop', description='Mavix GCS')
-    parser.add_argument('--headless', action='store_true',
-                        help='Run coordinator without Qt UI')
-    parser.add_argument('--demo', action='store_true',
-                        help='Run UI with mock data (no server). '
-                             'Accepts any email/password, shows '
-                             'test drones and a mock joystick.')
+    parser.add_argument(
+        '--headless', action='store_true', help='Run coordinator without Qt UI'
+    )
+    parser.add_argument(
+        '--demo',
+        action='store_true',
+        help='Run UI with mock data (no server). '
+        'Accepts any email/password, shows '
+        'test drones and a mock joystick.',
+    )
     parser.add_argument('--email', help='email for login (first run, headless or GUI)')
-    parser.add_argument('--password', help='password for login (first run, headless only)')
+    parser.add_argument(
+        '--password', help='password for login (first run, headless only)'
+    )
     args = parser.parse_args()
 
     _init_dirs()

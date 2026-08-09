@@ -1,4 +1,5 @@
 """Encode joystick stick positions into CRSF RC channels frames (TBS Crossfire)."""
+
 from __future__ import annotations
 
 ADDR_FC = 0xC8
@@ -24,7 +25,9 @@ class CRSF:
         for byte in data:
             crc ^= byte
             for _ in range(8):
-                crc = ((crc << 1) ^ CRC8_POLY if crc & CRC8_MSB else crc << 1) & BYTE_MASK
+                crc = (
+                    (crc << 1) ^ CRC8_POLY if crc & CRC8_MSB else crc << 1
+                ) & BYTE_MASK
         return crc
 
     @staticmethod

@@ -1,4 +1,5 @@
 """MAVLink v2 packet builders for Mavix joystick -> PX4 path."""
+
 from __future__ import annotations
 
 from typing import Protocol, cast
@@ -33,7 +34,9 @@ class MavlinkEncoder:
         target_component: int = TARGET_COMPONENT_DEFAULT,
     ) -> None:
         self._mav = mavlink.MAVLink(
-            file=None, srcSystem=SRC_SYSTEM, srcComponent=SRC_COMPONENT,
+            file=None,
+            srcSystem=SRC_SYSTEM,
+            srcComponent=SRC_COMPONENT,
         )
         self.target_system = target_system
         self.target_component = target_component

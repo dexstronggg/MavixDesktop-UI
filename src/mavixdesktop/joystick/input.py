@@ -1,4 +1,5 @@
 """Read calibrated stick positions and ARM state from pygame Joystick."""
+
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -8,8 +9,11 @@ from typing import Any
 class JoystickInput:
     AXES: Iterable[str] = ('thr', 'yaw', 'pitch', 'roll')
 
-    def __init__(self, joystick_index: int, calibration: dict[str, Any], pump_events: bool = True) -> None:
+    def __init__(
+        self, joystick_index: int, calibration: dict[str, Any], pump_events: bool = True
+    ) -> None:
         import pygame
+
         pygame.joystick.init()
         self._joystick_index = joystick_index
         self._js = pygame.joystick.Joystick(joystick_index)
@@ -31,6 +35,7 @@ class JoystickInput:
 
     def is_connected(self) -> bool:
         import pygame
+
         if self._pump_events:
             pygame.event.pump()
         try:
@@ -46,6 +51,7 @@ class JoystickInput:
     def get_stick_positions(self) -> tuple[float, float, float, float]:
         if self._pump_events:
             import pygame
+
             pygame.event.pump()
         return (
             self._read_axis('thr'),

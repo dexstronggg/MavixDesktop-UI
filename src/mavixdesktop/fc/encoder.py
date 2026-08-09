@@ -1,4 +1,5 @@
 """Joystick stick positions -> CRSF RC frame."""
+
 from __future__ import annotations
 
 from mavixdesktop.fc.crsf import CH_MAX, CH_MIN, CRSF

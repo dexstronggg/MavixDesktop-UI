@@ -1,4 +1,5 @@
 """User config saved to ~/.config/mavixdesktop/config.json."""
+
 from __future__ import annotations
 
 import json
@@ -36,11 +37,16 @@ def load() -> dict[str, Any]:
         with USER_CONFIG_PATH.open('r', encoding='utf-8') as f:
             data = json.load(f)
         if not isinstance(data, dict):
-            logger.warning('[user-config] %s не является JSON-объектом, игнорируем', USER_CONFIG_PATH)
+            logger.warning(
+                '[user-config] %s не является JSON-объектом, игнорируем',
+                USER_CONFIG_PATH,
+            )
             return {}
         return data
     except (OSError, json.JSONDecodeError) as exc:
-        logger.warning('[user-config] не удалось прочитать %s: %s', USER_CONFIG_PATH, exc)
+        logger.warning(
+            '[user-config] не удалось прочитать %s: %s', USER_CONFIG_PATH, exc
+        )
         return {}
 
 
@@ -56,14 +62,14 @@ def save(values: dict[str, Any]) -> None:
 
 
 _MAPPING = {
-    'signal_url':    'SIGNAL_URL',
-    'stun_server':   'STUN_SERVER',
-    'turn_server':   'TURN_SERVER',
+    'signal_url': 'SIGNAL_URL',
+    'stun_server': 'STUN_SERVER',
+    'turn_server': 'TURN_SERVER',
     'turn_username': 'TURN_USERNAME',
     'turn_password': 'TURN_PASSWORD',
-    'qgc_host':      'QGC_HOST',
-    'qgc_port':      'QGC_PORT',
-    'force_relay':   'FORCE_RELAY',
+    'qgc_host': 'QGC_HOST',
+    'qgc_port': 'QGC_PORT',
+    'force_relay': 'FORCE_RELAY',
 }
 
 _MANAGED_KEYS: set[str] = set()
@@ -75,7 +81,12 @@ def load_ui_scale() -> int:
     try:
         value = int(raw)
     except (TypeError, ValueError):
-        logger.warning('[user-config] некорректный %s=%r, беру %d', UI_SCALE_KEY, raw, UI_SCALE_DEFAULT)
+        logger.warning(
+            '[user-config] некорректный %s=%r, беру %d',
+            UI_SCALE_KEY,
+            raw,
+            UI_SCALE_DEFAULT,
+        )
         return UI_SCALE_DEFAULT
     return max(UI_SCALE_MIN, min(UI_SCALE_MAX, value))
 

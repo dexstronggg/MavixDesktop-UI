@@ -1,4 +1,5 @@
 """State of the current drone connection session."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

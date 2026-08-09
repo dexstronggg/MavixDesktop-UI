@@ -1,30 +1,31 @@
 """Design system — single file for all visual settings."""
+
 from __future__ import annotations
 
-BG            = '#07090E'
-BG_SURFACE    = '#11151D'
-BG_INPUT      = '#161B24'
-BG_HOVER      = '#1A2030'
-BORDER        = '#1F2733'
-BORDER_HOVER  = '#2A3340'
-BORDER_FOCUS  = '#22d3ee'
-ACCENT        = '#22d3ee'
-ACCENT_HOVER  = '#67e8f9'
-ACCENT_PRESS  = '#06b6d4'
+BG = '#07090E'
+BG_SURFACE = '#11151D'
+BG_INPUT = '#161B24'
+BG_HOVER = '#1A2030'
+BORDER = '#1F2733'
+BORDER_HOVER = '#2A3340'
+BORDER_FOCUS = '#22d3ee'
+ACCENT = '#22d3ee'
+ACCENT_HOVER = '#67e8f9'
+ACCENT_PRESS = '#06b6d4'
 ACCENT_SUBTLE = 'rgba(34, 211, 238, 0.12)'
-CYAN          = '#22d3ee'
-TEXT_PRIMARY  = '#E8EEF5'
-TEXT_MUTED    = '#8893A4'
+CYAN = '#22d3ee'
+TEXT_PRIMARY = '#E8EEF5'
+TEXT_MUTED = '#8893A4'
 TEXT_DISABLED = '#4A5563'
-BORDER_DARK   = '#0E1117'
-STATUS_READY  = '#4ADE80'
-STATUS_ERROR  = '#F87171'
-STATUS_ARM    = '#4ADE80'
+BORDER_DARK = '#0E1117'
+STATUS_READY = '#4ADE80'
+STATUS_ERROR = '#F87171'
+STATUS_ARM = '#4ADE80'
 STATUS_DISARM = '#F87171'
-WARNING       = '#FBBF24'
-BG_VIDEO      = '#000000'
+WARNING = '#FBBF24'
+BG_VIDEO = '#000000'
 
-FONT_FAMILY      = "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+FONT_FAMILY = "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
 FONT_FAMILY_MONO = "'JetBrains Mono', 'SF Mono', 'Cascadia Mono', Consolas, monospace"
 
 SPACE_XS = 4
@@ -37,21 +38,21 @@ RADIUS_SM = 6
 RADIUS_MD = 8
 RADIUS_LG = 12
 
-FONT_SIZE_SM    = 14
-FONT_SIZE_BASE  = 16
-FONT_SIZE_LG    = 20
+FONT_SIZE_SM = 14
+FONT_SIZE_BASE = 16
+FONT_SIZE_LG = 20
 FONT_SIZE_TITLE = 24
-FONT_SIZE_HERO  = 32
+FONT_SIZE_HERO = 32
 
-OVERLAY_BTN_CORNER      = 60
+OVERLAY_BTN_CORNER = 60
 OVERLAY_BTN_CORNER_ICON = 36
-OVERLAY_BTN_SIDE        = 64
-OVERLAY_BTN_SIDE_FONT   = 24
+OVERLAY_BTN_SIDE = 64
+OVERLAY_BTN_SIDE_FONT = 24
 
 ANIM_FAST = 150
-ANIM_MED  = 200
+ANIM_MED = 200
 
-QSS_GLOBAL = f'''
+QSS_GLOBAL = f"""
 QWidget {{
     background-color: {BG};
     color: {TEXT_PRIMARY};
@@ -365,9 +366,9 @@ QLabel {{
     color: {TEXT_PRIMARY};
     background: transparent;
 }}
-'''
+"""
 
-QSS_INPUT = f'''
+QSS_INPUT = f"""
 QLineEdit {{
     background-color: {BG_INPUT};
     color: {TEXT_PRIMARY};
@@ -384,9 +385,9 @@ QLineEdit:hover:!focus {{
 QLineEdit:focus {{
     border-color: {ACCENT};
 }}
-'''
+"""
 
-QSS_BUTTON_PRIMARY = f'''
+QSS_BUTTON_PRIMARY = f"""
 QPushButton {{
     background-color: {ACCENT};
     color: {BG};
@@ -408,9 +409,9 @@ QPushButton:disabled {{
     color: {TEXT_DISABLED};
     border: none;
 }}
-'''
+"""
 
-QSS_BUTTON_SECONDARY = f'''
+QSS_BUTTON_SECONDARY = f"""
 QPushButton {{
     background-color: transparent;
     color: {TEXT_MUTED};
@@ -428,17 +429,17 @@ QPushButton:pressed {{
     background-color: {BG_INPUT};
     color: {ACCENT};
 }}
-'''
+"""
 
-QSS_TOKEN_CARD = f'''
+QSS_TOKEN_CARD = f"""
 QWidget#tokenCard {{
     background-color: {BG_INPUT};
     border: 1px solid {BORDER};
     border-radius: {RADIUS_LG}px;
 }}
-'''
+"""
 
-QSS_BUTTON_ICON = f'''
+QSS_BUTTON_ICON = f"""
 QPushButton {{
     background: transparent;
     border: none;
@@ -454,9 +455,9 @@ QPushButton:pressed {{
 QPushButton:disabled {{
     background: transparent;
 }}
-'''
+"""
 
-QSS_SLIDER = f'''
+QSS_SLIDER = f"""
 QSlider::groove:horizontal {{
     background: {BG_HOVER};
     border: 1px solid {BORDER};
@@ -480,4 +481,4 @@ QSlider::handle:horizontal {{
 QSlider::handle:horizontal:hover {{
     background: {ACCENT_HOVER};
 }}
-'''
+"""

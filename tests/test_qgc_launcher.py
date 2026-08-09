@@ -60,8 +60,10 @@ def test_find_qgc_prefers_saved_path(tmp_path, monkeypatch) -> None:
     fake.write_text('binary')
     launcher.save_qgc_path(fake)
     monkeypatch.setattr('mavixdesktop.qgc.launcher.platform.system', lambda: 'Linux')
-    monkeypatch.setattr('mavixdesktop.qgc.launcher._find_qgc_linux',
-                        lambda *a: pytest.fail('search should not run'))
+    monkeypatch.setattr(
+        'mavixdesktop.qgc.launcher._find_qgc_linux',
+        lambda *a: pytest.fail('search should not run'),
+    )
     assert launcher.find_qgc() == fake
 
 
@@ -69,8 +71,10 @@ def test_find_qgc_uses_path_on_linux_and_saves(monkeypatch, tmp_path) -> None:
     fake = tmp_path / 'QGroundControl'
     fake.write_text('binary')
     monkeypatch.setattr('mavixdesktop.qgc.launcher.platform.system', lambda: 'Linux')
-    monkeypatch.setattr('mavixdesktop.qgc.launcher.shutil.which',
-                        lambda name: str(fake) if name == 'QGroundControl' else None)
+    monkeypatch.setattr(
+        'mavixdesktop.qgc.launcher.shutil.which',
+        lambda name: str(fake) if name == 'QGroundControl' else None,
+    )
     result = launcher.find_qgc()
     assert result == fake
     assert user_config.load()['qgc_path'] == str(fake)
@@ -146,8 +150,10 @@ def test_launch_qgc_uses_explicit_path(monkeypatch, tmp_path) -> None:
     fake = tmp_path / 'qgc'
     fake.write_text('#!/bin/sh\necho ok\n')
     fake.chmod(0o755)
-    monkeypatch.setattr('mavixdesktop.qgc.launcher.find_qgc',
-                        lambda *a: pytest.fail('find_qgc should not be called'))
+    monkeypatch.setattr(
+        'mavixdesktop.qgc.launcher.find_qgc',
+        lambda *a: pytest.fail('find_qgc should not be called'),
+    )
 
     popen_seen = {}
 
@@ -186,6 +192,8 @@ def test_launch_qgc_sets_sdl_env_via_find(monkeypatch, tmp_path) -> None:
 def test_launch_qgc_handles_popen_error(monkeypatch, tmp_path) -> None:
     fake = tmp_path / 'qgc'
     fake.write_text('x')
-    monkeypatch.setattr('mavixdesktop.qgc.launcher.subprocess.Popen',
-                        MagicMock(side_effect=OSError('exec')))
+    monkeypatch.setattr(
+        'mavixdesktop.qgc.launcher.subprocess.Popen',
+        MagicMock(side_effect=OSError('exec')),
+    )
     assert launcher.launch_qgc(qgc_path=fake) is None

@@ -1,4 +1,5 @@
 """Smoke tests for the Qt UI: imports + widget construction under offscreen QPA. These tests deliberately avoid driving the asyncio thread in ConnectionManager (login / coordinator), so no real network or PyAV codec setup happens."""
+
 from __future__ import annotations
 
 import os
@@ -12,18 +13,21 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 @pytest.fixture(scope='session')
 def qapp():
     from PySide6.QtWidgets import QApplication
+
     app = QApplication.instance() or QApplication(sys.argv)
     yield app
 
 
 def test_login_page_constructs(qapp):
     from mavixdesktop.ui.login_page import LoginPage
+
     page = LoginPage(on_login=lambda email, pw: None)
     assert page is not None
 
 
 def test_login_page_set_error(qapp):
     from mavixdesktop.ui.login_page import LoginPage
+
     page = LoginPage(on_login=lambda email, pw: None)
     page.set_error('bad credentials')
     assert page.error.text() == 'bad credentials'
@@ -31,6 +35,7 @@ def test_login_page_set_error(qapp):
 
 def test_login_submit_requires_both_fields(qapp):
     from mavixdesktop.ui.login_page import LoginPage
+
     captured: list = []
 
     page = LoginPage(on_login=lambda email, pw: captured.append((email, pw)))
@@ -47,6 +52,7 @@ def test_login_submit_requires_both_fields(qapp):
 
 def test_bridge_imports(qapp):
     from mavixdesktop.ui.screens.bridge import Bridge
+
     b = Bridge()
     assert hasattr(b, 'client_list_updated')
     assert hasattr(b, 'fc_info_received')
@@ -54,21 +60,25 @@ def test_bridge_imports(qapp):
 
 def test_drone_list_page_update_with_new_format(qapp):
     from mavixdesktop.ui.screens.drone_list_page import DroneListPage
+
     page = DroneListPage(
         on_select=lambda _id: None,
         on_refresh=lambda: None,
         on_logout=lambda: None,
         on_joystick_cfg=lambda: None,
     )
-    page.update([
-        {'drone_id': 'd-1', 'online': True},
-        {'drone_id': 'd-2', 'online': False},
-    ])
+    page.update(
+        [
+            {'drone_id': 'd-1', 'online': True},
+            {'drone_id': 'd-2', 'online': False},
+        ]
+    )
     page.update([])
 
 
 def test_drone_list_page_update_with_legacy_format(qapp):
     from mavixdesktop.ui.screens.drone_list_page import DroneListPage
+
     page = DroneListPage(
         on_select=lambda _id: None,
         on_refresh=lambda: None,
@@ -85,6 +95,7 @@ def test_app_constructs_without_login(qapp, monkeypatch):
     )
 
     from mavixdesktop.ui.app import App
+
     app = App()
     assert app.stack.currentWidget() is app.login_page
 
@@ -96,6 +107,7 @@ def test_app_close_without_session(qapp, monkeypatch):
     )
 
     from mavixdesktop.ui.app import App
+
     app = App()
     app.close()
 
@@ -110,18 +122,22 @@ def test_app_resumes_when_refresh_token_stored(qapp, monkeypatch):
 
     async def _no_op(self, *a, **kw):
         return None
+
     monkeypatch.setattr(conn_mod.ConnectionManager, '_refresh_and_run', _no_op)
 
     from mavixdesktop.ui.app import App
+
     app = App()
     assert app.stack.currentWidget() is app.drone_list_page
 
 
 def test_settings_page_ui_scale_slider(qapp, tmp_path, monkeypatch):
     from mavixdesktop.core import user_config
+
     monkeypatch.setattr(user_config, 'USER_CONFIG_PATH', tmp_path / 'config.json')
 
     from mavixdesktop.ui.screens.settings_page import SettingsPage
+
     page = SettingsPage(on_close=lambda: None)
 
     slider = page._ui_scale_slider
@@ -137,10 +153,15 @@ def test_settings_page_ui_scale_slider(qapp, tmp_path, monkeypatch):
 
 def test_drone_view_quality_overlays(qapp):
     from mavixdesktop.ui.screens.drone_view import DroneViewPage
+
     page = DroneViewPage(
-        on_back=lambda: None, on_prev=lambda: None, on_next=lambda: None,
-        on_save=lambda: None, on_joystick_cfg=lambda: None,
-        on_takeoff=lambda: None, on_calibrate=lambda: None,
+        on_back=lambda: None,
+        on_prev=lambda: None,
+        on_next=lambda: None,
+        on_save=lambda: None,
+        on_joystick_cfg=lambda: None,
+        on_takeoff=lambda: None,
+        on_calibrate=lambda: None,
     )
     panel = page._video_panel
 
@@ -174,14 +195,18 @@ def test_quality_line_and_table_render(qapp):
     assert 'нет данных' in idle_text
 
     ok_text, ok_color = format_quality_line(
-        LinkSnapshot(level=LEVEL_OK, bitrate_in_kbps=2400.0, loss_pct=0.3, rtt_p95_ms=78.0)
+        LinkSnapshot(
+            level=LEVEL_OK, bitrate_in_kbps=2400.0, loss_pct=0.3, rtt_p95_ms=78.0
+        )
     )
     assert '2.4 Мбит/с' in ok_text and '0.3%' in ok_text and '78 мс' in ok_text
 
     _, bad_color = format_quality_line(LinkSnapshot(level=LEVEL_BAD))
     assert bad_color != ok_color
 
-    table = format_stats_table(LinkSnapshot(level=LEVEL_OK, bitrate_in_kbps=2400.0, pli=3))
+    table = format_stats_table(
+        LinkSnapshot(level=LEVEL_OK, bitrate_in_kbps=2400.0, pli=3)
+    )
     assert 'входящий поток' in table
     assert 'запросов ключевого кадра' in table
     assert '—' in table, 'метрики борта без данных показываются прочерком'
@@ -206,15 +231,24 @@ def test_flight_window_quality_overlays(qapp):
             return False
 
     window = FlightWindow(
-        joystick_input=FakeJoystick(), signalling=None,
-        get_frame=lambda idx: None, cam_count=lambda: 1,
-        loop=None, on_close=lambda: None, fc_kind='crsf', passive=True,
+        joystick_input=FakeJoystick(),
+        signalling=None,
+        get_frame=lambda idx: None,
+        cam_count=lambda: 1,
+        loop=None,
+        on_close=lambda: None,
+        fc_kind='crsf',
+        passive=True,
     )
     window.resize(1280, 720)
 
-    window.update_quality(*format_quality_line(
-        LinkSnapshot(level=LEVEL_BAD, bitrate_in_kbps=900.0, loss_pct=4.2, rtt_p95_ms=530.0)
-    ))
+    window.update_quality(
+        *format_quality_line(
+            LinkSnapshot(
+                level=LEVEL_BAD, bitrate_in_kbps=900.0, loss_pct=4.2, rtt_p95_ms=530.0
+            )
+        )
+    )
     assert '0.9 Мбит/с' in window._quality_lbl.text()
 
     assert window._stale_lbl.isHidden()
@@ -236,9 +270,14 @@ def test_flight_window_joystick_lost_label_depends_on_fc_kind(qapp):
 
     for kind, expect_disarm in (('crsf', True), ('mavlink', False)):
         window = FlightWindow(
-            joystick_input=FakeJoystick(), signalling=None,
-            get_frame=lambda idx: None, cam_count=lambda: 1,
-            loop=None, on_close=lambda: None, fc_kind=kind, passive=True,
+            joystick_input=FakeJoystick(),
+            signalling=None,
+            get_frame=lambda idx: None,
+            cam_count=lambda: 1,
+            loop=None,
+            on_close=lambda: None,
+            fc_kind=kind,
+            passive=True,
         )
         window._FlightWindow__handle_joystick_lost()
         text = window._lost_lbl.text()
@@ -256,6 +295,7 @@ def test_flight_closed_stops_arm_listener(qapp, monkeypatch):
     )
 
     from mavixdesktop.ui.app import App
+
     app = App()
     calls: list[str] = []
     monkeypatch.setattr(app, '_stop_joystick_guard', lambda: calls.append('guard'))
@@ -280,6 +320,7 @@ def test_bitrate_input_is_bounded(qapp):
         BITRATE_MIN_KBS,
         SettingsBar,
     )
+
     bar = SettingsBar(on_save=lambda: None, on_calibrate=lambda: None)
 
     bar.bitrate_input.setText('2500')
@@ -305,6 +346,7 @@ def test_bitrate_out_of_range_is_flagged(qapp):
         BITRATE_MIN_KBS,
         SettingsBar,
     )
+
     bar = SettingsBar(on_save=lambda: None, on_calibrate=lambda: None)
 
     bar.bitrate_input.setText('2500')
@@ -312,7 +354,9 @@ def test_bitrate_out_of_range_is_flagged(qapp):
     assert 'border' not in bar.bitrate_input.styleSheet()
 
     bar.bitrate_input.setText('50')
-    assert not bar.bitrate_hint.isHidden(), 'значение вне диапазона должно подсвечиваться'
+    assert not bar.bitrate_hint.isHidden(), (
+        'значение вне диапазона должно подсвечиваться'
+    )
     assert 'border' in bar.bitrate_input.styleSheet()
     assert str(BITRATE_MIN_KBS) in bar.bitrate_hint.text()
 
@@ -321,7 +365,9 @@ def test_bitrate_out_of_range_is_flagged(qapp):
 
     bar.bitrate_input.setText('50')
     assert bar.selected_bitrate() == BITRATE_MIN_KBS
-    assert bar.bitrate_input.text() == str(BITRATE_MIN_KBS), 'поле показывает реально применённое'
+    assert bar.bitrate_input.text() == str(BITRATE_MIN_KBS), (
+        'поле показывает реально применённое'
+    )
 
     bar.bitrate_input.setText('99999')
     assert bar.selected_bitrate() == BITRATE_MAX_KBS
@@ -349,7 +395,9 @@ def test_help_text_covers_every_metric_and_the_log_path(qapp):
     for name, unit, _ in help_text.METRICS:
         assert name in html, f'в справке нет показателя «{name}»'
         assert unit in html, f'у показателя «{name}» не указана единица измерения'
-    assert 'stats_' in html and '.jsonl' in html, 'в справке нет пути к файлу статистики'
+    assert 'stats_' in html and '.jsonl' in html, (
+        'в справке нет пути к файлу статистики'
+    )
     assert 'stats_report.py' in html
     for key in ('S  /  Ы', 'I  /  Ш', 'Esc'):
         assert key in html
@@ -362,18 +410,28 @@ def test_hotkeys_work_in_both_layouts(qapp, monkeypatch):
     from mavixdesktop.ui.screens.drone_view import DroneViewPage
 
     page = DroneViewPage(
-        on_back=lambda: None, on_prev=lambda: None, on_next=lambda: None,
-        on_save=lambda: None, on_joystick_cfg=lambda: None,
-        on_takeoff=lambda: None, on_calibrate=lambda: None,
+        on_back=lambda: None,
+        on_prev=lambda: None,
+        on_next=lambda: None,
+        on_save=lambda: None,
+        on_joystick_cfg=lambda: None,
+        on_takeoff=lambda: None,
+        on_calibrate=lambda: None,
     )
     opened: list[str] = []
     monkeypatch.setattr(page._video_panel, 'toggle_help', lambda: opened.append('help'))
 
     def press(key: int, text: str) -> None:
-        page.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier, text))
+        page.keyPressEvent(
+            QKeyEvent(
+                QKeyEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier, text
+            )
+        )
 
     press(Qt.Key.Key_S, 's')
-    assert not page._video_panel.stats_panel.isHidden(), 'латинская S не открыла таблицу'
+    assert not page._video_panel.stats_panel.isHidden(), (
+        'латинская S не открыла таблицу'
+    )
     press(0, 'ы')
     assert page._video_panel.stats_panel.isHidden(), 'русская ы не закрыла таблицу'
 

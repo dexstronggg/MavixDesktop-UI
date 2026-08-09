@@ -1,4 +1,5 @@
 """DroneViewPage — video viewing page with camera settings."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -14,10 +15,16 @@ from mavixdesktop.ui.screens.drone_view.video_panel import VideoPanel
 
 
 class DroneViewPage(QWidget):
-    def __init__(self, on_back: Callable[[], None], on_prev: Callable[[], object],
-                 on_next: Callable[[], object], on_save: Callable[[], None],
-                 on_joystick_cfg: Callable[[], None], on_takeoff: Callable[[], None],
-                 on_calibrate: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        on_back: Callable[[], None],
+        on_prev: Callable[[], object],
+        on_next: Callable[[], object],
+        on_save: Callable[[], None],
+        on_joystick_cfg: Callable[[], None],
+        on_takeoff: Callable[[], None],
+        on_calibrate: Callable[[], None],
+    ) -> None:
         super().__init__()
         self._on_prev = on_prev
         self._on_next = on_next
@@ -28,8 +35,10 @@ class DroneViewPage(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
 
         self._video_panel = VideoPanel(
-            on_prev=on_prev, on_next=on_next,
-            on_back=on_back, on_joy=on_joystick_cfg,
+            on_prev=on_prev,
+            on_next=on_next,
+            on_back=on_back,
+            on_joy=on_joystick_cfg,
             on_takeoff=on_takeoff,
         )
         self._settings_bar = SettingsBar(on_save=on_save, on_calibrate=on_calibrate)

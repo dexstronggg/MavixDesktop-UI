@@ -1,4 +1,5 @@
 """Video panel with overlay control buttons."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -24,9 +25,14 @@ from mavixdesktop.ui.style import theme
 
 
 class VideoPanel(QWidget):
-    def __init__(self, on_prev: Callable[[], object], on_next: Callable[[], object],
-                 on_back: Callable[[], None], on_joy: Callable[[], None],
-                 on_takeoff: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        on_prev: Callable[[], object],
+        on_next: Callable[[], object],
+        on_back: Callable[[], None],
+        on_joy: Callable[[], None],
+        on_takeoff: Callable[[], None],
+    ) -> None:
         super().__init__()
 
         self.video = QLabel(self)
@@ -41,9 +47,14 @@ class VideoPanel(QWidget):
         self.__build_error_overlay()
         self.__reposition(800, 600)
 
-    def __build_controls(self, on_prev: Callable[[], object], on_next: Callable[[], object],
-                         on_back: Callable[[], None], on_joy: Callable[[], None],
-                         on_takeoff: Callable[[], None]) -> None:
+    def __build_controls(
+        self,
+        on_prev: Callable[[], object],
+        on_next: Callable[[], object],
+        on_back: Callable[[], None],
+        on_joy: Callable[[], None],
+        on_takeoff: Callable[[], None],
+    ) -> None:
         self.back_btn = overlay_icon_btn('arrow_back.svg', self)
         self.back_btn.setToolTip('Назад к списку дронов')
         self.back_btn.clicked.connect(on_back)
@@ -90,7 +101,9 @@ class VideoPanel(QWidget):
 
     def __build_quality_overlays(self) -> None:
         self.quality_overlay = QLabel('—', self)
-        self.quality_overlay.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        self.quality_overlay.setAlignment(
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
+        )
         self.quality_overlay.setStyleSheet(self.__quality_qss(theme.TEXT_MUTED))
         self.quality_overlay.adjustSize()
 
@@ -110,7 +123,9 @@ class VideoPanel(QWidget):
         self.stale_overlay.hide()
 
         self.stats_panel = QLabel('', self)
-        self.stats_panel.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self.stats_panel.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
+        )
         self.stats_panel.setStyleSheet(f"""
             QLabel {{
                 background: rgba(0,0,0,0.72);
@@ -182,7 +197,10 @@ class VideoPanel(QWidget):
         layout.setContentsMargins(28, 22, 28, 22)
         layout.setSpacing(14)
 
-        label = QLabel('Идёт калибровка камеры…\nЭто может занять продолжительное время', self.calib_overlay)
+        label = QLabel(
+            'Идёт калибровка камеры…\nЭто может занять продолжительное время',
+            self.calib_overlay,
+        )
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY};'
@@ -299,14 +317,19 @@ class VideoPanel(QWidget):
 
         self.back_btn.move(16, 16)
         self.joy_btn.move(w - c - 16, 16)
-        self.help_btn.move(w - c - 16 - self.help_btn.width() - 12, 16 + (c - self.help_btn.height()) // 2)
+        self.help_btn.move(
+            w - c - 16 - self.help_btn.width() - 12,
+            16 + (c - self.help_btn.height()) // 2,
+        )
         self.warn_lbl.adjustSize()
         self.warn_lbl.move((w - self.warn_lbl.width()) // 2, 16)
 
         self.prev_btn.move(16, (h - s) // 2)
         self.next_btn.move(w - s - 16, (h - s) // 2)
 
-        self.takeoff_btn.move((w - self.takeoff_btn.width()) // 2, h - self.takeoff_btn.height() - 56)
+        self.takeoff_btn.move(
+            (w - self.takeoff_btn.width()) // 2, h - self.takeoff_btn.height() - 56
+        )
 
         self.battery_overlay.move(
             w - self.battery_overlay.width() - 16,
@@ -336,7 +359,9 @@ class VideoPanel(QWidget):
         qimg = QImage(img.data, w, h, ch * w, QImage.Format.Format_BGR888)
         self.video.setPixmap(
             QPixmap.fromImage(qimg).scaled(
-                self.video.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+                self.video.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
             )
         )
         if self.calib_overlay.isVisible():

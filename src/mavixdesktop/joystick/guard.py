@@ -1,4 +1,5 @@
 """Monitors JoystickInput for disconnect during flight and sends a disarm frame."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -14,7 +15,9 @@ def _build_mavlink_disarm() -> bytes | None:
 
         from mavixdesktop.fc.mavlink_encoder import ARM_FORCE_MAGIC
     except ImportError:
-        logger.warning('[joystick-guard] pymavlink не установлен; mavlink disarm пропущен')
+        logger.warning(
+            '[joystick-guard] pymavlink не установлен; mavlink disarm пропущен'
+        )
         return None
     mav = mavlink.MAVLink(file=None, srcSystem=255, srcComponent=190)
     msg = mavlink.MAVLink_command_long_message(
@@ -24,13 +27,18 @@ def _build_mavlink_disarm() -> bytes | None:
         confirmation=0,
         param1=0.0,
         param2=float(ARM_FORCE_MAGIC),
-        param3=0.0, param4=0.0, param5=0.0, param6=0.0, param7=0.0,
+        param3=0.0,
+        param4=0.0,
+        param5=0.0,
+        param6=0.0,
+        param7=0.0,
     )
     return cast(bytes, msg.pack(mav))
 
 
 def _build_crsf_disarm() -> bytes:
     from mavixdesktop.fc.encoder import build_rc_frame
+
     return build_rc_frame(throttle=-1.0, roll=0.0, pitch=0.0, yaw=0.0, armed=False)
 
 
@@ -78,7 +86,8 @@ class JoystickGuard:
                 self._send(frame)
                 logger.warning(
                     '[joystick-guard] joystick потерян, отправлен %s disarm (%d байт)',
-                    self._fc_type, len(frame),
+                    self._fc_type,
+                    len(frame),
                 )
             except Exception as exc:
                 logger.error('[joystick-guard] отправка не удалась: %s', exc)

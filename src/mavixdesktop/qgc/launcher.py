@@ -1,4 +1,5 @@
 """Find and launch QGroundControl with SDL_GAMECONTROLLERCONFIG env var."""
+
 from __future__ import annotations
 
 import contextlib
@@ -80,7 +81,9 @@ def _is_qgc_windows_exe(name: str) -> bool:
 
 def _is_qgc_linux_file(name: str) -> bool:
     n = name.lower()
-    return n == 'qgroundcontrol' or (n.startswith('qgroundcontrol') and n.endswith('.appimage'))
+    return n == 'qgroundcontrol' or (
+        n.startswith('qgroundcontrol') and n.endswith('.appimage')
+    )
 
 
 def _bounded_find(
@@ -114,9 +117,8 @@ def _bounded_find(
                     try:
                         if entry.is_file() and predicate(entry.name):
                             return Path(entry.path)
-                        if (
-                            depth < _SEARCH_MAX_DEPTH
-                            and entry.is_dir(follow_symlinks=False)
+                        if depth < _SEARCH_MAX_DEPTH and entry.is_dir(
+                            follow_symlinks=False
                         ):
                             stack.append((Path(entry.path), depth + 1))
                     except OSError:
@@ -204,7 +206,9 @@ def is_qgc_running() -> bool:
     return False
 
 
-def launch_qgc(sdl_config: str = '', qgc_path: Path | None = None) -> subprocess.Popen[bytes] | None:
+def launch_qgc(
+    sdl_config: str = '', qgc_path: Path | None = None
+) -> subprocess.Popen[bytes] | None:
     if qgc_path is None:
         qgc_path = find_qgc()
     if not qgc_path:

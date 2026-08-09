@@ -1,8 +1,10 @@
 """Video stream manager: decoded frames go to the UI as they arrive, newest wins."""
+
 from __future__ import annotations
 
 import asyncio
 import threading
+import time
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -49,20 +51,30 @@ class VideoManager:
         self._stats_timer = QTimer(interval=self.STATS_INTERVAL_MS)
         self._stats_timer.timeout.connect(self._log_stats)
 
+        self._rendered_fps_prev_count = 0
+        self._rendered_fps_prev_at: float | None = None
+
     def on_track(self, track: MediaStreamTrack) -> None:
         if track.kind != 'video':
             return
         with self._lock:
             self._track_ids.append(track.id)
         logger.info('[video] трек получен: id=%s', track.id)
-        self._receive_tasks.append(asyncio.create_task(self._receive(cast(VideoStreamTrack, track))))
+        self._receive_tasks.append(
+            asyncio.create_task(self._receive(cast(VideoStreamTrack, track)))
+        )
 
     async def _receive(self, track: VideoStreamTrack) -> None:
         loop = asyncio.get_event_loop()
         try:
             while True:
                 frame = cast(VideoFrame, await track.recv())
-                img = await loop.run_in_executor(None, cast(Callable[[], Any], lambda f=frame: f.to_ndarray(format='bgr24')))
+                img = await loop.run_in_executor(
+                    None,
+                    cast(
+                        Callable[[], Any], lambda f=frame: f.to_ndarray(format='bgr24')
+                    ),
+                )
                 self._publish(track.id, img)
         except asyncio.CancelledError:
             return
@@ -179,14 +191,36 @@ class VideoManager:
                 task.cancel()
         self._receive_tasks.clear()
 
+    def rendered_fps(self) -> float:
+        """Средний fps отрисовки с прошлого вызова; первый вызов возвращает 0."""
+        now = time.monotonic()
+        with self._lock:
+            rendered = self._rendered
+        prev_at = self._rendered_fps_prev_at
+        prev_count = self._rendered_fps_prev_count
+        self._rendered_fps_prev_at = now
+        self._rendered_fps_prev_count = rendered
+        if prev_at is None:
+            return 0.0
+        elapsed = now - prev_at
+        if elapsed <= 0:
+            return 0.0
+        return (rendered - prev_count) / elapsed
+
     def _log_stats(self) -> None:
         with self._lock:
-            decoded, rendered, coalesced = self._decoded, self._rendered, self._coalesced
+            decoded, rendered, coalesced = (
+                self._decoded,
+                self._rendered,
+                self._coalesced,
+            )
             self._decoded = self._rendered = self._coalesced = 0
         if not decoded and not rendered:
             return
         secs = self.STATS_INTERVAL_MS / 1000
         logger.info(
             '[video] декодировано %.1f к/с, отрисовано %.1f к/с, вытеснено %d',
-            decoded / secs, rendered / secs, coalesced,
+            decoded / secs,
+            rendered / secs,
+            coalesced,
         )

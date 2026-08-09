@@ -1,4 +1,5 @@
 """Окно справки: заголовок с крестиком, прокрутка, размер по родителю."""
+
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
@@ -35,7 +36,9 @@ class HelpDialog(QDialog):
         """)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(theme.SPACE_LG, theme.SPACE_MD, theme.SPACE_LG, theme.SPACE_MD)
+        root.setContentsMargins(
+            theme.SPACE_LG, theme.SPACE_MD, theme.SPACE_LG, theme.SPACE_MD
+        )
         root.setSpacing(theme.SPACE_SM)
         root.addLayout(self.__build_header())
         root.addWidget(self.__build_body(), 1)
@@ -79,9 +82,15 @@ class HelpDialog(QDialog):
         self.content = QLabel(as_html())
         self.content.setTextFormat(Qt.TextFormat.RichText)
         self.content.setWordWrap(True)
-        self.content.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self.content.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.content.setStyleSheet(f'color: {theme.TEXT_PRIMARY}; background: transparent;')
+        self.content.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
+        )
+        self.content.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self.content.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; background: transparent;'
+        )
 
         scroll = QScrollArea()
         scroll.setWidget(self.content)
@@ -93,7 +102,9 @@ class HelpDialog(QDialog):
     def __fit_to_parent(self) -> None:
         """Размер по содержимому, но не больше окна: иначе справка уезжает за экран."""
         parent = self.parentWidget()
-        available = parent.size() if parent is not None else self.screen().availableSize()
+        available = (
+            parent.size() if parent is not None else self.screen().availableSize()
+        )
         max_w = min(_MAX_WIDTH, max(320, available.width() - _MARGIN))
         max_h = max(240, available.height() - _MARGIN)
 

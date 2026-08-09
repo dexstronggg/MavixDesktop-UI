@@ -29,12 +29,18 @@ class SignalClient:
     async def connect(self) -> bool:
         try:
             self._conn = await ws_connect(self._url)
-        except (OSError, websockets.exceptions.InvalidURI, websockets.exceptions.InvalidHandshake) as exc:
+        except (
+            OSError,
+            websockets.exceptions.InvalidURI,
+            websockets.exceptions.InvalidHandshake,
+        ) as exc:
             logger.info('[signal] ошибка подключения: %s', exc)
             self._conn = None
             return False
         try:
-            await self._conn.send(json.dumps({'type': 'auth', 'token': self._access_token}))
+            await self._conn.send(
+                json.dumps({'type': 'auth', 'token': self._access_token})
+            )
         except (websockets.exceptions.ConnectionClosed, OSError) as exc:
             logger.info('[signal] ошибка отправки auth: %s', exc)
             await self.disconnect()
@@ -56,7 +62,9 @@ class SignalClient:
             raise RuntimeError('signal-клиент не подключён')
         await self._conn.send(json.dumps(payload))
 
-    async def listen(self, on_message: Callable[[dict[str, Any]], Awaitable[None]]) -> None:
+    async def listen(
+        self, on_message: Callable[[dict[str, Any]], Awaitable[None]]
+    ) -> None:
         if self._conn is None:
             raise RuntimeError('signal-клиент не подключён')
         async for raw in self._conn:

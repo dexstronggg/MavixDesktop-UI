@@ -1,4 +1,5 @@
 """Wrappers around aiortc RTCDataChannel — one per label."""
+
 from __future__ import annotations
 
 import json
@@ -77,7 +78,9 @@ class PacketChannel(_BaseChannel):
         self.dropped += 1
         self._drop_warnings += 1
         if self._drop_warnings == 1 or self._drop_warnings % 50 == 0:
-            logger.warning('[dc:packet] потеряно пакетов при отправке: %d', self.dropped)
+            logger.warning(
+                '[dc:packet] потеряно пакетов при отправке: %d', self.dropped
+            )
 
     def _on_message(self, message: object) -> None:
         if not isinstance(message, (bytes, bytearray, memoryview)):
@@ -122,7 +125,7 @@ class PingChannel(_BaseChannel):
         if len(raw) != self._PAYLOAD_SIZE:
             return
         try:
-            sent_at, = struct.unpack(self._PAYLOAD_FMT, raw)
+            (sent_at,) = struct.unpack(self._PAYLOAD_FMT, raw)
         except struct.error:
             return
         self._last_rtt_ms = (time.monotonic() - sent_at) * 1000.0
@@ -213,7 +216,10 @@ class DataChannelHub:
         elif cls is ConfigChannel:
             self.config = cast(ConfigChannel, wrapped)
         if old is not None and old._ch is not channel:
-            logger.info('[hub] закрываем старый data-канал %s при повторном attach', channel.label)
+            logger.info(
+                '[hub] закрываем старый data-канал %s при повторном attach',
+                channel.label,
+            )
             try:
                 old._ch.close()
             except Exception as exc:

@@ -1,4 +1,5 @@
 """Bottom settings bar for the drone view."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -53,14 +54,19 @@ class _PopupItemDelegate(QStyledItemDelegate):
     def set_hover_index(self, index: QModelIndex) -> None:
         self._hover_index = QModelIndex(index) if index is not None else QModelIndex()
 
-    def paint(self, painter: QPainter, option: QStyleOptionViewItem,
-              index: QModelIndex | QPersistentModelIndex) -> None:
+    def paint(
+        self,
+        painter: QPainter,
+        option: QStyleOptionViewItem,
+        index: QModelIndex | QPersistentModelIndex,
+    ) -> None:
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
         is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
-        is_hover = (self._hover_index.isValid()
-                    and self._hover_index.row() == index.row())
+        is_hover = (
+            self._hover_index.isValid() and self._hover_index.row() == index.row()
+        )
         is_active = is_selected or is_hover
 
         if is_active:
@@ -70,7 +76,9 @@ class _PopupItemDelegate(QStyledItemDelegate):
         text_rect = option.rect.adjusted(12, 0, -12, 0)
         text_color = QColor(theme.ACCENT) if is_active else QColor(theme.TEXT_PRIMARY)
         painter.setPen(text_color)
-        painter.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
+        painter.drawText(
+            text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text
+        )
         painter.restore()
 
 
@@ -130,8 +138,9 @@ class _BoundedComboBox(QComboBox):
     """
 
     def __init__(self, *args: object, **kwargs: object) -> None:
-        super().__init__(*cast(tuple[QWidget | None, ...], args),
-                         **cast(dict[str, Any], kwargs))
+        super().__init__(
+            *cast(tuple[QWidget | None, ...], args), **cast(dict[str, Any], kwargs)
+        )
         self._popup_delegate = _PopupItemDelegate(self)
         self.view().setItemDelegate(self._popup_delegate)
         self._hover_tracker = _HoverTracker(self.view(), self._popup_delegate)
@@ -185,8 +194,9 @@ class _BoundedComboBox(QComboBox):
 
 
 class SettingsBar(QWidget):
-    def __init__(self, on_save: Callable[[], None],
-                 on_calibrate: Callable[[], None]) -> None:
+    def __init__(
+        self, on_save: Callable[[], None], on_calibrate: Callable[[], None]
+    ) -> None:
         super().__init__()
         self.setObjectName('settingsBar')
         self.setStyleSheet(f"""
@@ -235,8 +245,9 @@ class SettingsBar(QWidget):
         self._params: list[dict[str, Any]] = []
         self.__build(on_save, on_calibrate)
 
-    def __build(self, on_save: Callable[[], None],
-                on_calibrate: Callable[[], None]) -> None:
+    def __build(
+        self, on_save: Callable[[], None], on_calibrate: Callable[[], None]
+    ) -> None:
         layout = QHBoxLayout(self)
         layout.setContentsMargins(20, 0, 20, 0)
         layout.setSpacing(10)
@@ -263,7 +274,9 @@ class SettingsBar(QWidget):
         layout.addWidget(self.__muted('Разрешение'))
         self.resolution_box = _BoundedComboBox()
         self.resolution_box.setMinimumWidth(140)
-        self.resolution_box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.resolution_box.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToContents
+        )
         self.resolution_box.currentIndexChanged.connect(self._on_resolution_changed)
         self.resolution_box.setCursor(Qt.CursorShape.PointingHandCursor)
         self.resolution_box.view().setCursor(Qt.CursorShape.PointingHandCursor)
@@ -279,7 +292,9 @@ class SettingsBar(QWidget):
         layout.addWidget(self.__muted('Битрейт'))
         self.bitrate_input = QLineEdit()
         self.bitrate_input.setValidator(QIntValidator(BITRATE_MIN_KBS, BITRATE_MAX_KBS))
-        self.bitrate_input.setToolTip(f'от {BITRATE_MIN_KBS} до {BITRATE_MAX_KBS} кбит/с')
+        self.bitrate_input.setToolTip(
+            f'от {BITRATE_MIN_KBS} до {BITRATE_MAX_KBS} кбит/с'
+        )
         self.bitrate_input.setPlaceholderText('kbps')
         self.bitrate_input.setFixedWidth(80)
         self.bitrate_input.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -322,7 +337,9 @@ class SettingsBar(QWidget):
         self.save_btn.setFixedSize(40, 40)
         self.save_btn.setEnabled(False)
         self.save_btn.clicked.connect(on_save)
-        self.save_btn.setIcon(QIcon(svg_pixmap('save.svg', 28, color=theme.TEXT_PRIMARY)))
+        self.save_btn.setIcon(
+            QIcon(svg_pixmap('save.svg', 28, color=theme.TEXT_PRIMARY))
+        )
         self.save_btn.setIconSize(QSize(22, 22))
         self.save_btn.setStyleSheet(f"""
             QPushButton {{
@@ -378,7 +395,9 @@ class SettingsBar(QWidget):
                 resolutions.append(key)
         resolutions.sort(key=lambda r: r[1], reverse=True)
 
-        cur_param = self._params[param_index] if param_index < len(self._params) else None
+        cur_param = (
+            self._params[param_index] if param_index < len(self._params) else None
+        )
         cur_res = (cur_param['width'], cur_param['height']) if cur_param else None
 
         self.resolution_box.blockSignals(True)
@@ -395,8 +414,9 @@ class SettingsBar(QWidget):
         self.bitrate_input.setText(str(bitrate))
         self.save_btn.setEnabled(True)
 
-    def _fill_fps(self, resolution: tuple[int, int] | None,
-                  cur_param: dict[str, Any] | None) -> None:
+    def _fill_fps(
+        self, resolution: tuple[int, int] | None, cur_param: dict[str, Any] | None
+    ) -> None:
         if resolution is None:
             return
         w, h = resolution

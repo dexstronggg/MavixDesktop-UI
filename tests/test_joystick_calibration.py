@@ -7,11 +7,22 @@ from mavixdesktop.joystick import calibration
 
 def _valid_cal() -> dict:
     return {
-        'axis_thr': 1, 'axis_yaw': 0, 'axis_pitch': 3, 'axis_roll': 2,
-        'thr_min': -1.0, 'thr_max': 1.0, 'thr_center': 0.0,
-        'yaw_min': -1.0, 'yaw_max': 1.0, 'yaw_center': 0.0,
-        'pitch_min': -1.0, 'pitch_max': 1.0, 'pitch_center': 0.0,
-        'roll_min': -1.0, 'roll_max': 1.0, 'roll_center': 0.0,
+        'axis_thr': 1,
+        'axis_yaw': 0,
+        'axis_pitch': 3,
+        'axis_roll': 2,
+        'thr_min': -1.0,
+        'thr_max': 1.0,
+        'thr_center': 0.0,
+        'yaw_min': -1.0,
+        'yaw_max': 1.0,
+        'yaw_center': 0.0,
+        'pitch_min': -1.0,
+        'pitch_max': 1.0,
+        'pitch_center': 0.0,
+        'roll_min': -1.0,
+        'roll_max': 1.0,
+        'roll_center': 0.0,
         'arm_button_index': 0,
     }
 

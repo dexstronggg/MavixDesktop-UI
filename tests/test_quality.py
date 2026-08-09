@@ -1,4 +1,5 @@
 """LinkQuality: freeze detection, RTT percentiles, traffic light, jsonl trail."""
+
 from __future__ import annotations
 
 import json
@@ -141,7 +142,9 @@ def test_growth_on_tiny_rtt_does_not_raise_alarm(quality, clock):
         quality.add_rtt(4.0)
     snap = quality.snapshot()
     assert snap.rtt_growth >= 3.0, 'сам множитель считается как раньше'
-    assert snap.level == LEVEL_OK, 'но на единицах миллисекунд он не должен красить плашку'
+    assert snap.level == LEVEL_OK, (
+        'но на единицах миллисекунд он не должен красить плашку'
+    )
 
 
 def test_growth_on_real_latency_still_alarms(quality, clock):

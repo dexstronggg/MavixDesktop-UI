@@ -1,4 +1,5 @@
 """Link quality: the six core metrics, a traffic light for the pilot, a jsonl trail."""
+
 from __future__ import annotations
 
 import json
@@ -68,7 +69,9 @@ class _RttSample:
 @dataclass
 class _State:
     rtt: deque[_RttSample] = field(default_factory=lambda: deque(maxlen=200))
-    intervals: deque[float] = field(default_factory=lambda: deque(maxlen=_INTERVAL_HISTORY))
+    intervals: deque[float] = field(
+        default_factory=lambda: deque(maxlen=_INTERVAL_HISTORY)
+    )
     freezes: deque[_Freeze] = field(default_factory=lambda: deque(maxlen=200))
 
 
@@ -127,7 +130,9 @@ class LinkQuality:
             self._loss_pct = loss_pct
             self._inbound_at = now
 
-    def update_board(self, bitrate_out_kbps: float, encoder_kbps: float, pli: int) -> None:
+    def update_board(
+        self, bitrate_out_kbps: float, encoder_kbps: float, pli: int
+    ) -> None:
         with self._lock:
             self._bitrate_out = bitrate_out_kbps
             self._encoder_kbps = encoder_kbps
@@ -158,8 +163,16 @@ class LinkQuality:
             growth = (rtt_p95 / rtt_floor) if rtt_floor > 0 else 1.0
             freeze_ms = sum(f.duration for f in self._state.freezes) * 1000.0
             freeze_ratio = freeze_ms / 1000.0 / _FREEZE_WINDOW_S
-            staleness = (now - self._last_frame_at) * 1000.0 if self._last_frame_at > 0 else -1.0
-            fresh = (now - self._inbound_at) <= _FRESH_DATA_S if self._inbound_at > 0 else False
+            staleness = (
+                (now - self._last_frame_at) * 1000.0
+                if self._last_frame_at > 0
+                else -1.0
+            )
+            fresh = (
+                (now - self._inbound_at) <= _FRESH_DATA_S
+                if self._inbound_at > 0
+                else False
+            )
             out_ratio = (
                 self._bitrate_out / self._encoder_kbps
                 if self._bitrate_out >= 0 and self._encoder_kbps > 0
@@ -180,7 +193,10 @@ class LinkQuality:
                 out_ratio=out_ratio,
                 pli=self._pli_total,
             )
-            frames_active = self._last_frame_at > 0 and (now - self._last_frame_at) <= _FREEZE_WINDOW_S
+            frames_active = (
+                self._last_frame_at > 0
+                and (now - self._last_frame_at) <= _FREEZE_WINDOW_S
+            )
             has_data = fresh or bool(self._state.rtt) or frames_active
         level = self._level(snap) if has_data else LEVEL_IDLE
         return LinkSnapshot(**{**asdict(snap), 'level': level})
@@ -214,7 +230,9 @@ class LinkQuality:
     def _prune(self, now: float) -> None:
         while self._state.rtt and now - self._state.rtt[0].at > _RTT_WINDOW_S:
             self._state.rtt.popleft()
-        while self._state.freezes and now - self._state.freezes[0].at > _FREEZE_WINDOW_S:
+        while (
+            self._state.freezes and now - self._state.freezes[0].at > _FREEZE_WINDOW_S
+        ):
             self._state.freezes.popleft()
 
     @staticmethod
@@ -247,7 +265,12 @@ class LinkQuality:
             return
         self._log_seq += 1
         record = {'seq': self._log_seq, 'ts': round(time.time(), 3)}
-        record.update({k: round(v, 3) if isinstance(v, float) else v for k, v in asdict(snap).items()})
+        record.update(
+            {
+                k: round(v, 3) if isinstance(v, float) else v
+                for k, v in asdict(snap).items()
+            }
+        )
         try:
             self._log.write(json.dumps(record, ensure_ascii=False) + '\n')
         except (OSError, ValueError) as exc:

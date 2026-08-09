@@ -1,4 +1,5 @@
 """Top-level session coordinator for the desktop side."""
+
 from __future__ import annotations
 
 import asyncio
@@ -145,11 +146,19 @@ class SessionCoordinator:
         self._stop_event = asyncio.Event()
         ice_servers = _local_ice_servers()
         if ice_servers:
-            logger.info('[coord] используем %d ICE-сервер(ов) из локального конфига', len(ice_servers))
+            logger.info(
+                '[coord] используем %d ICE-сервер(ов) из локального конфига',
+                len(ice_servers),
+            )
         else:
             ice_servers = await self._api.ice_servers()
-            logger.info('[coord] локальный ICE-конфиг пуст — используем %d сервер(ов) из API', len(ice_servers))
-        self._manager = WebRTCManager(send=self._signal_client.send, ice_servers=ice_servers)
+            logger.info(
+                '[coord] локальный ICE-конфиг пуст — используем %d сервер(ов) из API',
+                len(ice_servers),
+            )
+        self._manager = WebRTCManager(
+            send=self._signal_client.send, ice_servers=ice_servers
+        )
         self._manager.on_track = self.on_track
         self._manager.on_channel_attached = lambda _label: self._wire_channels_to_fc()
 
@@ -157,7 +166,10 @@ class SessionCoordinator:
             connected = await self._signal_client.connect()
             if not connected:
                 delay = self._backoff.next_delay()
-                logger.info('[coord] не удалось подключиться к сигналингу, повтор через %.1fs', delay)
+                logger.info(
+                    '[coord] не удалось подключиться к сигналингу, повтор через %.1fs',
+                    delay,
+                )
                 await asyncio.sleep(delay)
                 continue
             logger.info('[coord] подключились к сигнальному серверу')
@@ -169,7 +181,9 @@ class SessionCoordinator:
                 if exc.code in (4401, 1008):
                     self._auth_failures += 1
                     if self._auth_failures >= 3:
-                        logger.error('[coord] авторизация отклонена 3 раза подряд, прекращаем переподключение')
+                        logger.error(
+                            '[coord] авторизация отклонена 3 раза подряд, прекращаем переподключение'
+                        )
                         await self._fire_auth_expired()
                         break
                 else:
@@ -206,9 +220,12 @@ class SessionCoordinator:
             return
         self._reconnect_drone_id = None
         self._connect_request_at = None
-        await self._signal_client.send({
-            'type': 'disconnect', 'drone_id': self._target_drone_id,
-        })
+        await self._signal_client.send(
+            {
+                'type': 'disconnect',
+                'drone_id': self._target_drone_id,
+            }
+        )
         await self._teardown_session()
 
     async def request_drone_list(self) -> None:
@@ -231,7 +248,10 @@ class SessionCoordinator:
 
     async def _on_message(self, msg: dict[str, Any]) -> None:
         if not isinstance(msg, dict):
-            logger.debug('[coord] игнорируем не-dict сообщение сигналинга: %r', type(msg).__name__)
+            logger.debug(
+                '[coord] игнорируем не-dict сообщение сигналинга: %r',
+                type(msg).__name__,
+            )
             return
         kind = msg.get('type')
         match kind:
@@ -251,7 +271,10 @@ class SessionCoordinator:
                 )
                 self._connect_request_at = None
                 if is_connect_failure:
-                    logger.info('[coord] дрон %s отключился во время connect; без повтора', drone_id)
+                    logger.info(
+                        '[coord] дрон %s отключился во время connect; без повтора',
+                        drone_id,
+                    )
                     await self._teardown_session()
                     if self.on_connect_failed is not None:
                         try:
@@ -259,7 +282,10 @@ class SessionCoordinator:
                         except Exception as exc:
                             logger.warning('[coord] ошибка on_connect_failed: %s', exc)
                     return
-                logger.info('[coord] дрон отключился: %s; авто-переподключение при возврате', drone_id)
+                logger.info(
+                    '[coord] дрон отключился: %s; авто-переподключение при возврате',
+                    drone_id,
+                )
                 if isinstance(drone_id, str) and self._target_drone_id == drone_id:
                     self._reconnect_drone_id = drone_id
                 await self._teardown_session()
@@ -300,7 +326,11 @@ class SessionCoordinator:
         manager_idle = self._manager is None or self._manager.active_drone_id is None
         if self._reconnect_drone_id is not None and manager_idle:
             entry = next(
-                (d for d in drones if d.get('drone_id') == self._reconnect_drone_id and d.get('online')),
+                (
+                    d
+                    for d in drones
+                    if d.get('drone_id') == self._reconnect_drone_id and d.get('online')
+                ),
                 None,
             )
             if entry is not None:
@@ -311,7 +341,10 @@ class SessionCoordinator:
             else:
                 offline_id = self._reconnect_drone_id
                 self._reconnect_drone_id = None
-                logger.info('[coord] дрон %s подтверждённо offline; прекращаем переподключение', offline_id)
+                logger.info(
+                    '[coord] дрон %s подтверждённо offline; прекращаем переподключение',
+                    offline_id,
+                )
                 if self.on_drone_offline is not None:
                     try:
                         self.on_drone_offline(offline_id)
@@ -344,10 +377,15 @@ class SessionCoordinator:
             self._signal_client.update_access_token(new_access)
             logger.info('[coord] access-токен обновлён из server-side refresh')
         new_refresh = msg.get('refresh_token')
-        if isinstance(new_refresh, str) and new_refresh and new_refresh != self._refresh_token:
+        if (
+            isinstance(new_refresh, str)
+            and new_refresh
+            and new_refresh != self._refresh_token
+        ):
             self._refresh_token = new_refresh
             try:
                 from mavixdesktop.server import token_store
+
                 email, _ = token_store.load()
                 if email:
                     token_store.save(email, new_refresh)
@@ -355,17 +393,22 @@ class SessionCoordinator:
                 logger.warning('[coord] не удалось сохранить refresh-токен: %s', exc)
 
     async def _handle_auth_warning(self, msg: dict[str, Any]) -> None:
-        logger.info('[coord] срок авторизации истекает через %ss, обновляем', msg.get('seconds_left'))
+        logger.info(
+            '[coord] срок авторизации истекает через %ss, обновляем',
+            msg.get('seconds_left'),
+        )
         try:
             new_access = await self._refresh_now()
         except ApiError as exc:
             logger.error('[coord] refresh не удался: %s', exc)
             return
         try:
-            await self._signal_client.send({
-                'type': 'refresh_auth',
-                'refresh_token': self._refresh_token,
-            })
+            await self._signal_client.send(
+                {
+                    'type': 'refresh_auth',
+                    'refresh_token': self._refresh_token,
+                }
+            )
         except Exception as exc:
             logger.warning('[coord] ошибка отправки refresh_auth: %s', exc)
         if new_access:
@@ -387,7 +430,9 @@ class SessionCoordinator:
         if hub.packet is not None:
             hub.packet.on_packet = self._on_packet_from_drone
 
-    async def _on_config_message_async(self, payload: dict[str, Any] | list[Any]) -> None:
+    async def _on_config_message_async(
+        self, payload: dict[str, Any] | list[Any]
+    ) -> None:
         if not isinstance(payload, dict):
             return
         kind = payload.get('type')
@@ -416,7 +461,9 @@ class SessionCoordinator:
         if self._manager is None or self._manager.peer_connection is None:
             return
         self._stop_stats_collector()
-        collector = StatsCollector(self._manager.peer_connection, self._emit_inbound_stats)
+        collector = StatsCollector(
+            self._manager.peer_connection, self._emit_inbound_stats
+        )
         self._stats_task = asyncio.create_task(collector.run())
 
     def _stop_stats_collector(self) -> None:
@@ -501,9 +548,13 @@ class SessionCoordinator:
                 try:
                     await self._mavlink.start()
                 except OSError as exc:
-                    logger.warning('[coord] не удалось запустить MAVLink-relay: %s', exc)
+                    logger.warning(
+                        '[coord] не удалось запустить MAVLink-relay: %s', exc
+                    )
                     self._mavlink = None
-                    self._notify_error('Could not bind to UDP port 14550, проверьте, не занят ли порт')
+                    self._notify_error(
+                        'Could not bind to UDP port 14550, проверьте, не занят ли порт'
+                    )
         else:
             if self._mavlink is not None:
                 await self._mavlink.stop()

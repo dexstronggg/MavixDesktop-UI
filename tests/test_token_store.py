@@ -60,7 +60,9 @@ def test_save_via_keyring(isolated_config_dir, monkeypatch):
 
 def test_load_via_keyring(isolated_config_dir, monkeypatch):
     kr = MagicMock()
-    kr.get_password.side_effect = lambda svc, key: 'a@b.c' if key == 'email' else 'r-xyz'
+    kr.get_password.side_effect = lambda svc, key: (
+        'a@b.c' if key == 'email' else 'r-xyz'
+    )
     monkeypatch.setattr('mavixdesktop.server.token_store._keyring', lambda: kr)
     email, refresh = token_store.load()
     assert email == 'a@b.c'
@@ -70,6 +72,7 @@ def test_load_via_keyring(isolated_config_dir, monkeypatch):
 def test_load_falls_back_to_file_if_keyring_raises(isolated_config_dir, monkeypatch):
     p = isolated_config_dir / 'tokens.json'
     import json
+
     p.write_text(json.dumps({'email': 'file@e.c', 'refresh_token': 'r-file'}))
     kr = MagicMock()
     kr.get_password.side_effect = RuntimeError('locked')

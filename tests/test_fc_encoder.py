@@ -1,10 +1,11 @@
 """Tests for joystick -> CRSF frame conversion."""
+
 from mavixdesktop.fc.crsf import CH_CENTER, CH_MAX, CH_MIN, CRSF
 from mavixdesktop.fc.encoder import build_rc_frame
 
 
 def _decode_channels(frame: bytes) -> list[int]:
-    payload = frame[3:3 + 22]
+    payload = frame[3 : 3 + 22]
     bits = int.from_bytes(payload, 'little')
     return [(bits >> (i * 11)) & 0x7FF for i in range(16)]
 

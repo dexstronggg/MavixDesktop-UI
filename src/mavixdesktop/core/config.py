@@ -1,4 +1,5 @@
 """Global application settings."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -43,10 +44,15 @@ class Settings(BaseSettings):
 
     force_relay: bool = Field(default=False, alias='FORCE_RELAY')
 
+    video_bpp: float = Field(default=0.07, alias='VIDEO_BPP')
+    video_motion_factor: float = Field(default=2.0, alias='VIDEO_MOTION_FACTOR')
+
     debug: bool = Field(default=False, alias='DEBUG')
 
     data_path: Path = _USER_BASE / 'data'
-    log_path: Path = Field(default_factory=lambda: _USER_BASE / 'logs' / f'mavixdesktop_{date.today()}.log')
+    log_path: Path = Field(
+        default_factory=lambda: _USER_BASE / 'logs' / f'mavixdesktop_{date.today()}.log'
+    )
     config_dir: Path = _USER_BASE
 
     keyring_service: str = Field(default='mavixdesktop', alias='KEYRING_SERVICE')
@@ -57,9 +63,9 @@ class Settings(BaseSettings):
             return self.signal_ws_url
         base = self.signal_url
         if base.startswith('https://'):
-            return 'wss://' + base[len('https://'):].rstrip('/') + '/ws/gcs'
+            return 'wss://' + base[len('https://') :].rstrip('/') + '/ws/gcs'
         if base.startswith('http://'):
-            return 'ws://' + base[len('http://'):].rstrip('/') + '/ws/gcs'
+            return 'ws://' + base[len('http://') :].rstrip('/') + '/ws/gcs'
         return base.rstrip('/') + '/ws/gcs'
 
     @property

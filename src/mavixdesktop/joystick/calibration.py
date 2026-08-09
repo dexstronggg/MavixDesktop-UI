@@ -1,4 +1,5 @@
 """Persistent joystick calibration: save/load JSON files in settings.data_path."""
+
 from __future__ import annotations
 
 import json
@@ -7,14 +8,27 @@ from typing import Any, cast
 
 from mavixdesktop.core.config import settings
 
-REQUIRED_KEYS = frozenset({
-    'axis_thr', 'axis_yaw', 'axis_pitch', 'axis_roll',
-    'thr_min', 'thr_max', 'thr_center',
-    'yaw_min', 'yaw_max', 'yaw_center',
-    'pitch_min', 'pitch_max', 'pitch_center',
-    'roll_min', 'roll_max', 'roll_center',
-    'arm_button_index',
-})
+REQUIRED_KEYS = frozenset(
+    {
+        'axis_thr',
+        'axis_yaw',
+        'axis_pitch',
+        'axis_roll',
+        'thr_min',
+        'thr_max',
+        'thr_center',
+        'yaw_min',
+        'yaw_max',
+        'yaw_center',
+        'pitch_min',
+        'pitch_max',
+        'pitch_center',
+        'roll_min',
+        'roll_max',
+        'roll_center',
+        'arm_button_index',
+    }
+)
 
 
 def _safe_name(joystick_name: str) -> str:

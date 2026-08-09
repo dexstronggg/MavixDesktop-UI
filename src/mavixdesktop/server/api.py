@@ -64,12 +64,16 @@ class ApiSession:
             except Exception:
                 data = {}
             if r.status != 200:
-                raise ApiError(data.get('detail', 'запрос восстановления пароля не удался'))
+                raise ApiError(
+                    data.get('detail', 'запрос восстановления пароля не удался')
+                )
             return cast(dict[str, Any], data)
 
     async def ice_servers(self) -> list[dict[str, Any]]:
         try:
-            async with self._session.get(f'{settings.http_url}/api/v1/ice-servers') as r:
+            async with self._session.get(
+                f'{settings.http_url}/api/v1/ice-servers'
+            ) as r:
                 if r.status != 200:
                     return []
                 data = await r.json()

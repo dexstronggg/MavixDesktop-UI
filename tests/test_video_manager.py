@@ -1,4 +1,5 @@
 """VideoManager: frames are delivered on arrival, newest wins over queued ones."""
+
 from __future__ import annotations
 
 import sys
@@ -11,6 +12,7 @@ from mavixdesktop.ui.managers.video import VideoManager
 @pytest.fixture(scope='session')
 def qapp():
     from PySide6.QtWidgets import QApplication
+
     app = QApplication.instance() or QApplication(sys.argv)
     yield app
 

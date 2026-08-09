@@ -1,4 +1,5 @@
 """Debug page for testing individual functions without board or server."""
+
 from __future__ import annotations
 
 from collections.abc import Callable

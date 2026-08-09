@@ -1,4 +1,5 @@
 """Tests for joystick.manager -- only pure-Python helpers; list_joysticks is exercised by an integration smoke test that doesn't assume a pad."""
+
 from __future__ import annotations
 
 import sys
@@ -9,11 +10,18 @@ from mavixdesktop.joystick.manager import build_sdl_config, list_joysticks
 
 def _cal_neutral() -> dict:
     return {
-        'axis_thr': 1, 'axis_yaw': 0, 'axis_pitch': 3, 'axis_roll': 2,
-        'thr_min': -1.0, 'thr_max': 1.0,
-        'yaw_min': -1.0, 'yaw_max': 1.0,
-        'pitch_min': -1.0, 'pitch_max': 1.0,
-        'roll_min': -1.0, 'roll_max': 1.0,
+        'axis_thr': 1,
+        'axis_yaw': 0,
+        'axis_pitch': 3,
+        'axis_roll': 2,
+        'thr_min': -1.0,
+        'thr_max': 1.0,
+        'yaw_min': -1.0,
+        'yaw_max': 1.0,
+        'pitch_min': -1.0,
+        'pitch_max': 1.0,
+        'roll_min': -1.0,
+        'roll_max': 1.0,
         'arm_button_index': 3,
     }
 

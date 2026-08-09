@@ -1,4 +1,5 @@
 """Owns one PeerSession + its DataChannelHub at a time."""
+
 from __future__ import annotations
 
 import asyncio
@@ -18,7 +19,9 @@ TrackHandler = Callable[['MediaStreamTrack'], None]
 
 
 class WebRTCManager:
-    def __init__(self, send: SignalSender, ice_servers: list[dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self, send: SignalSender, ice_servers: list[dict[str, Any]] | None = None
+    ) -> None:
         self._send = send
         self._ice_servers = ice_servers or []
         self._peer: PeerSession | None = None
@@ -44,7 +47,10 @@ class WebRTCManager:
 
     def start_session(self, drone_id: str) -> None:
         if self._peer is not None:
-            logger.warning('[manager] сессия уже активна (drone=%s), завершаем', self._peer.drone_id)
+            logger.warning(
+                '[manager] сессия уже активна (drone=%s), завершаем',
+                self._peer.drone_id,
+            )
             old_peer = self._peer
             self.end_session()
             asyncio.ensure_future(old_peer.close())
@@ -74,11 +80,13 @@ class WebRTCManager:
             return
         assert self._peer is not None
         answer_sdp = await self._peer.apply_offer(sdp_text)
-        await self._send({
-            'type': 'sdp',
-            'drone_id': drone_id,
-            'sdp': {'type': 'answer', 'sdp': answer_sdp},
-        })
+        await self._send(
+            {
+                'type': 'sdp',
+                'drone_id': drone_id,
+                'sdp': {'type': 'answer', 'sdp': answer_sdp},
+            }
+        )
 
     async def handle_ice(self, drone_id: str, candidate: dict[str, Any]) -> None:
         if not self._guard(drone_id):
@@ -93,11 +101,16 @@ class WebRTCManager:
 
     def _guard(self, drone_id: str) -> bool:
         if self._peer is None:
-            logger.warning('[manager] сообщение для drone=%s, но активной сессии нет', drone_id)
+            logger.warning(
+                '[manager] сообщение для drone=%s, но активной сессии нет', drone_id
+            )
             return False
         if self._peer.drone_id != drone_id:
-            logger.warning('[manager] сообщение для drone=%s, но активен drone=%s',
-                           drone_id, self._peer.drone_id)
+            logger.warning(
+                '[manager] сообщение для drone=%s, но активен drone=%s',
+                drone_id,
+                self._peer.drone_id,
+            )
             return False
         return True
 

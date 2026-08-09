@@ -1,4 +1,5 @@
 """Token storage over OS keyring with file fallback."""
+
 from __future__ import annotations
 
 import contextlib
@@ -46,6 +47,7 @@ def _write_file(data: dict[str, Any]) -> None:
 def _keyring() -> _Keyring | None:
     try:
         import keyring
+
         return cast(_Keyring, keyring)
     except ImportError:
         return None
@@ -59,7 +61,9 @@ def save(email: str, refresh_token: str) -> None:
             kr.set_password(settings.keyring_service, _EMAIL_KEY, email)
             return
         except Exception as exc:
-            logger.warning('[token] запись в keyring не удалась (%s), откат на файл', exc)
+            logger.warning(
+                '[token] запись в keyring не удалась (%s), откат на файл', exc
+            )
     _write_file({_REFRESH_KEY: refresh_token, _EMAIL_KEY: email})
 
 

@@ -1,9 +1,11 @@
 """Main Qt window of MavixDesktop."""
+
 from __future__ import annotations
 
 import asyncio
 import platform
 import subprocess
+import time
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -28,6 +30,7 @@ from mavixdesktop.qgc.launcher import (
     save_qgc_path,
 )
 from mavixdesktop.ui.login_page import LoginPage
+from mavixdesktop.ui.managers.advisor import Advisor, format_advice
 from mavixdesktop.ui.managers.connection import ConnectionManager
 from mavixdesktop.ui.managers.demo_connection import DemoConnectionManager
 from mavixdesktop.ui.managers.quality import (
@@ -79,6 +82,7 @@ class App(QMainWindow):
 
         try:
             import pygame
+
             pygame.init()
         except Exception as exc:
             logger.warning('[app] не удалось выполнить pygame.init: %s', exc)
@@ -89,10 +93,15 @@ class App(QMainWindow):
 
         self._conn: ConnectionManager = (
             cast(ConnectionManager, DemoConnectionManager(bridge=self._bridge))
-            if demo else
-            ConnectionManager(bridge=self._bridge)
+            if demo
+            else ConnectionManager(bridge=self._bridge)
         )
         self._quality = LinkQuality()
+        self._advisor = Advisor(
+            bpp=settings.video_bpp, motion=settings.video_motion_factor
+        )
+        self._advice_text = ''
+        self._quality_ticks = 0
         self._last_freeze_count = 0
         self._video = VideoManager(
             on_frame=lambda img: self.drone_view_page.show_frame(img),
@@ -251,6 +260,8 @@ class App(QMainWindow):
         self._ping_timer.stop()
         self._quality_timer.stop()
         self._quality.end_session()
+        self._advisor.reset()
+        self._advice_text = ''
         self._stop_arm_listener()
         self._drone_list_refresh_timer.stop()
         self._conn.logout()
@@ -282,6 +293,7 @@ class App(QMainWindow):
         def on_done(error: str | None) -> None:
             if error:
                 QMessageBox.warning(self, 'Ошибка', error)
+
         self._conn.delete_drone(drone_id, on_done=on_done)
 
     def _handle_select_drone(self, drone_id: str) -> None:
@@ -292,6 +304,9 @@ class App(QMainWindow):
         self._conn.select_drone(drone_id)
         self._video.start()
         self._quality.start_session(log_path=self._stats_log_path())
+        self._advisor.start_session(time.monotonic())
+        self._advice_text = ''
+        self._quality_ticks = 0
         self._last_freeze_count = 0
         self._ping_timer.start()
         self._quality_timer.start()
@@ -305,6 +320,8 @@ class App(QMainWindow):
         self._ping_timer.stop()
         self._quality_timer.stop()
         self._quality.end_session()
+        self._advisor.reset()
+        self._advice_text = ''
         self.drone_view_page.update_stale(0.0)
         self._stop_arm_listener()
         self._conn.disconnect_drone()
@@ -333,7 +350,9 @@ class App(QMainWindow):
     def _on_connect_failed(self, drone_id: str) -> None:
         if self.stack.currentWidget() is not self.drone_view_page:
             return
-        logger.info('[app] подключение к дрону %s не удалось; показываю баннер', drone_id)
+        logger.info(
+            '[app] подключение к дрону %s не удалось; показываю баннер', drone_id
+        )
         self.drone_view_page.set_calibration_visible(False)
         self.drone_view_page.show_error_banner('Камеры не найдены')
         QTimer.singleShot(3000, self._dismiss_error_banner_and_back)
@@ -345,7 +364,9 @@ class App(QMainWindow):
 
     def _on_server_error(self, message: str) -> None:
         logger.warning('[app] ошибка сервера: %s', message)
-        QMessageBox.warning(self, 'Ошибка сервера', message or 'Неизвестная ошибка сервера')
+        QMessageBox.warning(
+            self, 'Ошибка сервера', message or 'Неизвестная ошибка сервера'
+        )
 
     def _on_session_reset(self) -> None:
         self._video.clear_tracks()
@@ -408,19 +429,35 @@ class App(QMainWindow):
         coord = self._conn.coordinator
         device_index = cam.get('device_index', idx)
         old_param_index = old_cam.get('param_index')
-        logger.info('[app] сохранение: device_index=%s old_param_index=%s new_param_index=%s bitrate=%s',
-                    device_index, old_param_index, param_index, bitrate)
+        logger.info(
+            '[app] сохранение: device_index=%s old_param_index=%s new_param_index=%s bitrate=%s',
+            device_index,
+            old_param_index,
+            param_index,
+            bitrate,
+        )
         if coord is not None:
-            self._conn._submit(coord.send_bitrate_update([
-                {'device_index': device_index, 'bitrate_kbs': bitrate},
-            ]))
-            self._conn._submit(coord.send_params_update([
-                {'device_index': device_index, 'param_index': param_index},
-            ]))
+            self._conn._submit(
+                coord.send_bitrate_update(
+                    [
+                        {'device_index': device_index, 'bitrate_kbs': bitrate},
+                    ]
+                )
+            )
+            self._conn._submit(
+                coord.send_params_update(
+                    [
+                        {'device_index': device_index, 'param_index': param_index},
+                    ]
+                )
+            )
         self.drone_view_page.save_btn.setEnabled(True)
 
-    def _start_arm_listener(self, joystick_index: int, calibration: dict[str, Any]) -> None:
+    def _start_arm_listener(
+        self, joystick_index: int, calibration: dict[str, Any]
+    ) -> None:
         from mavixdesktop.joystick.input import JoystickInput
+
         try:
             self._arm_joystick = JoystickInput(joystick_index, calibration)
         except Exception as exc:
@@ -444,6 +481,7 @@ class App(QMainWindow):
             return
         try:
             import pygame
+
             pygame.event.pump()
             if not self._arm_joystick.is_connected():
                 self._arm_err_count += 1
@@ -460,13 +498,16 @@ class App(QMainWindow):
                     self._send_arm_disarm(new_state)
                 return
         if self._arm_err_count >= 3 and not self._failsafe_sent:
-            logger.warning('[app] джойстик потерян во время полёта MAVLink/QGC — шлём AUTO_RTL')
+            logger.warning(
+                '[app] джойстик потерян во время полёта MAVLink/QGC — шлём AUTO_RTL'
+            )
             self._failsafe_sent = True
             self._send_failsafe_rtl()
             self._stop_arm_listener()
 
     def _send_arm_disarm(self, armed: bool) -> None:
         from mavixdesktop.fc.mavlink_encoder import MavlinkEncoder
+
         coord = self._conn.coordinator
         if coord is None or coord._manager is None or coord._manager.channels is None:
             return
@@ -478,12 +519,15 @@ class App(QMainWindow):
             packet = enc.arm_disarm(armed, force=True)
             if self._conn._loop is not None:
                 self._conn._loop.call_soon_threadsafe(ch.send_bytes, packet)
-            logger.info('[app] джойстик → команда %s на PX4', 'ARM' if armed else 'DISARM')
+            logger.info(
+                '[app] джойстик → команда %s на PX4', 'ARM' if armed else 'DISARM'
+            )
         except Exception as exc:
             logger.warning('[app] ошибка отправки arm: %s', exc)
 
     def _send_failsafe_rtl(self) -> None:
         from mavixdesktop.fc.mavlink_encoder import MavlinkEncoder
+
         coord = self._conn.coordinator
         if coord is None or coord._manager is None or coord._manager.channels is None:
             return
@@ -513,14 +557,17 @@ class App(QMainWindow):
     def _handle_back_from_joystick(self) -> None:
         self._navigate_back()
 
-    def _handle_joystick_selected(self, joystick_index: int, calibration: dict[str, Any]) -> None:
+    def _handle_joystick_selected(
+        self, joystick_index: int, calibration: dict[str, Any]
+    ) -> None:
         coord = self._conn.coordinator
         fc_kind = coord.fc_kind if coord is not None else 'crsf'
         if fc_kind == 'mavlink':
             if is_qgc_running():
                 logger.info('[app] QGC уже запущен — просим пользователя закрыть его')
                 QMessageBox.warning(
-                    self, 'Закройте QGroundControl',
+                    self,
+                    'Закройте QGroundControl',
                     'QGroundControl уже запущен. Закройте его и нажмите '
                     '«Взлёт» ещё раз — приложение запустит QGC с нужной '
                     'конфигурацией джойстика.',
@@ -561,7 +608,8 @@ class App(QMainWindow):
     def _debug_launch_qgc(self) -> None:
         if is_qgc_running():
             QMessageBox.warning(
-                self, 'Закройте QGroundControl',
+                self,
+                'Закройте QGroundControl',
                 'QGroundControl уже запущен. Закройте его и попробуйте снова.',
             )
             return
@@ -572,22 +620,29 @@ class App(QMainWindow):
         if self.debug_page is not None:
             self.debug_page.set_status(text)
 
-    def _launch_qgc_with_user_pick(self, sdl_config: str) -> subprocess.Popen[bytes] | None:
+    def _launch_qgc_with_user_pick(
+        self, sdl_config: str
+    ) -> subprocess.Popen[bytes] | None:
         if platform.system() == 'Windows':
             filt = 'QGroundControl (QGroundControl*.exe);;Executable (*.exe);;All files (*)'
         else:
             filt = 'QGroundControl (QGroundControl* qgroundcontrol* *.AppImage);;All files (*)'
         ans = QMessageBox.question(
-            self, 'QGroundControl не найден',
+            self,
+            'QGroundControl не найден',
             'QGroundControl не удалось найти автоматически.\n'
             'Указать путь к исполняемому файлу вручную?',
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
         )
         if ans != QMessageBox.StandardButton.Yes:
             return None
         start_dir = str(Path.home())
         picked, _ = QFileDialog.getOpenFileName(
-            self, 'Выберите исполняемый файл QGroundControl', start_dir, filt,
+            self,
+            'Выберите исполняемый файл QGroundControl',
+            start_dir,
+            filt,
         )
         if not picked:
             return None
@@ -599,14 +654,17 @@ class App(QMainWindow):
         proc = launch_qgc(sdl_config, qgc_path=path)
         if proc is None:
             QMessageBox.warning(
-                self, 'QGroundControl',
+                self,
+                'QGroundControl',
                 'Не удалось запустить выбранный файл. Проверьте, что это исполняемый файл QGroundControl.',
             )
         return proc
 
-    def _open_flight_window(self, joystick_index: int, calibration: dict[str, Any],
-                            passive: bool = False) -> None:
+    def _open_flight_window(
+        self, joystick_index: int, calibration: dict[str, Any], passive: bool = False
+    ) -> None:
         from mavixdesktop.joystick.input import JoystickInput
+
         js_input = JoystickInput(joystick_index, calibration)
 
         self._video.stop()
@@ -650,10 +708,14 @@ class App(QMainWindow):
             return
         if js is None:
             from mavixdesktop.joystick.input import JoystickInput
+
             try:
                 js = JoystickInput(joystick_index, calibration)
             except Exception as exc:
-                logger.warning('[app] joystick guard пропущен: не удалось открыть джойстик: %s', exc)
+                logger.warning(
+                    '[app] joystick guard пропущен: не удалось открыть джойстик: %s',
+                    exc,
+                )
                 return
         self._joystick_guard = JoystickGuard(
             js=js,
@@ -685,7 +747,8 @@ class App(QMainWindow):
 
     def _on_guard_disarm(self) -> None:
         QMessageBox.warning(
-            self, 'Джойстик отключён',
+            self,
+            'Джойстик отключён',
             'Связь с джойстиком потеряна. Дрону отправлена команда DISARM.',
         )
 
@@ -728,10 +791,33 @@ class App(QMainWindow):
         snap = self._quality.snapshot()
         self._quality.log_snapshot(snap)
         self.drone_view_page.update_quality(*format_quality_line(snap))
-        self.drone_view_page.set_stats_text(format_stats_table(snap))
+        self._quality_ticks += 1
+        if self._quality_ticks % 5 == 0:
+            self._advice_text = self._compute_advice(snap)
+        advice_block = f'\n\n{self._advice_text}' if self._advice_text else ''
+        self.drone_view_page.set_stats_text(format_stats_table(snap) + advice_block)
         if self._flight_window is not None:
             self._flight_window.update_quality(*format_quality_line(snap))
         self._maybe_request_keyframe(snap)
+
+    def _compute_advice(self, snap: LinkSnapshot) -> str:
+        cam_index = self._video.cam_index
+        cameras = self._state.cameras
+        params: list[dict[str, Any]] = []
+        current_param: dict[str, Any] | None = None
+        if 0 <= cam_index < len(cameras):
+            cam = cameras[cam_index]
+            if isinstance(cam, dict):
+                raw_params = cam.get('params', [])
+                if isinstance(raw_params, list):
+                    params = [p for p in raw_params if isinstance(p, dict)]
+                param_index = cam.get('param_index', 0)
+                if isinstance(param_index, int) and 0 <= param_index < len(params):
+                    current_param = params[param_index]
+        rec = self._advisor.update(
+            snap, params, current_param, self._video.rendered_fps(), time.monotonic()
+        )
+        return format_advice(rec, current_param)
 
     def _maybe_request_keyframe(self, snap: LinkSnapshot) -> None:
         freeze_grew = snap.freeze_count > self._last_freeze_count
@@ -742,7 +828,6 @@ class App(QMainWindow):
         if coord is None:
             return
         self._conn._submit(coord.request_keyframe())
-
 
 
 class _CoordinatorAdapter:
@@ -759,7 +844,11 @@ class _CoordinatorAdapter:
         if coord is None or coord._manager is None or coord._manager.channels is None:
             return -1.0
         ping_ch = coord._manager.channels.ping
-        return ping_ch.last_rtt_ms if (ping_ch and ping_ch.last_rtt_ms is not None) else -1.0
+        return (
+            ping_ch.last_rtt_ms
+            if (ping_ch and ping_ch.last_rtt_ms is not None)
+            else -1.0
+        )
 
     @property
     def crsf_receiver(self) -> None:

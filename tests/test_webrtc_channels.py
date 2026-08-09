@@ -21,9 +21,11 @@ def _mock_channel(label: str, ready_state: str = 'connecting') -> MagicMock:
         if handler is not None:
             ch._handlers[event] = handler
             return handler
+
         def _register(fn):
             ch._handlers[event] = fn
             return fn
+
         return _register
 
     ch.on.side_effect = fake_on
@@ -41,7 +43,7 @@ def _fire(ch: MagicMock, event: str, *args) -> None:
 def test_packet_send_when_closed_is_noop():
     ch = _mock_channel('packet-channel', ready_state='connecting')
     pc = PacketChannel(ch)
-    pc.send_bytes(b'\xAA')
+    pc.send_bytes(b'\xaa')
     ch.send.assert_not_called()
     assert pc.dropped == 1
 
@@ -49,8 +51,8 @@ def test_packet_send_when_closed_is_noop():
 def test_packet_send_when_open():
     ch = _mock_channel('packet-channel', ready_state='open')
     pc = PacketChannel(ch)
-    pc.send_bytes(b'\xAA\xBB')
-    ch.send.assert_called_once_with(b'\xAA\xBB')
+    pc.send_bytes(b'\xaa\xbb')
+    ch.send.assert_called_once_with(b'\xaa\xbb')
     assert pc.dropped == 0
 
 

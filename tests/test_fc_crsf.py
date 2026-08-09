@@ -26,7 +26,7 @@ def test_frame_structure_starts_with_addr_and_length():
 
 
 def test_frame_includes_valid_crc():
-    payload = b'\xAA\xBB'
+    payload = b'\xaa\xbb'
     frame = CRSF._frame(0x16, payload)
     body = frame[2:-1]
     assert frame[-1] == CRSF.crc8(body)

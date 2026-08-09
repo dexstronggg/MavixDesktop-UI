@@ -1,4 +1,5 @@
 """Async UDP-relay between WebRTC data-channel and local QGroundControl."""
+
 from __future__ import annotations
 
 import asyncio
@@ -65,7 +66,9 @@ class MavlinkRelay:
             self._bound_port = sock.getsockname()[1]
         logger.info(
             '[mavlink-relay] слушаем на :%d, пересылаем на %s:%d',
-            self._bound_port, self._qgc_host, self._qgc_port,
+            self._bound_port,
+            self._qgc_host,
+            self._qgc_port,
         )
 
     async def stop(self) -> None:

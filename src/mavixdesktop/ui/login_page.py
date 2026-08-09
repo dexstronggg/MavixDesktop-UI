@@ -1,4 +1,5 @@
 """Login screen with email and password."""
+
 from __future__ import annotations
 
 import math
@@ -35,9 +36,9 @@ from mavixdesktop.ui.style import theme
 
 class _AuthBackground(QWidget):
     _BLOBS = [
-        (25, 25,  18, 12, 32.0, 0.0,  55, (34, 211, 238, 36)),
-        (75, 75,  22, 14, 38.0, 1.3,  60, (6,  182, 212, 30)),
-        (60, 30,  16, 18, 44.0, 2.1,  50, (29, 78,  216, 28)),
+        (25, 25, 18, 12, 32.0, 0.0, 55, (34, 211, 238, 36)),
+        (75, 75, 22, 14, 38.0, 1.3, 60, (6, 182, 212, 30)),
+        (60, 30, 16, 18, 44.0, 2.1, 50, (29, 78, 216, 28)),
     ]
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -65,7 +66,9 @@ class _AuthBackground(QWidget):
         p.setPen(Qt.PenStyle.NoPen)
         for bx, by, ax, ay, period, phase, rad_pct, rgba in self._BLOBS:
             cx = (bx + ax * math.sin(2 * math.pi * t / period + phase)) / 100.0 * w
-            cy = (by + ay * math.cos(2 * math.pi * t / period + phase * 1.2)) / 100.0 * h
+            cy = (
+                (by + ay * math.cos(2 * math.pi * t / period + phase * 1.2)) / 100.0 * h
+            )
             radius = rad_pct / 100.0 * min_side
 
             grad = QRadialGradient(QPointF(cx, cy), radius)
@@ -78,8 +81,13 @@ class _AuthBackground(QWidget):
 
 
 class _IconLineEdit(QFrame):
-    def __init__(self, icon_name: str, placeholder: str, echo: bool = False,
-                 parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        icon_name: str,
+        placeholder: str,
+        echo: bool = False,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName('iconInput')
         self.setMinimumHeight(44)
@@ -140,25 +148,33 @@ class _IconLineEdit(QFrame):
         self.input.focusInEvent = self._wrap_focus_in(self.input.focusInEvent)  # type: ignore[method-assign]
         self.input.focusOutEvent = self._wrap_focus_out(self.input.focusOutEvent)  # type: ignore[method-assign]
 
-    def _wrap_focus_in(self, orig: Callable[[QFocusEvent], None]) -> Callable[[QFocusEvent], None]:
+    def _wrap_focus_in(
+        self, orig: Callable[[QFocusEvent], None]
+    ) -> Callable[[QFocusEvent], None]:
         def handler(event: QFocusEvent) -> None:
             self.setProperty('focused', True)
             self.style().unpolish(self)
             self.style().polish(self)
             orig(event)
+
         return handler
 
-    def _wrap_focus_out(self, orig: Callable[[QFocusEvent], None]) -> Callable[[QFocusEvent], None]:
+    def _wrap_focus_out(
+        self, orig: Callable[[QFocusEvent], None]
+    ) -> Callable[[QFocusEvent], None]:
         def handler(event: QFocusEvent) -> None:
             self.setProperty('focused', False)
             self.style().unpolish(self)
             self.style().polish(self)
             orig(event)
+
         return handler
 
 
 class _Spinner(QWidget):
-    def __init__(self, size: int = 16, color: QColor | None = None, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, size: int = 16, color: QColor | None = None, parent: QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self.setFixedSize(size, size)
         self._size = size
@@ -381,6 +397,7 @@ class LoginPage(QWidget):
     def eventFilter(self, obj: QObject | None, event: QEvent) -> bool:
         if obj is self._submit_btn:
             from PySide6.QtCore import QEvent as _QE
+
             if event.type() in (_QE.Type.Resize, _QE.Type.Show):
                 btn_h = self._submit_btn.height()
                 self._busy_spinner.move(18, (btn_h - self._busy_spinner.height()) // 2)
@@ -425,7 +442,9 @@ class LoginPage(QWidget):
                 f'color: {theme.STATUS_ERROR}; background: transparent;'
                 f'font-size: {theme.FONT_SIZE_SM - 1}px; padding: 4px 0;'
             )
-            self._forgot_msg.setText('Введите email в поле выше и нажмите ссылку ещё раз')
+            self._forgot_msg.setText(
+                'Введите email в поле выше и нажмите ссылку ещё раз'
+            )
             self._forgot_msg.show()
             return
         if self._on_forgot_password is not None:

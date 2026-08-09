@@ -1,4 +1,5 @@
 """Common application logger: single named singleton `logger`."""
+
 from __future__ import annotations
 
 import logging
@@ -49,7 +50,9 @@ def enable_debug_logging() -> None:
 def setup_file_logging() -> None:
     from mavixdesktop.core.config import settings
 
-    if any(isinstance(h, logging.handlers.RotatingFileHandler) for h in logger.handlers):
+    if any(
+        isinstance(h, logging.handlers.RotatingFileHandler) for h in logger.handlers
+    ):
         return
 
     log_path = settings.log_path
@@ -84,7 +87,8 @@ def install_exception_hooks() -> None:
             return
         name = args.thread.name if args.thread is not None else '?'
         logger.critical(
-            'необработанное исключение в потоке %s', name,
+            'необработанное исключение в потоке %s',
+            name,
             exc_info=cast(
                 tuple[type[BaseException], BaseException, TracebackType | None],
                 (args.exc_type, args.exc_value, args.exc_traceback),

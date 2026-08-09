@@ -1,4 +1,5 @@
 """Render numpy ndarray (BGR24) frames in QLabel via QImage/QPixmap."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -27,7 +28,9 @@ class VideoWidget(QLabel):
             return
         height, width, _ = img.shape
         bytes_per_line = img.strides[0]
-        qimg = QImage(img.data, width, height, bytes_per_line, QImage.Format.Format_BGR888)
+        qimg = QImage(
+            img.data, width, height, bytes_per_line, QImage.Format.Format_BGR888
+        )
         pix = QPixmap.fromImage(qimg)
         target = self.size()
         scaled = pix.scaled(

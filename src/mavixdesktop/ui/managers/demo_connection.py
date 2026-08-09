@@ -1,4 +1,5 @@
 """Demo connection manager — stub for UI testing without a server."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -27,9 +28,9 @@ _MOCK_CAMERAS = [
         'params': [
             {'width': 1920, 'height': 1080, 'fps': 30},
             {'width': 1920, 'height': 1080, 'fps': 60},
-            {'width': 1280, 'height': 720,  'fps': 30},
-            {'width': 1280, 'height': 720,  'fps': 60},
-            {'width': 640,  'height': 480,  'fps': 30},
+            {'width': 1280, 'height': 720, 'fps': 30},
+            {'width': 1280, 'height': 720, 'fps': 60},
+            {'width': 640, 'height': 480, 'fps': 30},
         ],
     },
 ]
@@ -41,18 +42,26 @@ class DemoConnectionManager:
     def __init__(self, bridge: Bridge) -> None:
         self._bridge = bridge
         self._loop = None
-        logger.info('[demo] connection manager активирован; реальных вызовов сервера нет')
+        logger.info(
+            '[demo] connection manager активирован; реальных вызовов сервера нет'
+        )
 
     @property
     def coordinator(self) -> None:
         return None
 
-    def delete_drone(self, drone_id: str, on_done: Callable[[str | None], None] | None = None) -> None:
+    def delete_drone(
+        self, drone_id: str, on_done: Callable[[str | None], None] | None = None
+    ) -> None:
         logger.info('[demo] delete_drone(%s) — no-op', drone_id)
         if on_done is not None:
             on_done(None)
 
-    def set_quality_sink(self, on_inbound: Callable[[float, float], None], on_board: Callable[[dict[str, Any]], None]) -> None:
+    def set_quality_sink(
+        self,
+        on_inbound: Callable[[float, float], None],
+        on_board: Callable[[dict[str, Any]], None],
+    ) -> None:
         return
 
     def set_track_callback(self, on_track: Callable[[MediaStreamTrack], None]) -> None:
@@ -75,7 +84,9 @@ class DemoConnectionManager:
 
     def select_drone(self, drone_id: str) -> None:
         logger.info('[demo] select_drone(%s) — эмитирую mock-камеры и FC', drone_id)
-        QTimer.singleShot(120, lambda: self._bridge.config_received.emit(list(_MOCK_CAMERAS)))
+        QTimer.singleShot(
+            120, lambda: self._bridge.config_received.emit(list(_MOCK_CAMERAS))
+        )
         QTimer.singleShot(140, lambda: self._bridge.fc_info_received.emit(*_MOCK_FC))
 
     def disconnect_drone(self) -> None:

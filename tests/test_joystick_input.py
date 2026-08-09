@@ -1,11 +1,16 @@
 """Tests for joystick.input.JoystickInput -- pygame is fully mocked."""
+
 from __future__ import annotations
 
 import sys
 from unittest.mock import MagicMock
 
 
-def _install_pygame_mock(monkeypatch, axes_by_idx: dict[int, float], buttons_by_idx: dict[int, int] | None = None):
+def _install_pygame_mock(
+    monkeypatch,
+    axes_by_idx: dict[int, float],
+    buttons_by_idx: dict[int, int] | None = None,
+):
     pg = MagicMock()
     js = MagicMock()
     js.get_axis.side_effect = lambda idx: axes_by_idx.get(idx, 0.0)
@@ -18,12 +23,24 @@ def _install_pygame_mock(monkeypatch, axes_by_idx: dict[int, float], buttons_by_
 
 def _full_cal() -> dict:
     return {
-        'axis_thr': 1, 'axis_yaw': 0, 'axis_pitch': 3, 'axis_roll': 2,
-        'thr_min': -1.0, 'thr_max': 1.0, 'thr_center': 0.0,
-        'yaw_min': -1.0, 'yaw_max': 1.0, 'yaw_center': 0.0,
-        'pitch_min': -1.0, 'pitch_max': 1.0, 'pitch_center': 0.0,
-        'roll_min': -1.0, 'roll_max': 1.0, 'roll_center': 0.0,
-        'arm_type': 'button', 'arm_button_index': 4,
+        'axis_thr': 1,
+        'axis_yaw': 0,
+        'axis_pitch': 3,
+        'axis_roll': 2,
+        'thr_min': -1.0,
+        'thr_max': 1.0,
+        'thr_center': 0.0,
+        'yaw_min': -1.0,
+        'yaw_max': 1.0,
+        'yaw_center': 0.0,
+        'pitch_min': -1.0,
+        'pitch_max': 1.0,
+        'pitch_center': 0.0,
+        'roll_min': -1.0,
+        'roll_max': 1.0,
+        'roll_center': 0.0,
+        'arm_type': 'button',
+        'arm_button_index': 4,
     }
 
 

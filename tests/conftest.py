@@ -1,4 +1,5 @@
 """pytest-wide setup for MavixDesktop tests."""
+
 import os
 import sys
 

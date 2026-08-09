@@ -1,4 +1,5 @@
 """Polls RTCPeerConnection.getStats() once a second and turns counters into rates."""
+
 from __future__ import annotations
 
 import asyncio
@@ -36,7 +37,9 @@ def to_sample(previous: _Totals, current: _Totals) -> tuple[float, float]:
     elapsed = current.at - previous.at
     if elapsed <= 0:
         return 0.0, 0.0
-    bitrate = max(0, current.bytes_received - previous.bytes_received) * 8 / 1000.0 / elapsed
+    bitrate = (
+        max(0, current.bytes_received - previous.bytes_received) * 8 / 1000.0 / elapsed
+    )
     received = max(0, current.packets_received - previous.packets_received)
     lost = max(0, current.packets_lost - previous.packets_lost)
     expected = received + lost

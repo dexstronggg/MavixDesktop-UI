@@ -1,4 +1,5 @@
 """UI scale stored in ~/.config/mavixdesktop/config.json and applied via QT_SCALE_FACTOR."""
+
 from __future__ import annotations
 
 import json

@@ -1,4 +1,5 @@
 """Logging: rotation, no duplicate handlers, crashes end up in the log."""
+
 from __future__ import annotations
 
 import logging
@@ -15,9 +16,12 @@ from mavixdesktop.core import logger as logger_module
 def clean_logger(tmp_path, monkeypatch):
     log = logger_module.logger
     saved = list(log.handlers)
-    log.handlers = [h for h in saved if not isinstance(h, logging.handlers.RotatingFileHandler)]
+    log.handlers = [
+        h for h in saved if not isinstance(h, logging.handlers.RotatingFileHandler)
+    ]
 
     from mavixdesktop.core.config import settings
+
     monkeypatch.setattr(settings, 'log_path', tmp_path / 'logs' / 'mavixdesktop.log')
 
     saved_excepthook = sys.excepthook
@@ -29,7 +33,9 @@ def clean_logger(tmp_path, monkeypatch):
 
 
 def _file_handlers(log):
-    return [h for h in log.handlers if isinstance(h, logging.handlers.RotatingFileHandler)]
+    return [
+        h for h in log.handlers if isinstance(h, logging.handlers.RotatingFileHandler)
+    ]
 
 
 def test_file_logging_uses_rotation(clean_logger, tmp_path):
@@ -52,7 +58,7 @@ def test_rotation_actually_rolls_over(clean_logger, tmp_path):
     handler.maxBytes = 512
     for i in range(200):
         clean_logger.info('строка лога номер %d, набиваем объём для ротации', i)
-    log_dir = (tmp_path / 'logs')
+    log_dir = tmp_path / 'logs'
     assert (log_dir / 'mavixdesktop.log').exists()
     assert (log_dir / 'mavixdesktop.log.1').exists()
 

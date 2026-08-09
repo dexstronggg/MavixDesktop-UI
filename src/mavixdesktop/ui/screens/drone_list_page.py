@@ -57,8 +57,9 @@ def _brand_widget(parent: QWidget | None = None) -> QWidget:
     return w
 
 
-def _icon_button(icon_name: str | None, text: str,
-                 parent: QWidget | None = None) -> QPushButton:
+def _icon_button(
+    icon_name: str | None, text: str, parent: QWidget | None = None
+) -> QPushButton:
     btn = QPushButton(text, parent)
     if icon_name is not None:
         btn.setIcon(QIcon(svg_pixmap(icon_name, 16, color=theme.TEXT_PRIMARY)))
@@ -68,19 +69,19 @@ def _icon_button(icon_name: str | None, text: str,
     return btn
 
 
-_CARD_W   = 210
-_CARD_H   = 230
+_CARD_W = 210
+_CARD_H = 230
 _ICON_SIZE = 88
 _ID_MAX_CHARS = 16
 
 _STATUS_COLORS = {
-    'ready':      theme.STATUS_READY,
-    'offline':    theme.STATUS_ERROR,
+    'ready': theme.STATUS_READY,
+    'offline': theme.STATUS_ERROR,
     'connecting': theme.WARNING,
 }
 _STATUS_LABELS = {
-    'ready':      'готов',
-    'offline':    'offline',
+    'ready': 'готов',
+    'offline': 'offline',
     'connecting': 'подключение',
 }
 
@@ -109,12 +110,13 @@ class DroneCard(AnimatedCard):
     clicked = Signal(str)
     delete_requested = Signal(str)
 
-    def __init__(self, drone_id: str, status: str, index: int,
-                 icon_pixmap: QPixmap) -> None:
+    def __init__(
+        self, drone_id: str, status: str, index: int, icon_pixmap: QPixmap
+    ) -> None:
         super().__init__()
         self._drone_id = drone_id
         self._status = status
-        self._ready = (status == 'ready')
+        self._ready = status == 'ready'
         self._bar_color = _STATUS_COLORS.get(status, theme.ACCENT)
 
         self.setFixedSize(_CARD_W, _CARD_H)
@@ -193,7 +195,9 @@ class DroneCard(AnimatedCard):
         self._dots_btn = QPushButton(self)
         self._dots_btn.setFixedSize(28, 28)
         self._dots_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._dots_btn.setIcon(QIcon(svg_pixmap('three_dots.svg', 16, color=theme.TEXT_MUTED)))
+        self._dots_btn.setIcon(
+            QIcon(svg_pixmap('three_dots.svg', 16, color=theme.TEXT_MUTED))
+        )
         self._dots_btn.setIconSize(QSize(16, 16))
         self._dots_btn.setToolTip('Действия')
         self._dots_btn.setStyleSheet(
@@ -256,7 +260,7 @@ class DroneCard(AnimatedCard):
 class _DroneGrid(CardGrid):
     CARD_W = _CARD_W
     CARD_H = _CARD_H
-    GAP    = 20
+    GAP = 20
 
 
 class _StatsBar(QWidget):
@@ -277,9 +281,9 @@ class _StatsBar(QWidget):
 
         self._items: dict[str, tuple[QLabel, QLabel]] = {}
         for key, label, color in [
-            ('total',      'всего',       theme.TEXT_PRIMARY),
-            ('ready',      'готов',       _STATUS_COLORS['ready']),
-            ('offline',    'offline',     _STATUS_COLORS['offline']),
+            ('total', 'всего', theme.TEXT_PRIMARY),
+            ('ready', 'готов', _STATUS_COLORS['ready']),
+            ('offline', 'offline', _STATUS_COLORS['offline']),
             ('connecting', 'подключение', _STATUS_COLORS['connecting']),
         ]:
             block = self._build_item(label, color)
@@ -361,7 +365,9 @@ class _DocsHint(QWidget):
         lay.addWidget(title)
 
         sep = QLabel('·')
-        sep.setStyleSheet(f'color: {theme.TEXT_DISABLED}; font-size: {theme.FONT_SIZE_BASE}px;')
+        sep.setStyleSheet(
+            f'color: {theme.TEXT_DISABLED}; font-size: {theme.FONT_SIZE_BASE}px;'
+        )
         lay.addWidget(sep)
 
         link = QLabel('Как зарегистрировать дрон — см. документацию')
@@ -381,10 +387,15 @@ class _DocsHint(QWidget):
 
 
 class DroneListPage(QWidget):
-    def __init__(self, on_select: Callable[[str], None], on_refresh: Callable[[], None],
-                 on_logout: Callable[[], None], on_joystick_cfg: Callable[[], None],
-                 on_open_settings: Callable[[], None] | None = None,
-                 on_delete_drone: Callable[[str], None] | None = None) -> None:
+    def __init__(
+        self,
+        on_select: Callable[[str], None],
+        on_refresh: Callable[[], None],
+        on_logout: Callable[[], None],
+        on_joystick_cfg: Callable[[], None],
+        on_open_settings: Callable[[], None] | None = None,
+        on_delete_drone: Callable[[str], None] | None = None,
+    ) -> None:
         super().__init__()
         self._on_select = on_select
         self._on_delete_drone = on_delete_drone
@@ -489,7 +500,9 @@ class DroneListPage(QWidget):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        self._empty = QLabel('Дроны не найдены\n\nПодождите, список обновляется автоматически')
+        self._empty = QLabel(
+            'Дроны не найдены\n\nПодождите, список обновляется автоматически'
+        )
         self._empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty.setStyleSheet(
             f'color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_BASE}px;'

@@ -1,4 +1,5 @@
 """Shared UI utilities for the screens package."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -98,8 +99,12 @@ def overlay_btn(text: str, parent: QWidget, size: int | None = None) -> QPushBut
     return btn
 
 
-def overlay_icon_btn(svg_name: str, parent: QWidget,
-                     size: int | None = None, icon_size: int | None = None) -> QPushButton:
+def overlay_icon_btn(
+    svg_name: str,
+    parent: QWidget,
+    size: int | None = None,
+    icon_size: int | None = None,
+) -> QPushButton:
     if size is None:
         size = theme.OVERLAY_BTN_CORNER
     if icon_size is None:
@@ -131,8 +136,8 @@ def overlay_icon_btn(svg_name: str, parent: QWidget,
 
 class AnimatedCard(QWidget):
     _ANIM_DURATION = 500
-    _BAR_RADIUS    = theme.RADIUS_LG
-    _BAR_HEIGHT    = 3
+    _BAR_RADIUS = theme.RADIUS_LG
+    _BAR_HEIGHT = 3
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -179,14 +184,16 @@ class AnimatedCard(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(self._bar_color))
-        painter.drawRoundedRect(r, self.height() - self._BAR_HEIGHT, bar_w, self._BAR_HEIGHT, 1, 1)
+        painter.drawRoundedRect(
+            r, self.height() - self._BAR_HEIGHT, bar_w, self._BAR_HEIGHT, 1, 1
+        )
         painter.end()
 
 
 class CardGrid(QWidget):
     CARD_W: int = 0
     CARD_H: int = 0
-    GAP:    int = 0
+    GAP: int = 0
 
     def __init__(self) -> None:
         super().__init__()
@@ -223,11 +230,21 @@ class CardGrid(QWidget):
             self._layout.setColumnStretch(c, 0)
 
         if n == 1:
-            self._layout.addWidget(self._cards[0], 0, 0, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+            self._layout.addWidget(
+                self._cards[0],
+                0,
+                0,
+                Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
+            )
             self._layout.setColumnStretch(1, 1)
         else:
             for i, card in enumerate(self._cards):
-                self._layout.addWidget(card, i // cols, i % cols, Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+                self._layout.addWidget(
+                    card,
+                    i // cols,
+                    i % cols,
+                    Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter,
+                )
 
         rows = (n + cols - 1) // cols if self._cards else 0
         self.setMinimumHeight(rows * (self.CARD_H + self.GAP) + self.GAP)

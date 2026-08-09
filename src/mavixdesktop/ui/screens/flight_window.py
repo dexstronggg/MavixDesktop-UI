@@ -33,30 +33,36 @@ _TAKEOFF_HELP = (
     '3. Аккуратно добавьте газ.'
 )
 
-_PAD        = 16
+_PAD = 16
 _STICK_SIZE = 120
-_STICK_GAP  = 20
-_STICK_PAD  = 24
+_STICK_GAP = 20
+_STICK_PAD = 24
 
-_ARM_STYLE   = f'font-weight: bold; font-size: 13px; color: {theme.STATUS_ARM};   background: transparent;'
+_ARM_STYLE = f'font-weight: bold; font-size: 13px; color: {theme.STATUS_ARM};   background: transparent;'
 _DISARM_STYLE = f'font-weight: bold; font-size: 13px; color: {theme.STATUS_DISARM}; background: transparent;'
 
 
 class Signalling(Protocol):
     @property
-    def peer_ping_ms(self) -> float:
-        ...
+    def peer_ping_ms(self) -> float: ...
 
-    def send_crsf_packet(self, frame: bytes) -> None:
-        ...
+    def send_crsf_packet(self, frame: bytes) -> None: ...
 
 
 class FlightWindow(QWidget):
-    def __init__(self, joystick_input: JoystickInput, signalling: Signalling | None,
-                 get_frame: Callable[[int], np.ndarray[tuple[int, int, int], np.dtype[np.uint8]] | None], cam_count: Callable[[], int],
-                 loop: asyncio.AbstractEventLoop | None, on_close: Callable[[], None],
-                 fc_kind: str = 'crsf',
-                 passive: bool = False) -> None:
+    def __init__(
+        self,
+        joystick_input: JoystickInput,
+        signalling: Signalling | None,
+        get_frame: Callable[
+            [int], np.ndarray[tuple[int, int, int], np.dtype[np.uint8]] | None
+        ],
+        cam_count: Callable[[], int],
+        loop: asyncio.AbstractEventLoop | None,
+        on_close: Callable[[], None],
+        fc_kind: str = 'crsf',
+        passive: bool = False,
+    ) -> None:
         super().__init__()
         self.setWindowTitle('Flight')
         self._js = joystick_input
@@ -99,20 +105,21 @@ class FlightWindow(QWidget):
         self._help_btn.setToolTip('Горячие клавиши и что означают показатели')
         self._help_btn.clicked.connect(self.toggle_help)
 
-
         self._prev_btn = overlay_btn('◀', self)
         self._prev_btn.clicked.connect(self.__prev_cam)
         self._next_btn = overlay_btn('▶', self)
         self._next_btn.clicked.connect(self.__next_cam)
 
         self._quality_lbl = QLabel('\u25cf  нет данных', self)
-        self._quality_lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        self._quality_lbl.setAlignment(
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
+        )
         self._quality_lbl.setStyleSheet(self.__quality_qss(theme.TEXT_MUTED))
         self._quality_lbl.adjustSize()
 
         self._stale_lbl = QLabel('', self)
         self._stale_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._stale_lbl.setStyleSheet(f'''
+        self._stale_lbl.setStyleSheet(f"""
             QLabel {{
                 background: rgba(0,0,0,0.60);
                 color: {theme.STATUS_ERROR};
@@ -122,7 +129,7 @@ class FlightWindow(QWidget):
                 font-weight: 600;
                 padding: 6px 14px;
             }}
-        ''')
+        """)
         self._stale_lbl.hide()
 
         self._arm_label = QLabel('DISARM', self)
@@ -130,8 +137,12 @@ class FlightWindow(QWidget):
         self._arm_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._arm_label.setStyleSheet(_DISARM_STYLE)
 
-        self._stick_left  = StickWidget('Тяга/Рыскание',  self, bg_alpha=160, label_font_px=18)
-        self._stick_right = StickWidget('Тангаж/Крен',    self, bg_alpha=160, label_font_px=18)
+        self._stick_left = StickWidget(
+            'Тяга/Рыскание', self, bg_alpha=160, label_font_px=18
+        )
+        self._stick_right = StickWidget(
+            'Тангаж/Крен', self, bg_alpha=160, label_font_px=18
+        )
 
         self.hint_lbl = QLabel('Клавиши  ←  →  для переключения камер', self)
         self.hint_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -168,7 +179,6 @@ class FlightWindow(QWidget):
             }}
         """
 
-
         self._battery_lbl = QLabel('—', self)
         self._battery_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._battery_lbl.setFixedSize(90, 26)
@@ -186,8 +196,10 @@ class FlightWindow(QWidget):
 
         self._video_label.setGeometry(0, 0, w, h)
         self._back_btn.move(_PAD, _PAD)
-        self._help_btn.move(_PAD + theme.OVERLAY_BTN_CORNER + 12,
-                            _PAD + (theme.OVERLAY_BTN_CORNER - self._help_btn.height()) // 2)
+        self._help_btn.move(
+            _PAD + theme.OVERLAY_BTN_CORNER + 12,
+            _PAD + (theme.OVERLAY_BTN_CORNER - self._help_btn.height()) // 2,
+        )
 
         side_sz = theme.OVERLAY_BTN_SIDE
         self._prev_btn.move(_PAD, (h - side_sz) // 2)
@@ -199,21 +211,26 @@ class FlightWindow(QWidget):
         self._stick_left.move(x0, stick_y)
         self._stick_right.move(x0 + _STICK_SIZE + _STICK_GAP, stick_y)
 
-        self.hint_lbl.setGeometry(_PAD, _PAD + theme.OVERLAY_BTN_CORNER + 8, w - 2 * _PAD, 20)
+        self.hint_lbl.setGeometry(
+            _PAD, _PAD + theme.OVERLAY_BTN_CORNER + 8, w - 2 * _PAD, 20
+        )
 
         arm_w = 100
         self._arm_label.setGeometry((w - arm_w) // 2, stick_y - 26, arm_w, 20)
 
         self._quality_lbl.move(_PAD, h - self._quality_lbl.height() - _PAD)
-        self._stale_lbl.move((w - self._stale_lbl.width()) // 2, _PAD + theme.OVERLAY_BTN_CORNER + 34)
+        self._stale_lbl.move(
+            (w - self._stale_lbl.width()) // 2, _PAD + theme.OVERLAY_BTN_CORNER + 34
+        )
         self._battery_lbl.move(
             w - self._battery_lbl.width() - _PAD,
             h - self._battery_lbl.height() - _PAD,
         )
 
-
         self._lost_lbl.adjustSize()
-        self._lost_lbl.move((w - self._lost_lbl.width()) // 2, (h - self._lost_lbl.height()) // 2)
+        self._lost_lbl.move(
+            (w - self._lost_lbl.width()) // 2, (h - self._lost_lbl.height()) // 2
+        )
 
     def __prev_cam(self) -> None:
         n = self._cam_count()
@@ -249,7 +266,9 @@ class FlightWindow(QWidget):
             thr, yaw, pitch, roll = self._js.get_stick_positions()
             armed = self._js.is_armed()
         except Exception as exc:
-            logger.warning('[FlightWindow] сбой чтения джойстика, трактуем как отключение: %s', exc)
+            logger.warning(
+                '[FlightWindow] сбой чтения джойстика, трактуем как отключение: %s', exc
+            )
             self.__handle_joystick_lost()
             return
 
@@ -275,7 +294,9 @@ class FlightWindow(QWidget):
         self._lost_lbl.raise_()
 
         if self._fc_kind == 'mavlink':
-            logger.warning('[FlightWindow] джойстик отключён — аварийный DISARM (MAVLink)')
+            logger.warning(
+                '[FlightWindow] джойстик отключён — аварийный DISARM (MAVLink)'
+            )
             self._lost_lbl.setText('⚠  СВЯЗЬ С ДЖОЙСТИКОМ ПОТЕРЯНА')
         else:
             logger.warning('[FlightWindow] джойстик отключён — аварийный DISARM (CRSF)')
@@ -294,8 +315,9 @@ class FlightWindow(QWidget):
         except Exception as exc:
             logger.debug('[FlightWindow] ошибка аварийной отправки crsf: %s', exc)
 
-    def __tick_crsf(self, thr: float, yaw: float, pitch: float,
-                    roll: float, armed: bool) -> None:
+    def __tick_crsf(
+        self, thr: float, yaw: float, pitch: float, roll: float, armed: bool
+    ) -> None:
         try:
             packet = build_rc_frame(thr, roll, pitch, yaw, armed)
         except Exception as exc:
@@ -305,8 +327,14 @@ class FlightWindow(QWidget):
             logger.info(
                 '[FlightWindow] переход arm CRSF: %s -> %s '
                 '(thr=%.2f yaw=%.2f pitch=%.2f roll=%.2f, frame len=%d, head=%s)',
-                self._last_armed, armed, thr, yaw, pitch, roll,
-                len(packet), packet[:6].hex(),
+                self._last_armed,
+                armed,
+                thr,
+                yaw,
+                pitch,
+                roll,
+                len(packet),
+                packet[:6].hex(),
             )
             self._last_armed = armed
         self._send_packet(packet)
@@ -372,7 +400,9 @@ class FlightWindow(QWidget):
             qimg = QImage(frame.data, fw, fh, ch * fw, QImage.Format.Format_BGR888)
             self._video_label.setPixmap(
                 QPixmap.fromImage(qimg).scaled(
-                    self._video_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation,
+                    self._video_label.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
                 )
             )
 

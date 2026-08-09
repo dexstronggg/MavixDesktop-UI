@@ -1,4 +1,5 @@
 """Settings UI — edits ~/.config/mavixdesktop/config.json from the app."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -50,7 +51,9 @@ class SettingsPage(QWidget):
         self._ui_scale_saved: int = user_config.load_ui_scale()
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(theme.SPACE_LG, theme.SPACE_LG, theme.SPACE_LG, theme.SPACE_LG)
+        outer.setContentsMargins(
+            theme.SPACE_LG, theme.SPACE_LG, theme.SPACE_LG, theme.SPACE_LG
+        )
         outer.setSpacing(theme.SPACE_MD)
 
         outer.addWidget(self._build_header())
@@ -66,35 +69,41 @@ class SettingsPage(QWidget):
         body_layout.setContentsMargins(0, 0, 0, 0)
         body_layout.setSpacing(theme.SPACE_LG)
 
-        body_layout.addWidget(self._build_card(
-            'Сервер',
-            'URL базового HTTP-эндпойнта MavixServer. WebSocket-адрес'
-            ' выводится из этого значения автоматически.',
-            [('signal_url', 'SIGNAL_URL', 'http://example.com:8000')],
-        ))
+        body_layout.addWidget(
+            self._build_card(
+                'Сервер',
+                'URL базового HTTP-эндпойнта MavixServer. WebSocket-адрес'
+                ' выводится из этого значения автоматически.',
+                [('signal_url', 'SIGNAL_URL', 'http://example.com:8000')],
+            )
+        )
 
-        body_layout.addWidget(self._build_card(
-            'WebRTC (STUN/TURN)',
-            'Оставьте пустыми, чтобы использовать настройки сервера'
-            ' (получаются через /api/v1/ice-servers). Заполните, чтобы'
-            ' принудительно использовать свои.',
-            [
-                ('stun_server',   'STUN сервер',  'stun:host:3478'),
-                ('turn_server',   'TURN сервер',  'turn:host:3478'),
-                ('turn_username', 'TURN логин',   ''),
-                ('turn_password', 'TURN пароль',  ''),
-            ],
-        ))
+        body_layout.addWidget(
+            self._build_card(
+                'WebRTC (STUN/TURN)',
+                'Оставьте пустыми, чтобы использовать настройки сервера'
+                ' (получаются через /api/v1/ice-servers). Заполните, чтобы'
+                ' принудительно использовать свои.',
+                [
+                    ('stun_server', 'STUN сервер', 'stun:host:3478'),
+                    ('turn_server', 'TURN сервер', 'turn:host:3478'),
+                    ('turn_username', 'TURN логин', ''),
+                    ('turn_password', 'TURN пароль', ''),
+                ],
+            )
+        )
 
-        body_layout.addWidget(self._build_card(
-            'QGroundControl / MAVLink relay',
-            'UDP-сокет, куда desktop форвардит MAVLink-пакеты от дрона'
-            ' для QGC. Меняйте только если QGC слушает не на 127.0.0.1:14550.',
-            [
-                ('qgc_host', 'QGC хост', '127.0.0.1'),
-                ('qgc_port', 'QGC порт', '14550'),
-            ],
-        ))
+        body_layout.addWidget(
+            self._build_card(
+                'QGroundControl / MAVLink relay',
+                'UDP-сокет, куда desktop форвардит MAVLink-пакеты от дрона'
+                ' для QGC. Меняйте только если QGC слушает не на 127.0.0.1:14550.',
+                [
+                    ('qgc_host', 'QGC хост', '127.0.0.1'),
+                    ('qgc_port', 'QGC порт', '14550'),
+                ],
+            )
+        )
 
         body_layout.addWidget(self._build_ui_scale_card())
 
@@ -129,7 +138,9 @@ class SettingsPage(QWidget):
         layout.addStretch()
         return header
 
-    def _build_card(self, title: str, subtitle: str, fields: list[tuple[str, str, str]]) -> QWidget:
+    def _build_card(
+        self, title: str, subtitle: str, fields: list[tuple[str, str, str]]
+    ) -> QWidget:
         card = QWidget()
         card.setObjectName('settingsCard')
         card.setStyleSheet(
@@ -140,11 +151,15 @@ class SettingsPage(QWidget):
             f' }}'
         )
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(theme.SPACE_LG, theme.SPACE_MD, theme.SPACE_LG, theme.SPACE_MD)
+        layout.setContentsMargins(
+            theme.SPACE_LG, theme.SPACE_MD, theme.SPACE_LG, theme.SPACE_MD
+        )
         layout.setSpacing(theme.SPACE_SM)
 
         h = QLabel(title)
-        h.setStyleSheet(f'color: {theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;')
+        h.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;'
+        )
         layout.addWidget(h)
 
         sub = QLabel(subtitle)
@@ -158,7 +173,9 @@ class SettingsPage(QWidget):
             row.setSpacing(4)
 
             lbl = QLabel(label_text)
-            lbl.setStyleSheet(f'color: {theme.TEXT_MUTED}; font-size: 12px; font-weight: 500;')
+            lbl.setStyleSheet(
+                f'color: {theme.TEXT_MUTED}; font-size: 12px; font-weight: 500;'
+            )
             row.addWidget(lbl)
 
             inp = QLineEdit()
@@ -183,11 +200,15 @@ class SettingsPage(QWidget):
             f' }}'
         )
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(theme.SPACE_LG, theme.SPACE_MD, theme.SPACE_LG, theme.SPACE_MD)
+        layout.setContentsMargins(
+            theme.SPACE_LG, theme.SPACE_MD, theme.SPACE_LG, theme.SPACE_MD
+        )
         layout.setSpacing(theme.SPACE_SM)
 
         h = QLabel('Масштаб интерфейса')
-        h.setStyleSheet(f'color: {theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;')
+        h.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;'
+        )
         layout.addWidget(h)
 
         sub = QLabel(
@@ -217,7 +238,9 @@ class SettingsPage(QWidget):
 
         value_label = QLabel(f'{user_config.UI_SCALE_DEFAULT} %')
         value_label.setMinimumWidth(56)
-        value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        value_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        )
         value_label.setStyleSheet(
             f'color: {theme.ACCENT}; font-size: 15px; font-weight: 600;'
             f' font-family: {theme.FONT_FAMILY_MONO};'
@@ -232,7 +255,9 @@ class SettingsPage(QWidget):
             '⚠  Новый масштаб применится только после полного перезапуска '
             'приложения — закройте его и откройте снова.'
         )
-        warn.setStyleSheet(f'color: {theme.WARNING}; font-size: 13px; font-weight: 500;')
+        warn.setStyleSheet(
+            f'color: {theme.WARNING}; font-size: 13px; font-weight: 500;'
+        )
         warn.setWordWrap(True)
         layout.addWidget(warn)
 
@@ -258,11 +283,15 @@ class SettingsPage(QWidget):
             f' }}'
         )
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(theme.SPACE_LG, theme.SPACE_MD, theme.SPACE_LG, theme.SPACE_MD)
+        layout.setContentsMargins(
+            theme.SPACE_LG, theme.SPACE_MD, theme.SPACE_LG, theme.SPACE_MD
+        )
         layout.setSpacing(theme.SPACE_SM)
 
         h = QLabel('Debug: force-relay (TURN-only)')
-        h.setStyleSheet(f'color: {theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;')
+        h.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; font-size: 16px; font-weight: 600;'
+        )
         layout.addWidget(h)
 
         sub = QLabel(
@@ -276,7 +305,9 @@ class SettingsPage(QWidget):
         layout.addWidget(sub)
 
         cb = QCheckBox('Включить force-relay режим')
-        cb.setStyleSheet(f'color: {theme.TEXT_PRIMARY}; font-size: 13px; padding-top: 4px;')
+        cb.setStyleSheet(
+            f'color: {theme.TEXT_PRIMARY}; font-size: 13px; padding-top: 4px;'
+        )
         self._force_relay_cb = cb
         layout.addWidget(cb)
 
@@ -317,7 +348,9 @@ class SettingsPage(QWidget):
         for key, inp in self._inputs.items():
             inp.setText(current.get(key, ''))
         if self._force_relay_cb is not None:
-            self._force_relay_cb.setChecked(bool(getattr(settings, 'force_relay', False)))
+            self._force_relay_cb.setChecked(
+                bool(getattr(settings, 'force_relay', False))
+            )
         self._ui_scale_saved = user_config.load_ui_scale()
         if self._ui_scale_slider is not None:
             self._ui_scale_slider.setValue(self._ui_scale_saved)
@@ -325,7 +358,9 @@ class SettingsPage(QWidget):
             self._ui_scale_value.setText(f'{self._ui_scale_saved} %')
 
     def _collect(self) -> dict[str, Any]:
-        values: dict[str, Any] = {key: inp.text().strip() for key, inp in self._inputs.items()}
+        values: dict[str, Any] = {
+            key: inp.text().strip() for key, inp in self._inputs.items()
+        }
         if self._force_relay_cb is not None:
             values['force_relay'] = self._force_relay_cb.isChecked()
         if self._ui_scale_slider is not None:
@@ -339,7 +374,9 @@ class SettingsPage(QWidget):
             'Все поля будут заполнены значениями по умолчанию.\n'
             'Нажмите «Сохранить», чтобы применить.'
         )
-        confirm.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+        confirm.setStandardButtons(
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+        )
         confirm.setDefaultButton(QMessageBox.StandardButton.Cancel)
         if confirm.exec() != QMessageBox.StandardButton.Ok:
             return

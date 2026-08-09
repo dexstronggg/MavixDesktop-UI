@@ -1,7 +1,9 @@
 """UI adapter over mavixdesktop.coordinator.SessionCoordinator."""
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import threading
 from collections.abc import Awaitable, Callable, Coroutine
 from typing import TYPE_CHECKING, Any, cast
@@ -47,7 +49,8 @@ class ConnectionManager:
         self._ensure_loop_started()
         assert self._loop is not None
         asyncio.run_coroutine_threadsafe(
-            self._login_and_run(email, password), self._loop,
+            self._login_and_run(email, password),
+            self._loop,
         )
 
     def resume(self) -> bool:
@@ -57,7 +60,8 @@ class ConnectionManager:
         self._ensure_loop_started()
         assert self._loop is not None
         asyncio.run_coroutine_threadsafe(
-            self._refresh_and_run(email or '', refresh), self._loop,
+            self._refresh_and_run(email or '', refresh),
+            self._loop,
         )
         return True
 
@@ -105,7 +109,9 @@ class ConnectionManager:
             try:
                 await self._coord.request_drone_list()
             except Exception as exc:
-                logger.warning('[connection] не удалось обновить список после удаления: %s', exc)
+                logger.warning(
+                    '[connection] не удалось обновить список после удаления: %s', exc
+                )
         if on_done is not None:
             QTimer.singleShot(0, lambda e=error: on_done(e))
 
@@ -156,7 +162,9 @@ class ConnectionManager:
         try:
             result = await self._api.login(email, password)
             token_store.save(email, result['refresh_token'])
-            await self._start_coordinator(result['access_token'], result['refresh_token'])
+            await self._start_coordinator(
+                result['access_token'], result['refresh_token']
+            )
         except ApiError as exc:
             logger.error('[connection] вход не удался: %s', exc)
             await self._api.close()
@@ -181,7 +189,9 @@ class ConnectionManager:
                 raise ApiError('refresh не вернул access-токен')
             await self._start_coordinator(access, refresh_token)
         except ApiError as exc:
-            logger.warning('[connection] refresh не удался (%s); чистим сохранённый токен', exc)
+            logger.warning(
+                '[connection] refresh не удался (%s); чистим сохранённый токен', exc
+            )
             token_store.clear()
             await self._api.close()
             self._api = None
@@ -229,7 +239,9 @@ class ConnectionManager:
             except asyncio.CancelledError:
                 pass
             except Exception as exc:
-                logger.warning('[connection] предыдущая сессия завершилась с ошибкой: %s', exc)
+                logger.warning(
+                    '[connection] предыдущая сессия завершилась с ошибкой: %s', exc
+                )
         self._coord_task = asyncio.create_task(self._coord.run())
 
     async def _shutdown_coordinator(self) -> None:
@@ -249,12 +261,21 @@ class ConnectionManager:
         except asyncio.CancelledError:
             return
         except TimeoutError:
-            logger.warning('[connection] координатор не завершился за 3 секунды')
+            logger.warning(
+                '[connection] координатор не завершился за 3 секунды, отменяем'
+            )
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
         if self._coord_task is task:
             self._coord_task = None
             self._coord = None
 
-    def set_quality_sink(self, on_inbound: Callable[[float, float], None], on_board: Callable[[dict[str, Any]], None]) -> None:
+    def set_quality_sink(
+        self,
+        on_inbound: Callable[[float, float], None],
+        on_board: Callable[[dict[str, Any]], None],
+    ) -> None:
         self._on_inbound_stats = on_inbound
         self._on_board_stats = on_board
         if self._coord is not None:
@@ -317,4 +338,6 @@ class ConnectionManager:
     def _submit(self, coro: Awaitable[Any] | None) -> None:
         if coro is None or self._loop is None:
             return
-        asyncio.run_coroutine_threadsafe(cast(Coroutine[Any, Any, Any], coro), self._loop)
+        asyncio.run_coroutine_threadsafe(
+            cast(Coroutine[Any, Any, Any], coro), self._loop
+        )

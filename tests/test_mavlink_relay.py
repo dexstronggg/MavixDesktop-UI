@@ -1,4 +1,5 @@
 """Tests for the async MAVLink UDP relay."""
+
 from __future__ import annotations
 
 import asyncio
@@ -46,9 +47,11 @@ async def test_send_to_qgc_delivers_packet():
     try:
         relay = MavlinkRelay('127.0.0.1', qgc_port, bind_port=0)
         await relay.start()
-        relay.send_to_qgc(b'\xFE\x09hello')
-        data, _ = await asyncio.get_running_loop().run_in_executor(None, qgc_sock.recvfrom, 2048)
-        assert data == b'\xFE\x09hello'
+        relay.send_to_qgc(b'\xfe\x09hello')
+        data, _ = await asyncio.get_running_loop().run_in_executor(
+            None, qgc_sock.recvfrom, 2048
+        )
+        assert data == b'\xfe\x09hello'
         await relay.stop()
     finally:
         qgc_sock.close()
@@ -60,10 +63,14 @@ async def test_send_to_qgc_accepts_memoryview_and_bytearray():
         relay = MavlinkRelay('127.0.0.1', qgc_port, bind_port=0)
         await relay.start()
         relay.send_to_qgc(memoryview(b'\x01\x02'))
-        d1, _ = await asyncio.get_running_loop().run_in_executor(None, qgc_sock.recvfrom, 2048)
+        d1, _ = await asyncio.get_running_loop().run_in_executor(
+            None, qgc_sock.recvfrom, 2048
+        )
         assert d1 == b'\x01\x02'
         relay.send_to_qgc(bytearray(b'\x03\x04'))
-        d2, _ = await asyncio.get_running_loop().run_in_executor(None, qgc_sock.recvfrom, 2048)
+        d2, _ = await asyncio.get_running_loop().run_in_executor(
+            None, qgc_sock.recvfrom, 2048
+        )
         assert d2 == b'\x03\x04'
         await relay.stop()
     finally:
@@ -96,13 +103,13 @@ async def test_packet_from_qgc_routes_to_callback():
     await relay.start()
     try:
         sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sender.sendto(b'\xAA\xBB\xCC', ('127.0.0.1', relay.bound_port))
+        sender.sendto(b'\xaa\xbb\xcc', ('127.0.0.1', relay.bound_port))
         sender.close()
         for _ in range(20):
             if received:
                 break
             await asyncio.sleep(0.02)
-        assert received == [b'\xAA\xBB\xCC']
+        assert received == [b'\xaa\xbb\xcc']
     finally:
         await relay.stop()
 
