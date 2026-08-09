@@ -1,4 +1,5 @@
 """End-to-end PeerSession test: real aiortc loopback drone<->gcs in-process. The 'drone' side here is a plain aiortc RTCPeerConnection that creates data channels and produces an offer; the GCS side is our PeerSession applying the offer and producing an answer."""
+
 from __future__ import annotations
 
 import asyncio
@@ -19,11 +20,14 @@ def test_build_configuration_no_servers():
 
 def test_build_configuration_keeps_all_servers_when_relay_off(monkeypatch):
     from mavixdesktop.core.config import settings as s
+
     monkeypatch.setattr(s, 'force_relay', False, raising=False)
-    cfg = _build_configuration([
-        {'urls': 'stun:stun.example:3478'},
-        {'urls': 'turn:turn.example:3478', 'username': 'a', 'credential': 'b'},
-    ])
+    cfg = _build_configuration(
+        [
+            {'urls': 'stun:stun.example:3478'},
+            {'urls': 'turn:turn.example:3478', 'username': 'a', 'credential': 'b'},
+        ]
+    )
     assert len(cfg.iceServers) == 2
     assert cfg.iceServers[0].urls == 'stun:stun.example:3478'
     assert cfg.iceServers[1].username == 'a'
@@ -32,11 +36,18 @@ def test_build_configuration_keeps_all_servers_when_relay_off(monkeypatch):
 
 def test_build_configuration_keeps_turn_when_relay_on(monkeypatch):
     from mavixdesktop.core.config import settings as s
+
     monkeypatch.setattr(s, 'force_relay', True, raising=False)
-    cfg = _build_configuration([
-        {'urls': 'stun:stun.example:3478'},
-        {'urls': 'turn:turn.example:3478', 'username': 'alice', 'credential': 'secret'},
-    ])
+    cfg = _build_configuration(
+        [
+            {'urls': 'stun:stun.example:3478'},
+            {
+                'urls': 'turn:turn.example:3478',
+                'username': 'alice',
+                'credential': 'secret',
+            },
+        ]
+    )
     assert len(cfg.iceServers) == 1
     assert cfg.iceServers[0].username == 'alice'
     assert cfg.iceServers[0].credential == 'secret'
@@ -44,29 +55,32 @@ def test_build_configuration_keeps_turn_when_relay_on(monkeypatch):
 
 def test_build_configuration_keeps_turns_when_relay_on(monkeypatch):
     from mavixdesktop.core.config import settings as s
+
     monkeypatch.setattr(s, 'force_relay', True, raising=False)
-    cfg = _build_configuration([
-        {'urls': 'stun:stun.example:3478'},
-        {'urls': 'turns:turn.example:443', 'username': 'a', 'credential': 'b'},
-    ])
+    cfg = _build_configuration(
+        [
+            {'urls': 'stun:stun.example:3478'},
+            {'urls': 'turns:turn.example:443', 'username': 'a', 'credential': 'b'},
+        ]
+    )
     assert len(cfg.iceServers) == 1
-    assert 'turns:' in (cfg.iceServers[0].urls if isinstance(cfg.iceServers[0].urls, str) else cfg.iceServers[0].urls[0])
+    assert 'turns:' in (
+        cfg.iceServers[0].urls
+        if isinstance(cfg.iceServers[0].urls, str)
+        else cfg.iceServers[0].urls[0]
+    )
 
 
 def test_build_configuration_ignores_entries_without_urls(monkeypatch):
     from mavixdesktop.core.config import settings as s
+
     monkeypatch.setattr(s, 'force_relay', False, raising=False)
     cfg = _build_configuration([{'username': 'x'}, {'urls': 'stun:y:3478'}])
     assert len(cfg.iceServers) == 1
 
 
 def test_patch_dtls_replaces_setup_active_line():
-    sdp = (
-        'v=0\r\n'
-        'a=group:BUNDLE 0\r\n'
-        'a=setup:active\r\n'
-        'a=ice-ufrag:abc\r\n'
-    )
+    sdp = 'v=0\r\na=group:BUNDLE 0\r\na=setup:active\r\na=ice-ufrag:abc\r\n'
     out = _patch_dtls_setup_passive(sdp)
     assert 'a=setup:passive\r\n' in out
     assert 'a=setup:active' not in out
@@ -158,7 +172,9 @@ async def test_datachannel_callback_fires_on_drone_open(monkeypatch):
         offer = await drone_pc.createOffer()
         await drone_pc.setLocalDescription(offer)
         answer_sdp = await peer.apply_offer(drone_pc.localDescription.sdp)
-        await drone_pc.setRemoteDescription(RTCSessionDescription(sdp=answer_sdp, type='answer'))
+        await drone_pc.setRemoteDescription(
+            RTCSessionDescription(sdp=answer_sdp, type='answer')
+        )
 
         for _ in range(50):
             if received_labels:
@@ -183,3 +199,71 @@ async def test_close_is_idempotent_ish():
     peer = PeerSession('drone', ice_servers=[])
     await peer.close()
     await peer.close()
+
+
+async def test_early_candidate_buffered_until_offer():
+    drone_pc = RTCPeerConnection()
+    drone_pc.createDataChannel('packet-channel')
+    offer = await drone_pc.createOffer()
+    await drone_pc.setLocalDescription(offer)
+    offer_sdp = drone_pc.localDescription.sdp
+
+    peer = PeerSession('drone-loopback', ice_servers=[])
+    try:
+        ok = await peer.add_remote_ice({
+            'candidate': 'candidate:1 1 udp 2130706431 192.168.0.99 55555 typ host',
+            'sdpMLineIndex': 0,
+            'sdpMid': '0',
+        })
+        assert ok is True
+        assert len(peer._pending_remote_candidates) == 1
+
+        await peer.apply_offer(offer_sdp)
+        assert peer._pending_remote_candidates == []
+    finally:
+        await peer.close()
+        await drone_pc.close()
+
+
+async def test_candidate_after_offer_not_buffered():
+    drone_pc = RTCPeerConnection()
+    drone_pc.createDataChannel('packet-channel')
+    offer = await drone_pc.createOffer()
+    await drone_pc.setLocalDescription(offer)
+
+    peer = PeerSession('drone-loopback', ice_servers=[])
+    try:
+        await peer.apply_offer(drone_pc.localDescription.sdp)
+        await peer.add_remote_ice({
+            'candidate': 'candidate:1 1 udp 2130706431 192.168.0.99 55555 typ host',
+            'sdpMLineIndex': 0,
+            'sdpMid': '0',
+        })
+        assert peer._pending_remote_candidates == []
+    finally:
+        await peer.close()
+        await drone_pc.close()
+
+
+async def test_early_candidate_applied_after_offer():
+    drone_pc = RTCPeerConnection()
+    drone_pc.createDataChannel('packet-channel')
+    offer = await drone_pc.createOffer()
+    await drone_pc.setLocalDescription(offer)
+    offer_sdp = drone_pc.localDescription.sdp
+
+    peer = PeerSession('drone-loopback', ice_servers=[])
+    try:
+        await peer.add_remote_ice({
+            'candidate': 'candidate:1 1 udp 2130706431 192.168.0.99 55555 typ host',
+            'sdpMLineIndex': 0,
+            'sdpMid': '0',
+        })
+        answer_sdp = await peer.apply_offer(offer_sdp)
+        assert isinstance(answer_sdp, str)
+        assert answer_sdp.startswith('v=0')
+        remote_candidates = peer._pc.remoteDescription.sdp.count('a=candidate:')
+        assert remote_candidates >= 1
+    finally:
+        await peer.close()
+        await drone_pc.close()

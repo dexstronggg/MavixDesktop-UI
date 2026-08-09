@@ -1,4 +1,5 @@
 """WebRTC peer session on the GCS side."""
+
 from __future__ import annotations
 
 import re
@@ -27,7 +28,7 @@ def _patch_dtls_setup_passive(sdp: str) -> str:
     for line in sdp.splitlines(keepends=True):
         stripped = line.rstrip('\r\n')
         if stripped == 'a=setup:active':
-            ending = line[len(stripped):]
+            ending = line[len(stripped) :]
             out_lines.append('a=setup:passive' + ending)
         else:
             out_lines.append(line)
@@ -68,8 +69,12 @@ def _filter_to_relay_only(sdp: str, label: str) -> str:
             kept += 1
         out_lines.append(line)
     if kept or dropped:
-        logger.info('[ice/%s] force_relay фильтр: оставлено %d relay, отброшено %d non-relay',
-                    label, kept, dropped)
+        logger.info(
+            '[ice/%s] force_relay фильтр: оставлено %d relay, отброшено %d non-relay',
+            label,
+            kept,
+            dropped,
+        )
     return ''.join(out_lines)
 
 
@@ -85,11 +90,16 @@ def _entry_scheme(entry: dict[str, Any]) -> str:
 
 def _build_configuration(ice_servers: list[dict[str, Any]]) -> RTCConfiguration:
     from mavixdesktop.webrtc.jitter_patch import install_jitter_patch
+
     install_jitter_patch()
     use_relay = bool(getattr(settings, 'force_relay', False))
     mode = 'RELAY (только TURN)' if use_relay else 'DIRECT (STUN+TURN)'
-    logger.info('[ice/config] режим=%s, force_relay=%s, получено %d ICE-сервер(ов)',
-                mode, use_relay, len(ice_servers))
+    logger.info(
+        '[ice/config] режим=%s, force_relay=%s, получено %d ICE-сервер(ов)',
+        mode,
+        use_relay,
+        len(ice_servers),
+    )
     servers: list[RTCIceServer] = []
     for entry in ice_servers:
         urls = entry.get('urls') if isinstance(entry, dict) else None
@@ -98,7 +108,9 @@ def _build_configuration(ice_servers: list[dict[str, Any]]) -> RTCConfiguration:
         scheme = _entry_scheme(entry)
         is_turn = scheme in ('turn', 'turns')
         if use_relay and not is_turn:
-            logger.info('[ice/config] пропускаем non-TURN (%s) — force_relay включён', urls)
+            logger.info(
+                '[ice/config] пропускаем non-TURN (%s) — force_relay включён', urls
+            )
             continue
         username = entry.get('username')
         credential = entry.get('credential')
@@ -108,19 +120,31 @@ def _build_configuration(ice_servers: list[dict[str, Any]]) -> RTCConfiguration:
         if credential:
             kwargs['credential'] = credential
         servers.append(RTCIceServer(**kwargs))
-        logger.info('[ice/config] ИСПОЛЬЗУЕМ %s: urls=%s username=%s',
-                    scheme.upper(), urls, bool(username))
+        logger.info(
+            '[ice/config] ИСПОЛЬЗУЕМ %s: urls=%s username=%s',
+            scheme.upper(),
+            urls,
+            bool(username),
+        )
     if not servers:
-        logger.warning('[ice/config] после фильтрации не осталось ICE-серверов — '
-                       'соединение, скорее всего, упадёт. Проверьте локальный STUN/TURN-конфиг '
-                       '(или /api/v1/ice-servers) и настройку force_relay (текущая: %s).', use_relay)
+        logger.warning(
+            '[ice/config] после фильтрации не осталось ICE-серверов — '
+            'соединение, скорее всего, упадёт. Проверьте локальный STUN/TURN-конфиг '
+            '(или /api/v1/ice-servers) и настройку force_relay (текущая: %s).',
+            use_relay,
+        )
     from mavixdesktop.webrtc.relay_patch import enable_relay_only
+
     enable_relay_only()
     if use_relay and not servers:
-        logger.warning('[ice/config] force_relay запрошен, но TURN-сервера нет — '
-                       'relay-путь использовать нельзя')
-    logger.info('[ice/config] transport policy=%s (нативно через aioice)',
-                'relay' if (use_relay and servers) else 'all')
+        logger.warning(
+            '[ice/config] force_relay запрошен, но TURN-сервера нет — '
+            'relay-путь использовать нельзя'
+        )
+    logger.info(
+        '[ice/config] transport policy=%s (нативно через aioice)',
+        'relay' if (use_relay and servers) else 'all',
+    )
     return RTCConfiguration(iceServers=servers)
 
 
@@ -132,11 +156,14 @@ class PeerSession:
         pc: RTCPeerConnection | None = None,
     ) -> None:
         self.drone_id = drone_id
-        self._pc = pc if pc is not None else RTCPeerConnection(
-            _build_configuration(ice_servers or [])
+        self._pc = (
+            pc
+            if pc is not None
+            else RTCPeerConnection(_build_configuration(ice_servers or []))
         )
         self.on_track: TrackHandler | None = None
         self.on_datachannel: DataChannelHandler | None = None
+        self._pending_remote_candidates: list[Any] = []
 
         self._pc.add_listener('track', self._handle_track)
         self._pc.add_listener('datachannel', self._handle_datachannel)
@@ -153,8 +180,10 @@ class PeerSession:
         return self._pc.connectionState
 
     async def apply_offer(self, sdp_text: str) -> str:
-        logger.info('[peer] m-линии offer: %s',
-                    [line for line in sdp_text.splitlines() if line.startswith('m=')])
+        logger.info(
+            '[peer] m-линии offer: %s',
+            [line for line in sdp_text.splitlines() if line.startswith('m=')],
+        )
 
         _log_candidates('offer/drone', sdp_text)
 
@@ -164,6 +193,12 @@ class PeerSession:
         await self._pc.setRemoteDescription(
             RTCSessionDescription(sdp=sdp_text, type='offer')
         )
+        for cand in self._pending_remote_candidates:
+            try:
+                await self._pc.addIceCandidate(cand)
+            except Exception as exc:
+                logger.warning('[peer] ошибка применения отложенного кандидата: %s', exc)
+        self._pending_remote_candidates.clear()
         answer = await self._pc.createAnswer()
         patched_answer = RTCSessionDescription(
             sdp=_patch_dtls_setup_passive(answer.sdp),
@@ -178,32 +213,54 @@ class PeerSession:
         if getattr(settings, 'force_relay', False):
             final_sdp = _filter_to_relay_only(final_sdp, 'answer/gcs')
 
-        logger.info('[peer] m-линии answer: %s',
-                    [line for line in final_sdp.splitlines() if line.startswith('m=')])
+        logger.info(
+            '[peer] m-линии answer: %s',
+            [line for line in final_sdp.splitlines() if line.startswith('m=')],
+        )
         return final_sdp
 
     async def add_remote_ice(self, candidate: dict[str, Any]) -> bool:
         try:
             from aiortc.sdp import candidate_from_sdp
+
             cand_str = candidate.get('candidate')
             sdp_mid = candidate.get('sdpMid')
             sdp_mline_index = candidate.get('sdpMLineIndex')
             if not isinstance(cand_str, str) or not cand_str.strip():
                 return False
-            sdp_str = cand_str[len('candidate:'):] if cand_str.startswith('candidate:') else cand_str
+            sdp_str = (
+                cand_str[len('candidate:') :]
+                if cand_str.startswith('candidate:')
+                else cand_str
+            )
             if getattr(settings, 'force_relay', False) and ' typ ' in sdp_str:
                 typ = sdp_str.split(' typ ', 1)[1].split(' ', 1)[0]
                 if typ != 'relay':
-                    logger.info('[ice/trickle] отброшен non-relay кандидат: %s', cand_str)
+                    logger.info(
+                        '[ice/trickle] отброшен non-relay кандидат: %s', cand_str
+                    )
                     return False
             try:
                 ice = candidate_from_sdp(sdp_str)
             except (AssertionError, ValueError, IndexError):
-                logger.info('[ice/trickle] пропускаем неразбираемый кандидат: %r', cand_str)
+                logger.info(
+                    '[ice/trickle] пропускаем неразбираемый кандидат: %r', cand_str
+                )
                 return False
             ice.sdpMid = sdp_mid
             ice.sdpMLineIndex = sdp_mline_index
-            logger.info('[ice/trickle] добавляем кандидат type=%s %s:%s', ice.type, ice.ip, ice.port)
+            logger.info(
+                '[ice/trickle] добавляем кандидат type=%s %s:%s',
+                ice.type,
+                ice.ip,
+                ice.port,
+            )
+            if self._pc.remoteDescription is None:
+                self._pending_remote_candidates.append(ice)
+                logger.info(
+                    '[ice/trickle] кандидат пришёл до offer — отложен до setRemoteDescription'
+                )
+                return True
             await self._pc.addIceCandidate(ice)
             return True
         except Exception as exc:
@@ -238,10 +295,12 @@ class PeerSession:
         state = self._pc.iceConnectionState
         logger.info('[ice/state] iceConnectionState=%s', state)
         if state == 'failed':
-            logger.warning('[ice/state] ICE failed — нет работающей кандидат-пары. '
-                           'Проверьте логи [ice/offer/drone] и [ice/answer/gcs] выше '
-                           '(на DEBUG-уровне логов там же полный список кандидатов): '
-                           'обе стороны должны иметь хотя бы по одному relay-кандидату.')
+            logger.warning(
+                '[ice/state] ICE failed — нет работающей кандидат-пары. '
+                'Проверьте логи [ice/offer/drone] и [ice/answer/gcs] выше '
+                '(на DEBUG-уровне логов там же полный список кандидатов): '
+                'обе стороны должны иметь хотя бы по одному relay-кандидату.'
+            )
 
     def _handle_gather_state(self) -> None:
         logger.info('[ice/state] iceGatheringState=%s', self._pc.iceGatheringState)
