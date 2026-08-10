@@ -138,7 +138,7 @@ class FlightWindow(QWidget):
         self._arm_label.setStyleSheet(_DISARM_STYLE)
 
         self._stick_left = StickWidget(
-            'Тяга/Рыскание', self, bg_alpha=160, label_font_px=18
+            'Тяга/Рыск', self, bg_alpha=160, label_font_px=18
         )
         self._stick_right = StickWidget(
             'Тангаж/Крен', self, bg_alpha=160, label_font_px=18

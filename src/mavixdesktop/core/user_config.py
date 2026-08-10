@@ -9,7 +9,19 @@ from typing import Any
 
 from mavixdesktop.core.logger import logger
 
-USER_CONFIG_PATH = Path.home() / '.config' / 'mavixdesktop' / 'config.json'
+USER_CONFIG_PATH: Path | None = None
+
+
+def _user_config_path() -> Path:
+    global USER_CONFIG_PATH
+    path = USER_CONFIG_PATH
+    if path is None:
+        from mavixdesktop.core.config import user_data_dir
+
+        path = user_data_dir() / 'config.json'
+        USER_CONFIG_PATH = path
+    return path
+
 
 EDITABLE_KEYS = (
     'signal_url',
@@ -31,34 +43,34 @@ UI_SCALE_STEP = 5
 
 
 def load() -> dict[str, Any]:
-    if not USER_CONFIG_PATH.is_file():
+    if not _user_config_path().is_file():
         return {}
     try:
-        with USER_CONFIG_PATH.open('r', encoding='utf-8') as f:
+        with _user_config_path().open('r', encoding='utf-8') as f:
             data = json.load(f)
         if not isinstance(data, dict):
             logger.warning(
                 '[user-config] %s не является JSON-объектом, игнорируем',
-                USER_CONFIG_PATH,
+                _user_config_path(),
             )
             return {}
         return data
     except (OSError, json.JSONDecodeError) as exc:
         logger.warning(
-            '[user-config] не удалось прочитать %s: %s', USER_CONFIG_PATH, exc
+            '[user-config] не удалось прочитать %s: %s', _user_config_path(), exc
         )
         return {}
 
 
 def save(values: dict[str, Any]) -> None:
-    USER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = USER_CONFIG_PATH.with_suffix('.json.tmp')
+    _user_config_path().parent.mkdir(parents=True, exist_ok=True)
+    tmp = _user_config_path().with_suffix('.json.tmp')
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, 'w', encoding='utf-8') as f:
         json.dump(values, f, indent=2, ensure_ascii=False)
         f.write('\n')
     os.chmod(tmp, 0o600)
-    os.replace(tmp, USER_CONFIG_PATH)
+    os.replace(tmp, _user_config_path())
 
 
 _MAPPING = {

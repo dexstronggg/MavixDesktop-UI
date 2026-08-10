@@ -22,6 +22,9 @@ _SEARCH_BUDGET = 20_000
 
 
 def _legacy_path_file() -> Path:
+    appdata = os.environ.get('APPDATA')
+    if appdata is not None:
+        return Path(appdata) / 'mavixdesktop' / 'qgc_path.txt'
     return Path.home() / '.config' / 'mavixdesktop' / 'qgc_path.txt'
 
 
@@ -188,26 +191,33 @@ def find_qgc(deadline_s: float = _SEARCH_DEADLINE_S) -> Path | None:
     return found
 
 
-_QGC_RUNGUARD_KEY = 'QGroundControlRunGuardKey'
-
-_last_launched_proc: subprocess.Popen[bytes] | None = None
-
-
-def is_qgc_running() -> bool:
+def _ensure_executable(path: Path) -> None:
+    """Свежескачанный .AppImage приходит без +x — иначе Popen упадёт PermissionError."""
+    if platform.system() == 'Windows' or os.access(path, os.X_OK):
+        return
     try:
-        from PySide6.QtCore import QSharedMemory
-    except ImportError:
-        proc = _last_launched_proc
-        return proc is not None and proc.poll() is None
-    shm = QSharedMemory(_QGC_RUNGUARD_KEY)
-    if shm.attach():
-        shm.detach()
-        return True
-    return False
+        path.chmod(path.stat().st_mode | 0o111)
+        logger.info('[qgc] проставлен бит исполнения: %s', path)
+    except OSError as exc:
+        logger.warning('[qgc] не удалось сделать файл исполняемым: %s', exc)
+
+
+def _launch_flags() -> int:
+    """Windows: свой процесс-группа и без консольного окна.
+
+    Без DETACHED_PROCESS дочерний QGC наследует консоль родителя и получает
+    CTRL_CLOSE_EVENT при её закрытии — на Linux такого нет, процесс просто
+    остаётся жить. Флаги существуют только в Windows-сборке subprocess.
+    """
+    if platform.system() != 'Windows':
+        return 0
+    detached = getattr(subprocess, 'DETACHED_PROCESS', 0)
+    no_window = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+    return int(detached | no_window)
 
 
 def launch_qgc(
-    sdl_config: str = '', qgc_path: Path | None = None
+    qgc_path: Path | None = None, sdl_config: str = ''
 ) -> subprocess.Popen[bytes] | None:
     if qgc_path is None:
         qgc_path = find_qgc()
@@ -215,19 +225,19 @@ def launch_qgc(
         logger.warning('[qgc] QGroundControl не найден')
         return None
     logger.info('[qgc] найден %s', qgc_path)
+    _ensure_executable(qgc_path)
     env = os.environ.copy()
     if sdl_config:
         env['SDL_GAMECONTROLLERCONFIG'] = sdl_config
-    global _last_launched_proc
     try:
         proc = subprocess.Popen(
             [str(qgc_path)],
             env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            creationflags=_launch_flags(),
         )
         logger.info('[qgc] запущен pid=%d', proc.pid)
-        _last_launched_proc = proc
         return proc
     except Exception as exc:
         logger.error('[qgc] запуск не удался: %s', exc)

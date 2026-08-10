@@ -235,6 +235,38 @@ False. Это исключает мгновенный арм при входе �
 `loop.create_datagram_endpoint`, что исключает использование
 дополнительных потоков.
 
+**Передача калибровки джойстика в QGroundControl.** Требуется
+QGroundControl 5.0.8 (Stable). Он собран на SDL2 и хранит калибровку
+джойстика в «легаси»-разделе `[Joysticks/<имя>]` файла настроек `.ini`
+(Linux: `~/.config/QGroundControl*/`; Windows: `%APPDATA%\QGroundControl`;
+macOS: `~/Library/Preferences` и `~/.config`). Ключи раздела:
+`RollAxis`/`PitchAxis`/`YawAxis`/`ThrottleAxis` — индексы осей SDL,
+назначенные функциям, `Calibrated4=true` включает готовую калибровку,
+а `Axis<N>Min/Max/Trim/Rev/Deadbnd` — параметры каждой оси. Формат
+`JoystickSettingsV2` (Daily/мастер) на 5.0.8 не читается.
+
+`qgc/joystick_config.py` пишет эти ключи напрямую перед запуском QGC
+(`ui/app.py:_apply_calibration_to_qgc`, вызывается из
+`_handle_joystick_selected`), тем же классом `QSettings` с `IniFormat`,
+которым пользуется сам QGC (на Windows он принудительно выставляет
+`QSettings::setDefaultFormat(IniFormat)`) — формат файла (percent-encoding
+имён, `\` вместо `/` внутри составного ключа) совпадает с тем, что пишет
+сам QGC. Точная калибровка (диапазон/trim/мёртвая зона) для осей,
+остающихся в работе, снимается до записи и восстанавливается — ручная
+подстройка в QGC не теряется.
+
+Назначение осей пишется в конвенции Mode 2, поэтому в разделе
+`[Joysticks]` фиксируется глобальный `TXMode_MultiRotor=2` (режим
+трансмиттера QGC хранит по типам ЛА: `TXMode_FixedWing`, `TXMode_MultiRotor`
+и т.д.), а в `[JoystickManager]` — `ActiveJoystick=<имя>`.
+
+`SDL_GAMECONTROLLERCONFIG` в 5.0.8 **читается** (mavlink/qgroundcontrol#12639)
+и передаётся QGC при запуске. Если устройство опознано как game controller,
+в `RollAxis` и т.п. QGC ожидает логические индексы осей SDL (leftx=0,
+lefty=1, rightx=2, righty=3) — модуль переводит их из сырых индексов
+pygame через нашу SDL-строку калибровки (`sdl_gamecontrollerconfig`);
+для обычного raw-джойстика пишутся сырые индексы.
+
 #### 4.2.5. Модуль хранения учётных данных (`server/token_store.py`)
 
 При первом входе пилота refresh-токен сохраняется в системном
@@ -456,7 +488,7 @@ cp .env-example .env
 
 ```bash
 .venv/bin/pytest
-# Ожидаемый результат: 342 passed
+# Ожидаемый результат: 361 passed
 ```
 
 Тесты выполняются с параметрами `QT_QPA_PLATFORM=offscreen` и

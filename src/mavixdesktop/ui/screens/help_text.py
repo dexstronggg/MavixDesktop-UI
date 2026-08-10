@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+
 from mavixdesktop.core.config import settings
 
 HOTKEYS: tuple[tuple[str, str], ...] = (
@@ -89,7 +91,7 @@ ADVICE: tuple[tuple[str, str], ...] = (
 
 
 def stats_log_path() -> str:
-    return str(settings.log_path.parent / 'stats_<дата>.jsonl')
+    return str(settings.log_path.parent / 'stats_ГГГГ-ММ-ДД.jsonl')
 
 
 def as_html() -> str:
@@ -129,7 +131,7 @@ def as_html() -> str:
         '<h3 style="color:#E8EEF5; margin:16px 0 6px 0">Запись в файл</h3>'
         '<p style="margin:0">Пока открыт экран дрона, все показатели записываются '
         'раз в секунду в файл:</p>'
-        f'<p style="margin:6px 0; color:#22d3ee; font-family:monospace">{stats_log_path()}</p>'
+        f'<p style="margin:6px 0; color:#22d3ee; font-family:monospace">{html.escape(stats_log_path())}</p>'
         '<p style="margin:0">Одна строка — одна секунда, примерно мегабайт за час полёта. '
         'Разобрать записанное после посадки:</p>'
         '<p style="margin:6px 0; color:#22d3ee; font-family:monospace">'

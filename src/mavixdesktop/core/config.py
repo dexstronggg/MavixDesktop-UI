@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import platform
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -11,13 +14,28 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from mavixdesktop.core import user_config
 
-_PROJECT_ROOT = Path(__file__).parents[3]
+# В PyInstaller-сборке .env за пределами бандла; parents[3] уезжает выше
+# _MEIPASS во временный каталог ОС — ищем .env только в исходной структуре.
+_PROJECT_ROOT = Path(getattr(sys, '_MEIPASS', Path(__file__).parents[3]))
 
 load_dotenv(_PROJECT_ROOT / '.env', override=False)
 
+
+def user_data_dir() -> Path:
+    """Кросс-платформенная база пользовательских данных приложения."""
+    if platform.system() == 'Windows':
+        base = os.environ.get('APPDATA')
+        if base:
+            return Path(base) / 'mavixdesktop'
+    xdg = os.environ.get('XDG_CONFIG_HOME')
+    if xdg:
+        return Path(xdg) / 'mavixdesktop'
+    return Path.home() / '.config' / 'mavixdesktop'
+
+
 user_config.apply_to_env()
 
-_USER_BASE = Path.home() / '.config' / 'mavixdesktop'
+_USER_BASE = user_data_dir()
 
 DEFAULT_SIGNAL_URL = 'https://drone-mavix.ru'
 

@@ -17,6 +17,16 @@ def list_joysticks() -> list[str]:
     ]
 
 
+def joystick_name(index: int) -> str | None:
+    import pygame
+
+    pygame.joystick.init()
+    try:
+        return pygame.joystick.Joystick(index).get_name()
+    except Exception:
+        return None
+
+
 def build_sdl_config(cal: dict[str, Any], name: str, guid: str) -> str:
     def axis_str(sdl_key: str, cal_key: str, inverted: bool) -> str:
         ax = cal.get(f'axis_{cal_key}', 0)

@@ -8,13 +8,13 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
 from mavixdesktop.ui.screens.help_text import as_html
+from mavixdesktop.ui.screens.widgets import CloseButton
 from mavixdesktop.ui.style import theme
 
 _MARGIN = 48
@@ -52,25 +52,8 @@ class HelpDialog(QDialog):
             f'color: {theme.TEXT_PRIMARY}; font-size: {theme.FONT_SIZE_LG}px; font-weight: 700;'
         )
 
-        self.close_btn = QPushButton('✕')
-        self.close_btn.setFixedSize(32, 32)
-        self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.close_btn = CloseButton()
         self.close_btn.setToolTip('Закрыть (Esc)')
-        self.close_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: rgba(255,255,255,0.06);
-                color: {theme.TEXT_PRIMARY};
-                border: 1px solid {theme.BORDER};
-                border-radius: {theme.RADIUS_SM}px;
-                font-size: {theme.FONT_SIZE_LG}px;
-                font-weight: 700;
-            }}
-            QPushButton:hover {{
-                background: rgba(255,255,255,0.14);
-                color: {theme.ACCENT};
-                border-color: {theme.ACCENT};
-            }}
-        """)
         self.close_btn.clicked.connect(self.reject)
 
         header.addWidget(title)

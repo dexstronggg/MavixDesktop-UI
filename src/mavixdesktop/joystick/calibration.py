@@ -43,7 +43,7 @@ def _path(joystick_name: str, data_dir: Path | None = None) -> Path:
 def save(cal: dict[str, Any], joystick_name: str, data_dir: Path | None = None) -> Path:
     target = _path(joystick_name, data_dir)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(cal, indent=2))
+    target.write_text(json.dumps(cal, indent=2), encoding='utf-8')
     return target
 
 
@@ -52,7 +52,7 @@ def load(joystick_name: str, data_dir: Path | None = None) -> dict[str, Any] | N
     if not target.exists():
         return None
     try:
-        return cast(dict[str, Any], json.loads(target.read_text()))
+        return cast(dict[str, Any], json.loads(target.read_text(encoding='utf-8')))
     except (OSError, ValueError):
         return None
 

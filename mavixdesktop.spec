@@ -46,8 +46,9 @@ datas += [(src, dest) for (src, dest) in _p_datas if not _is_unwanted_qt(dest)]
 binaries += [(src, dest) for (src, dest) in _p_binaries if not _is_unwanted_qt(dest)]
 hiddenimports += [mod for mod in _p_hidden if not _is_unwanted_qt(mod)]
 
-# Остальные пакеты нужны целиком (PyAV/aiortc — видео, pymavlink — протокол FC).
-for pkg in ('av', 'aiortc', 'pymavlink'):
+# Остальные пакеты нужны целиком (PyAV/aiortc — видео, pymavlink — протокол FC,
+# pygame — джойстик; импортируется лениво внутри функций, поэтому hiddenimports обязателен).
+for pkg in ('av', 'aiortc', 'pymavlink', 'pygame'):
     _datas, _binaries, _hidden = collect_all(pkg)
     datas += _datas
     binaries += _binaries

@@ -2,9 +2,57 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QPushButton, QWidget
 
 from mavixdesktop.ui.style import theme
+
+
+class CloseButton(QPushButton):
+    """Кнопка «закрыть» с крестиком, нарисованным через QPainter.
+
+    Текстовые глифы крестика (✕, ×) не гарантированы во всех шрифтах на всех
+    ОС — на некоторых системах символ превращается в пустой прямоугольник.
+    Поэтому крестик рисуется программно: белые линии, одинаково выглядят
+    на Linux, Windows и macOS независимо от установленных шрифтов.
+    """
+
+    def __init__(self, parent: QWidget | None = None, size: int = 32) -> None:
+        super().__init__(parent)
+        self.setFixedSize(size, size)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._hovered = False
+
+    def enterEvent(self, event: object) -> None:
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)  # type: ignore[arg-type]
+
+    def leaveEvent(self, event: object) -> None:
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)  # type: ignore[arg-type]
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w, h = self.width(), self.height()
+
+        bg_alpha = 36 if self._hovered else 15
+        p.fillRect(0, 0, w, h, QColor(255, 255, 255, bg_alpha))
+
+        pen = QPen(QColor(theme.BORDER))
+        pen.setWidth(1)
+        p.setPen(pen)
+        p.drawRoundedRect(1, 1, w - 2, h - 2, theme.RADIUS_SM, theme.RADIUS_SM)
+
+        pen = QPen(QColor('#FFFFFF'))
+        pen.setWidth(2)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        m = max(5, w // 5)
+        cx, cy = w // 2, h // 2
+        p.drawLine(cx - m, cy - m, cx + m, cy + m)
+        p.drawLine(cx - m, cy + m, cx + m, cy - m)
 
 
 class StickWidget(QWidget):

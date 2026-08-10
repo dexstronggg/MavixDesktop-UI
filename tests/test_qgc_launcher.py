@@ -126,21 +126,6 @@ def test_bounded_find_stops_on_deadline(tmp_path, monkeypatch) -> None:
     assert found is None
 
 
-def test_is_qgc_running_true_when_shm_attached(monkeypatch) -> None:
-    fake_shm = MagicMock()
-    fake_shm.attach.return_value = True
-    monkeypatch.setattr('PySide6.QtCore.QSharedMemory', lambda key: fake_shm)
-    assert launcher.is_qgc_running() is True
-    fake_shm.detach.assert_called_once()
-
-
-def test_is_qgc_running_false_when_shm_missing(monkeypatch) -> None:
-    fake_shm = MagicMock()
-    fake_shm.attach.return_value = False
-    monkeypatch.setattr('PySide6.QtCore.QSharedMemory', lambda key: fake_shm)
-    assert launcher.is_qgc_running() is False
-
-
 def test_launch_qgc_returns_none_when_not_found(monkeypatch) -> None:
     monkeypatch.setattr('mavixdesktop.qgc.launcher.find_qgc', lambda: None)
     assert launcher.launch_qgc() is None
@@ -164,7 +149,7 @@ def test_launch_qgc_uses_explicit_path(monkeypatch, tmp_path) -> None:
             self.pid = 4242
 
     monkeypatch.setattr('mavixdesktop.qgc.launcher.subprocess.Popen', FakePopen)
-    proc = launcher.launch_qgc('test-sdl-config', qgc_path=fake)
+    proc = launcher.launch_qgc(qgc_path=fake, sdl_config='test-sdl-config')
     assert proc is not None
     assert popen_seen['env'].get('SDL_GAMECONTROLLERCONFIG') == 'test-sdl-config'
     assert popen_seen['args'][0] == str(fake)
@@ -184,7 +169,7 @@ def test_launch_qgc_sets_sdl_env_via_find(monkeypatch, tmp_path) -> None:
             self.pid = 4242
 
     monkeypatch.setattr('mavixdesktop.qgc.launcher.subprocess.Popen', FakePopen)
-    proc = launcher.launch_qgc('test-sdl-config')
+    proc = launcher.launch_qgc(sdl_config='test-sdl-config')
     assert proc is not None
     assert popen_seen['env'].get('SDL_GAMECONTROLLERCONFIG') == 'test-sdl-config'
 

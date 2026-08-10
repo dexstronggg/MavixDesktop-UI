@@ -378,6 +378,7 @@ def test_help_dialog_fits_into_small_window(qapp):
     from PySide6.QtWidgets import QWidget
 
     from mavixdesktop.ui.screens.help_dialog import HelpDialog
+    from mavixdesktop.ui.screens.widgets import CloseButton
 
     for w, h in ((1920, 1080), (1280, 720), (800, 480), (640, 400)):
         parent = QWidget()
@@ -385,7 +386,8 @@ def test_help_dialog_fits_into_small_window(qapp):
         dlg = HelpDialog(parent)
         assert dlg.width() <= w, f'справка шире окна {w}x{h}'
         assert dlg.height() <= h, f'справка выше окна {w}x{h}'
-        assert dlg.close_btn.text() == '✕'
+        assert isinstance(dlg.close_btn, CloseButton)
+        assert dlg.close_btn.toolTip() == 'Закрыть (Esc)'
 
 
 def test_help_text_covers_every_metric_and_the_log_path(qapp):
@@ -438,3 +440,47 @@ def test_hotkeys_work_in_both_layouts(qapp, monkeypatch):
     press(Qt.Key.Key_I, 'i')
     press(0, 'ш')
     assert opened == ['help', 'help'], 'справка должна открываться и по i, и по ш'
+
+
+def test_qgc_overlay_is_a_child_widget_not_a_window(qapp):
+    """Wayland игнорирует move() для окон — плашка обязана быть дочерним виджетом."""
+    from PySide6.QtWidgets import QWidget
+
+    from mavixdesktop.ui.screens.joystick_setup import QGCSearchOverlay
+
+    parent = QWidget()
+    parent.resize(1200, 800)
+    overlay = QGCSearchOverlay(parent=parent)
+    assert not overlay.isWindow()
+    assert overlay.parentWidget() is parent
+
+
+def test_qgc_overlay_centers_itself_in_the_parent(qapp):
+    from PySide6.QtWidgets import QWidget
+
+    from mavixdesktop.ui.screens.joystick_setup import QGCSearchOverlay
+
+    parent = QWidget()
+    parent.resize(1200, 800)
+    overlay = QGCSearchOverlay(parent=parent)
+    overlay.show_centered()
+
+    assert overlay.geometry().center().x() == pytest.approx(600, abs=1)
+    assert overlay.geometry().center().y() == pytest.approx(400, abs=1)
+
+
+def test_qgc_overlay_follows_window_resize(qapp):
+    from PySide6.QtWidgets import QWidget
+
+    from mavixdesktop.ui.screens.joystick_setup import QGCSearchOverlay
+
+    parent = QWidget()
+    parent.resize(1200, 800)
+    parent.show()
+    overlay = QGCSearchOverlay(parent=parent)
+    overlay.show_centered()
+    parent.resize(600, 400)
+    qapp.processEvents()
+
+    assert overlay.geometry().center().x() == pytest.approx(300, abs=1)
+    assert overlay.geometry().center().y() == pytest.approx(200, abs=1)

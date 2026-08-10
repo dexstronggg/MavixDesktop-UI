@@ -210,11 +210,13 @@ async def test_early_candidate_buffered_until_offer():
 
     peer = PeerSession('drone-loopback', ice_servers=[])
     try:
-        ok = await peer.add_remote_ice({
-            'candidate': 'candidate:1 1 udp 2130706431 192.168.0.99 55555 typ host',
-            'sdpMLineIndex': 0,
-            'sdpMid': '0',
-        })
+        ok = await peer.add_remote_ice(
+            {
+                'candidate': 'candidate:1 1 udp 2130706431 192.168.0.99 55555 typ host',
+                'sdpMLineIndex': 0,
+                'sdpMid': '0',
+            }
+        )
         assert ok is True
         assert len(peer._pending_remote_candidates) == 1
 
@@ -234,11 +236,13 @@ async def test_candidate_after_offer_not_buffered():
     peer = PeerSession('drone-loopback', ice_servers=[])
     try:
         await peer.apply_offer(drone_pc.localDescription.sdp)
-        await peer.add_remote_ice({
-            'candidate': 'candidate:1 1 udp 2130706431 192.168.0.99 55555 typ host',
-            'sdpMLineIndex': 0,
-            'sdpMid': '0',
-        })
+        await peer.add_remote_ice(
+            {
+                'candidate': 'candidate:1 1 udp 2130706431 192.168.0.99 55555 typ host',
+                'sdpMLineIndex': 0,
+                'sdpMid': '0',
+            }
+        )
         assert peer._pending_remote_candidates == []
     finally:
         await peer.close()
@@ -254,11 +258,13 @@ async def test_early_candidate_applied_after_offer():
 
     peer = PeerSession('drone-loopback', ice_servers=[])
     try:
-        await peer.add_remote_ice({
-            'candidate': 'candidate:1 1 udp 2130706431 192.168.0.99 55555 typ host',
-            'sdpMLineIndex': 0,
-            'sdpMid': '0',
-        })
+        await peer.add_remote_ice(
+            {
+                'candidate': 'candidate:1 1 udp 2130706431 192.168.0.99 55555 typ host',
+                'sdpMLineIndex': 0,
+                'sdpMid': '0',
+            }
+        )
         answer_sdp = await peer.apply_offer(offer_sdp)
         assert isinstance(answer_sdp, str)
         assert answer_sdp.startswith('v=0')

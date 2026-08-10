@@ -30,7 +30,7 @@ def _read_file() -> dict[str, Any]:
     if not p.exists():
         return {}
     try:
-        return cast(dict[str, Any], json.loads(p.read_text()))
+        return cast(dict[str, Any], json.loads(p.read_text(encoding='utf-8')))
     except (OSError, ValueError):
         return {}
 
@@ -39,7 +39,7 @@ def _write_file(data: dict[str, Any]) -> None:
     p = _file_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, 'w') as f:
+    with os.fdopen(fd, 'w', encoding='utf-8') as f:
         f.write(json.dumps(data))
     os.chmod(p, 0o600)
 

@@ -8,7 +8,7 @@ on:
     inputs:
       branch:
         description: 'Ветка для сборки .exe'
-        default: 'remote_control'
+        default: 'main'
         required: true
   push:
     tags:
@@ -45,6 +45,27 @@ jobs:
         run: |
           Get-ChildItem dist
           if (-not (Test-Path dist/mavixdesktop.exe)) { throw 'mavixdesktop.exe не собрался' }
+
+      - name: Verify SDL2 DLLs in bundle
+        run: |
+          # pygame/SDL2 живут в dist/_internal/ (onefile) — ищем рекурсивно.
+          $sdl2 = Get-ChildItem -Path dist -Recurse -Filter '*SDL2*.dll' -ErrorAction SilentlyContinue
+          if (-not $sdl2) { throw 'SDL2 DLLs не найдены в dist — pygame не попал в бандл' }
+          Write-Host "SDL2 DLLs: $($sdl2.FullName -join ', ')"
+
+      - name: Smoke-run (.exe)
+        run: |
+          $p = Start-Process -FilePath "dist\mavixdesktop.exe" -PassThru
+          try {
+            Start-Sleep -Seconds 10
+            if ($p.HasExited) {
+              Write-Error "mavixdesktop.exe exited early with code $($p.ExitCode)"
+              exit 1
+            }
+            Write-Host 'mavixdesktop.exe жив после 10 секунд'
+          } finally {
+            if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

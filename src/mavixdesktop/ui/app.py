@@ -25,7 +25,6 @@ from mavixdesktop.core.logger import logger
 from mavixdesktop.joystick.guard import JoystickGuard
 from mavixdesktop.qgc.launcher import (
     find_qgc,
-    is_qgc_running,
     launch_qgc,
     save_qgc_path,
 )
@@ -563,25 +562,51 @@ class App(QMainWindow):
         coord = self._conn.coordinator
         fc_kind = coord.fc_kind if coord is not None else 'crsf'
         if fc_kind == 'mavlink':
-            if is_qgc_running():
-                logger.info('[app] QGC уже запущен — просим пользователя закрыть его')
-                QMessageBox.warning(
-                    self,
-                    'Закройте QGroundControl',
-                    'QGroundControl уже запущен. Закройте его и нажмите '
-                    '«Взлёт» ещё раз — приложение запустит QGC с нужной '
-                    'конфигурацией джойстика.',
-                )
-                return
-            sdl_config = calibration.get('sdl_gamecontrollerconfig', '')
+            self._apply_calibration_to_qgc(joystick_index, calibration)
             self._start_arm_listener(joystick_index, calibration)
             self._open_flight_window(joystick_index, calibration, passive=True)
+            sdl_config = calibration.get('sdl_gamecontrollerconfig', '')
             self._begin_qgc_search(sdl_config)
             return
         self._open_flight_window(joystick_index, calibration)
 
+    def _apply_calibration_to_qgc(
+        self, joystick_index: int, calibration: dict[str, Any]
+    ) -> None:
+        """Передаёт раскладку осей джойстика в QGC 5.0.8 через его .ini и env."""
+        from mavixdesktop.joystick.manager import joystick_name
+        from mavixdesktop.qgc.joystick_config import apply_calibration_to_all
+
+        name = joystick_name(joystick_index)
+        if not name:
+            return
+        try:
+            applied = apply_calibration_to_all(calibration, name)
+        except Exception as exc:
+            logger.warning(
+                '[app] не удалось применить калибровку джойстика к QGC: %s', exc
+            )
+            applied = 0
+        if applied == 0:
+            self._set_debug_status('Калибровка джойстика не передана в QGroundControl')
+            QMessageBox.information(
+                self,
+                'Настройки джойстика',
+                'Не удалось передать раскладку осей в QGroundControl: его файл '
+                'настроек не найден.\n\nЗапустите QGroundControl один раз, '
+                'закройте его и нажмите «Взлёт» ещё раз — либо настройте '
+                'джойстик вручную в самом QGroundControl.',
+            )
+
+    def _overlay_parent(self) -> QWidget:
+        """Полётное окно открывается на весь экран — плашку вешаем на него, иначе она под ним."""
+        flight = self._flight_window
+        if flight is not None and flight.isVisible():
+            return flight
+        return self
+
     def _begin_qgc_search(self, sdl_config: str) -> None:
-        self._qgc_search_overlay = QGCSearchOverlay()
+        self._qgc_search_overlay = QGCSearchOverlay(parent=self._overlay_parent())
         self._qgc_search_overlay.show_centered()
         worker = _QgcFindWorker()
         worker.found.connect(lambda path: self._on_qgc_found(path, sdl_config))
@@ -594,25 +619,20 @@ class App(QMainWindow):
             self._qgc_search_overlay = None
         proc = None
         if qgc_path is not None:
-            proc = launch_qgc(sdl_config, qgc_path=qgc_path)
+            proc = launch_qgc(qgc_path=qgc_path, sdl_config=sdl_config)
         if proc is None:
             proc = self._launch_qgc_with_user_pick(sdl_config)
         if proc is None:
             logger.warning('[app] QGC не найден; полётное окно работает без него')
             self._set_debug_status('QGroundControl не найден и не запущен')
         else:
-            self._qgc_overlay = QGCLaunchingOverlay(qgc_proc=proc)
+            self._qgc_overlay = QGCLaunchingOverlay(
+                qgc_proc=proc, parent=self._overlay_parent()
+            )
             self._qgc_overlay.show_centered()
             self._set_debug_status(f'QGroundControl запущен (pid={proc.pid})')
 
     def _debug_launch_qgc(self) -> None:
-        if is_qgc_running():
-            QMessageBox.warning(
-                self,
-                'Закройте QGroundControl',
-                'QGroundControl уже запущен. Закройте его и попробуйте снова.',
-            )
-            return
         self._set_debug_status('Ищу QGroundControl…')
         self._begin_qgc_search('')
 
@@ -651,7 +671,7 @@ class App(QMainWindow):
             QMessageBox.warning(self, 'QGroundControl', 'Указанный файл не существует.')
             return None
         save_qgc_path(path)
-        proc = launch_qgc(sdl_config, qgc_path=path)
+        proc = launch_qgc(qgc_path=path, sdl_config=sdl_config)
         if proc is None:
             QMessageBox.warning(
                 self,

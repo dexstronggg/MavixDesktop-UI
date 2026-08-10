@@ -197,7 +197,9 @@ class PeerSession:
             try:
                 await self._pc.addIceCandidate(cand)
             except Exception as exc:
-                logger.warning('[peer] ошибка применения отложенного кандидата: %s', exc)
+                logger.warning(
+                    '[peer] ошибка применения отложенного кандидата: %s', exc
+                )
         self._pending_remote_candidates.clear()
         answer = await self._pc.createAnswer()
         patched_answer = RTCSessionDescription(

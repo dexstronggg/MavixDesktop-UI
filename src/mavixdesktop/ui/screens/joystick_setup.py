@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import platform
 import subprocess
 import time
 from collections.abc import Callable
@@ -10,7 +11,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pygame
-from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QCloseEvent,
     QColor,
@@ -82,17 +83,17 @@ _STEP_ARM = 9
 _STEP_DONE = 10
 
 _STEPS = [
-    'Step 1/10: Set all sticks to CENTER -> Next',
-    'Step 2/10: THROTTLE - pull up (MAXIMUM) -> Next',
-    'Step 3/10: THROTTLE - pull down (MINIMUM) -> Next',
-    'Step 4/10: YAW - turn right (MAXIMUM) -> Next',
-    'Step 5/10: YAW - turn left (MINIMUM) -> Next',
-    'Step 6/10: PITCH - tilt forward (MAXIMUM) -> Next',
-    'Step 7/10: PITCH - tilt backward (MINIMUM) -> Next',
-    'Step 8/10: ROLL - tilt right (MAXIMUM) -> Next',
-    'Step 9/10: ROLL - tilt left (MINIMUM) -> Next',
-    'Step 10/10: Press the ARM/DISARM button on the controller',
-    'Calibration complete!\n\nPress "Done" to save.',
+    'Шаг 1/10: установите все стики в ЦЕНТР — Далее',
+    'Шаг 2/10: ГАЗ — потяните вверх (МАКСИМУМ) — Далее',
+    'Шаг 3/10: ГАЗ — потяните вниз (МИНИМУМ) — Далее',
+    'Шаг 4/10: РЫСКАНИЕ — поверните вправо (МАКСИМУМ) — Далее',
+    'Шаг 5/10: РЫСКАНИЕ — поверните влево (МИНИМУМ) — Далее',
+    'Шаг 6/10: ТАНГАЖ — наклоните вперёд (МАКСИМУМ) — Далее',
+    'Шаг 7/10: ТАНГАЖ — наклоните назад (МИНИМУМ) — Далее',
+    'Шаг 8/10: КРЕН — наклоните вправо (МАКСИМУМ) — Далее',
+    'Шаг 9/10: КРЕН — наклоните влево (МИНИМУМ) — Далее',
+    'Шаг 10/10: нажмите кнопку ARM/DISARM на пульте',
+    'Калибровка завершена!\n\nНажмите «Готово» для сохранения.',
 ]
 
 
@@ -379,7 +380,7 @@ class _StickPreviewDialog(QDialog):
 
         if on_takeoff:
             takeoff_btn = QPushButton('Взлёт')
-            takeoff_btn.setFixedHeight(32)
+            takeoff_btn.setFixedHeight(40)
             takeoff_btn.setStyleSheet(theme.QSS_BUTTON_PRIMARY)
             takeoff_btn.clicked.connect(self.__takeoff)
             root.addWidget(takeoff_btn)
@@ -447,27 +448,77 @@ class _StickPreviewDialog(QDialog):
         super().closeEvent(event)
 
 
-class QGCSearchOverlay(QDialog):
+class _CenteredPanel(QWidget):
+    """Плашка по центру окна.
+
+    Дочерний виджет, а не окно: Wayland запрещает приложению самому
+    расставлять окна, там `move()` для окна просто игнорируется.
+    """
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowFlags(
-            Qt.WindowType.Tool
-            | Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-        )
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        self.setModal(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setObjectName('centeredPanel')
         self.setFixedSize(360, 80)
         self.setStyleSheet(f"""
-            QDialog {{
+            QWidget#centeredPanel {{
                 background: {theme.BG_SURFACE};
                 border: 1px solid {theme.BORDER};
                 border-radius: {theme.RADIUS_LG}px;
             }}
         """)
+        self.hide()
+
+    def show_centered(self) -> None:
+        parent = self.parentWidget()
+        if parent is None:
+            screen = QGuiApplication.primaryScreen().geometry()
+            self.move(
+                screen.x() + (screen.width() - self.width()) // 2,
+                screen.y() + (screen.height() - self.height()) // 2,
+            )
+        else:
+            parent.installEventFilter(self)
+            self.__recenter()
+        self.show()
+        self.raise_()
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.Resize and watched is self.parentWidget():
+            self.__recenter()
+        return super().eventFilter(watched, event)
+
+    def __recenter(self) -> None:
+        parent = self.parentWidget()
+        if parent is None:
+            return
+        area = parent.rect()
+        self.move(
+            area.x() + (area.width() - self.width()) // 2,
+            area.y() + (area.height() - self.height()) // 2,
+        )
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        parent = self.parentWidget()
+        if parent is not None:
+            parent.removeEventFilter(self)
+        super().closeEvent(event)
+
+
+_REOPEN_NOTE = (
+    'Если QGroundControl уже было открыто раньше — закройте его: '
+    'приложение откроет своё окно с нужными настройками'
+)
+
+
+class QGCSearchOverlay(_CenteredPanel):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setFixedSize(360, 124)
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(20, 18, 20, 18)
+        lay.setContentsMargins(20, 16, 20, 16)
         self._label = QLabel('Ищу QGroundControl')
         self._label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._label.setStyleSheet(
@@ -476,19 +527,19 @@ class QGCSearchOverlay(QDialog):
         )
         lay.addWidget(self._label)
 
+        note = QLabel(_REOPEN_NOTE)
+        note.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        note.setWordWrap(True)
+        note.setStyleSheet(
+            f'color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_SM}px;'
+            'background: transparent;'
+        )
+        lay.addWidget(note)
+
         self._dots = 0
         self._timer = QTimer(interval=350)
         self._timer.timeout.connect(self.__tick)
         self._timer.start()
-
-    def show_centered(self) -> None:
-        screen = QGuiApplication.primaryScreen().geometry()
-        x = screen.x() + (screen.width() - self.width()) // 2
-        y = screen.y() + (screen.height() - self.height()) // 2
-        self.move(x, y)
-        self.show()
-        self.raise_()
-        self.activateWindow()
 
     def __tick(self) -> None:
         self._dots = (self._dots + 1) % 4
@@ -499,32 +550,18 @@ class QGCSearchOverlay(QDialog):
         super().closeEvent(event)
 
 
-class QGCLaunchingOverlay(QDialog):
+class QGCLaunchingOverlay(_CenteredPanel):
     def __init__(
         self, qgc_proc: subprocess.Popen[bytes], parent: QWidget | None = None
     ) -> None:
         super().__init__(parent)
-        self.setWindowFlags(
-            Qt.WindowType.Tool
-            | Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-        )
-        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        self.setModal(False)
-        self.setFixedSize(360, 80)
-        self.setStyleSheet(f"""
-            QDialog {{
-                background: {theme.BG_SURFACE};
-                border: 1px solid {theme.BORDER};
-                border-radius: {theme.RADIUS_LG}px;
-            }}
-        """)
+        self.setFixedSize(360, 124)
 
         self._qgc_proc = qgc_proc
         self._deadline = time.monotonic() + 6.0
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(20, 18, 20, 18)
+        lay.setContentsMargins(20, 16, 20, 16)
         lbl = QLabel('Открываю QGroundControl…')
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lbl.setStyleSheet(
@@ -533,18 +570,18 @@ class QGCLaunchingOverlay(QDialog):
         )
         lay.addWidget(lbl)
 
+        note = QLabel(_REOPEN_NOTE)
+        note.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        note.setWordWrap(True)
+        note.setStyleSheet(
+            f'color: {theme.TEXT_MUTED}; font-size: {theme.FONT_SIZE_SM}px;'
+            'background: transparent;'
+        )
+        lay.addWidget(note)
+
         self._timer = QTimer(interval=500)
         self._timer.timeout.connect(self.__check)
         self._timer.start()
-
-    def show_centered(self) -> None:
-        screen = QGuiApplication.primaryScreen().geometry()
-        x = screen.x() + (screen.width() - self.width()) // 2
-        y = screen.y() + (screen.height() - self.height()) // 2
-        self.move(x, y)
-        self.show()
-        self.raise_()
-        self.activateWindow()
 
     def __check(self) -> None:
         if self._qgc_proc.poll() is not None:
@@ -554,6 +591,8 @@ class QGCLaunchingOverlay(QDialog):
             self.close()
 
     def __qgc_window_visible(self) -> bool:
+        if platform.system() != 'Linux':
+            return False
         try:
             result = subprocess.run(
                 ['wmctrl', '-lp'],
@@ -575,6 +614,8 @@ class QGCLaunchingOverlay(QDialog):
         return False
 
     def __qgc_pid_tree(self) -> set[str]:
+        if platform.system() != 'Linux':
+            return {str(self._qgc_proc.pid)}
         pids = {str(self._qgc_proc.pid)}
         try:
             result = subprocess.run(
@@ -760,7 +801,7 @@ class JoystickSetupPage(QWidget):
         if not path:
             return
         try:
-            with open(path) as f:
+            with open(path, encoding='utf-8') as f:
                 data = json.load(f)
         except Exception as exc:
             QMessageBox.critical(self, 'Ошибка чтения файла', str(exc))
@@ -790,7 +831,7 @@ class JoystickSetupPage(QWidget):
         if not path:
             return
         try:
-            with open(path, 'w') as f:
+            with open(path, 'w', encoding='utf-8') as f:
                 json.dump(cal, f, indent=2, ensure_ascii=False)
         except Exception as exc:
             QMessageBox.critical(self, 'Ошибка сохранения', str(exc))
@@ -821,7 +862,7 @@ class JoystickCalibrationDialog(QDialog):
 
         sticks_row = QHBoxLayout()
         sticks_row.addStretch()
-        self._stick_l = StickWidget('Рыскание/Тяга', label_font_px=18)
+        self._stick_l = StickWidget('Рыск/Тяга', label_font_px=18)
         self._stick_r = StickWidget('Крен/Тангаж', label_font_px=18)
         sticks_row.addWidget(self._stick_l)
         sticks_row.addSpacing(16)

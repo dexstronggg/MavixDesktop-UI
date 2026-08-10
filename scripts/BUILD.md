@@ -39,7 +39,7 @@ ssh root@SERVER 'cd /srv/mavix && docker compose restart app'
 Готовый workflow `.github/workflows/build-windows.yml` в репозитории.
 
 1. GitHub → `dexstronggg/MavixDesktop-UI` → вкладка **Actions** → **Build Windows EXE** → **Run workflow**.
-2. Указать ветку (по умолчанию `remote_control`) → **Run**.
+2. Указать ветку (по умолчанию `main`) → **Run**.
 3. После завершения — в самом run скачать артефакт **mavixdesktop-exe** (там `dist/mavixdesktop.exe`).
 
 Срабатывает и автоматически по тегу `vX.Y`.
