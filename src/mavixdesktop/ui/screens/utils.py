@@ -25,7 +25,15 @@ from PySide6.QtGui import (
     QResizeEvent,
 )
 from PySide6.QtSvg import QSvgRenderer
-from PySide6.QtWidgets import QGridLayout, QLayoutItem, QPushButton, QWidget
+from PySide6.QtWidgets import (
+    QFrame,
+    QGridLayout,
+    QLabel,
+    QLayoutItem,
+    QPushButton,
+    QScrollArea,
+    QWidget,
+)
 
 from mavixdesktop.ui.style import theme
 
@@ -75,6 +83,9 @@ def overlay_btn(text: str, parent: QWidget, size: int | None = None) -> QPushBut
         size = theme.OVERLAY_BTN_SIDE
     btn = QPushButton(text, parent)
     btn.setFixedSize(size, size)
+    # иначе кнопка забирает фокус: пробел «нажимает» её, а стрелки уходят на
+    # навигацию по фокусу и не доходят до keyPressEvent окна
+    btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     btn.setFlat(True)
     btn.setAutoFillBackground(False)
     btn.setStyleSheet(f"""
@@ -111,6 +122,7 @@ def overlay_icon_btn(
         icon_size = theme.OVERLAY_BTN_CORNER_ICON
     btn = QPushButton(parent)
     btn.setFixedSize(size, size)
+    btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
     btn.setIcon(QIcon(svg_pixmap(svg_name, icon_size, color=theme.TEXT_PRIMARY)))
     btn.setIconSize(QSize(icon_size, icon_size))
     btn.setFlat(True)
@@ -248,3 +260,74 @@ class CardGrid(QWidget):
 
         rows = (n + cols - 1) // cols if self._cards else 0
         self.setMinimumHeight(rows * (self.CARD_H + self.GAP) + self.GAP)
+
+
+STATS_PANEL_SCREEN_FRACTION = 0.25
+
+
+def stats_panel_width(widget: QWidget, margin: int = 16) -> int:
+    """Ширина панели показателей: не больше 25 % экрана, чтобы не закрывать видео."""
+    screen = widget.screen()
+    screen_w = screen.geometry().width() if screen is not None else widget.width()
+    cap = int(screen_w * STATS_PANEL_SCREEN_FRACTION)
+    available = max(0, widget.width() - 2 * margin)
+    return max(1, min(cap, available)) if available else max(1, cap)
+
+
+def stats_label_qss() -> str:
+    return f"""
+        QLabel {{
+            background: transparent;
+            color: {theme.TEXT_PRIMARY};
+            border: none;
+            font-family: monospace;
+            font-size: {theme.FONT_SIZE_SM - 1}px;
+            padding: 10px 14px;
+        }}
+    """
+
+
+def build_stats_scroll(label: QLabel, parent: QWidget) -> QScrollArea:
+    """Панель показателей не влезает по высоте — кладём метку в прокрутку."""
+    scroll = QScrollArea(parent)
+    scroll.setWidget(label)
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QFrame.Shape.NoFrame)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    scroll.setStyleSheet(f"""
+        QScrollArea {{
+            background: rgba(0,0,0,0.72);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: {theme.RADIUS_MD}px;
+        }}
+        QScrollArea > QWidget > QWidget {{ background: transparent; }}
+        QScrollBar:vertical {{
+            background: transparent;
+            width: 8px;
+            margin: 4px 2px 4px 0;
+        }}
+        QScrollBar::handle:vertical {{
+            background: rgba(255,255,255,0.28);
+            border-radius: 4px;
+            min-height: 24px;
+        }}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+            background: transparent;
+        }}
+    """)
+    return scroll
+
+
+def fit_stats_scroll(
+    scroll: QScrollArea, label: QLabel, x: int, y: int, width: int, max_height: int
+) -> None:
+    """Панель тянется по содержимому и упирается в max_height — дальше прокрутка."""
+    viewport_w = max(1, width - 2 * scroll.frameWidth() - 2)
+    needed = label.heightForWidth(viewport_w)
+    if needed <= 0:
+        needed = label.sizeHint().height()
+    height = max(0, min(max_height, needed + 2 * scroll.frameWidth() + 2))
+    scroll.setGeometry(x, y, width, height)

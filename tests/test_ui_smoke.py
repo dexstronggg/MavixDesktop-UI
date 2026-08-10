@@ -178,7 +178,7 @@ def test_drone_view_quality_overlays(qapp):
 
     page.set_stats_text('КАЧЕСТВО КАНАЛА\n\nпотери   0.30 %')
     assert 'потери' in panel.stats_panel.text()
-    assert panel.stats_panel.isHidden()
+    assert panel.stats_scroll.isHidden()
     assert panel.toggle_stats_panel() is True
     assert panel.toggle_stats_panel() is False
 
@@ -209,8 +209,10 @@ def test_quality_line_and_table_render(qapp):
     table = format_stats_table(
         LinkSnapshot(level=LEVEL_OK, bitrate_in_kbps=2400.0, pli=3)
     )
-    assert 'входящий поток' in table
-    assert 'запросов ключевого кадра' in table
+    assert 'ВХОДЯЩИЙ ПОТОК\n2.4 Мбит/с' in table, (
+        'параметр и значение — на разных строках'
+    )
+    assert '\n\nЗАПРОСОВ КЛЮЧЕВОГО КАДРА\n3' in table, 'пары разделены пустой строкой'
     assert '—' in table, 'метрики борта без данных показываются прочерком'
 
 
@@ -433,11 +435,11 @@ def test_hotkeys_work_in_both_layouts(qapp, monkeypatch):
         )
 
     press(Qt.Key.Key_S, 's')
-    assert not page._video_panel.stats_panel.isHidden(), (
+    assert not page._video_panel.stats_scroll.isHidden(), (
         'латинская S не открыла таблицу'
     )
     press(0, 'ы')
-    assert page._video_panel.stats_panel.isHidden(), 'русская ы не закрыла таблицу'
+    assert page._video_panel.stats_scroll.isHidden(), 'русская ы не закрыла таблицу'
 
     press(Qt.Key.Key_I, 'i')
     press(0, 'ш')
@@ -486,3 +488,158 @@ def test_qgc_overlay_follows_window_resize(qapp):
 
     assert overlay.geometry().center().x() == pytest.approx(300, abs=1)
     assert overlay.geometry().center().y() == pytest.approx(200, abs=1)
+
+
+def _flight_window(cam_count=2):
+    from mavixdesktop.ui.screens.flight_window import FlightWindow
+
+    class FakeJoystick:
+        def is_connected(self):
+            return True
+
+        def read(self):
+            return {'thr': 0.0, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
+
+        def is_armed(self):
+            return False
+
+    return FlightWindow(
+        joystick_input=FakeJoystick(),
+        signalling=None,
+        get_frame=lambda idx: None,
+        cam_count=lambda: cam_count,
+        loop=None,
+        on_close=lambda: None,
+        fc_kind='crsf',
+        passive=True,
+    )
+
+
+def test_flight_window_overlay_buttons_never_take_keyboard_focus(qapp):
+    """Кнопка в фокусе перехватывает пробел (нажимает себя) и стрелки (навигация
+    по фокусу), поэтому до keyPressEvent окна они не доходят."""
+    from PySide6.QtCore import Qt
+
+    window = _flight_window()
+    buttons = (
+        window._back_btn,
+        window._help_btn,
+        window._prev_btn,
+        window._next_btn,
+    )
+    for btn in buttons:
+        assert btn.focusPolicy() == Qt.FocusPolicy.NoFocus, btn
+
+
+def test_flight_window_arrows_switch_camera_not_focus(qapp):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeyEvent
+
+    window = _flight_window()
+    window.resize(1280, 720)
+    window.show()
+    qapp.processEvents()
+
+    start = window._cam_index
+    for key, expected in ((Qt.Key.Key_Right, 1), (Qt.Key.Key_Left, start)):
+        target = window.focusWidget() or window
+        qapp.sendEvent(
+            target,
+            QKeyEvent(QKeyEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier),
+        )
+        qapp.processEvents()
+        assert window._cam_index == expected
+
+    window.close()
+
+
+def test_flight_window_space_does_not_close_it(qapp):
+    """Пробел «нажимал» сфокусированную кнопку «назад» и закрывал полёт."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeyEvent
+
+    closed = []
+    window = _flight_window()
+    window.resize(1280, 720)
+    window.show()
+    qapp.processEvents()
+    window._on_close = lambda: closed.append(True)
+
+    target = window.focusWidget() or window
+    for event_type in (QKeyEvent.Type.KeyPress, QKeyEvent.Type.KeyRelease):
+        qapp.sendEvent(
+            target,
+            QKeyEvent(event_type, Qt.Key.Key_Space, Qt.KeyboardModifier.NoModifier),
+        )
+    qapp.processEvents()
+
+    assert not closed
+    assert window.isVisible()
+    window.close()
+
+
+def test_flight_window_s_key_toggles_stats_panel(qapp):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeyEvent
+
+    window = _flight_window()
+    window.resize(1280, 720)
+    window.show()
+    qapp.processEvents()
+
+    assert window._stats_scroll.isHidden()
+    for expected_visible in (True, False):
+        target = window.focusWidget() or window
+        qapp.sendEvent(
+            target,
+            QKeyEvent(
+                QKeyEvent.Type.KeyPress, Qt.Key.Key_S, Qt.KeyboardModifier.NoModifier
+            ),
+        )
+        qapp.processEvents()
+        assert window._stats_scroll.isVisible() == expected_visible
+
+    window.close()
+
+
+def test_stats_panel_never_wider_than_a_tenth_of_the_screen(qapp):
+    """Панель уходила почти на половину кадра и перегораживала видео."""
+    from mavixdesktop.ui.screens.utils import STATS_PANEL_SCREEN_FRACTION
+
+    long_text = '\n'.join('показатель ' + 'x' * 60 for _ in range(20))
+    screen_w = qapp.primaryScreen().geometry().width()
+    cap = int(screen_w * STATS_PANEL_SCREEN_FRACTION)
+
+    window = _flight_window()
+    window.resize(1280, 720)
+    window.show()
+    window.toggle_stats_panel()
+    window.set_stats_text(long_text)
+    qapp.processEvents()
+
+    assert window._stats_scroll.width() <= cap
+    assert window._stats_scroll.x() <= 24, 'панель прижата к левому краю'
+    assert window._stats_scroll.verticalScrollBar().maximum() > 0, (
+        'длинная таблица должна прокручиваться, а не обрезаться'
+    )
+    window.close()
+
+
+def test_stats_panel_height_follows_content(qapp):
+    """Панель растягивалась на всю высоту кадра даже под пару строк."""
+    window = _flight_window()
+    window.resize(1280, 720)
+    window.show()
+    window.toggle_stats_panel()
+
+    window.set_stats_text('КАЧЕСТВО КАНАЛА\n\nПОТЕРИ\n0.00 %')
+    qapp.processEvents()
+    short_h = window._stats_scroll.height()
+
+    window.set_stats_text('\n\n'.join(f'ПАРАМЕТР {i}\nзначение' for i in range(40)))
+    qapp.processEvents()
+    tall_h = window._stats_scroll.height()
+
+    assert short_h < tall_h, 'высота должна зависеть от содержимого'
+    assert short_h < 200, f'короткая таблица не должна занимать {short_h} px'
+    window.close()

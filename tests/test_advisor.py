@@ -254,8 +254,10 @@ def test_format_advice_has_both_lines_and_fits_note():
         fits=True,
     )
     text = format_advice(rec, {'width': 1920, 'height': 1080, 'fps': 30})
-    assert 'рекомендуется' in text
-    assert 'сейчас' in text
+    assert 'РЕКОМЕНДУЕТСЯ\n1280x720@30' in text, (
+        'подпись и значение — на разных строках'
+    )
+    assert '\n\nСЕЙЧАС\n' in text, 'пары разделены пустой строкой'
     assert '1280x720@30' in text
     assert '1920x1080@30' in text
     assert 'не тянет' not in text

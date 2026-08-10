@@ -271,6 +271,4 @@ def format_advice(rec: Recommendation | None, current: dict[str, Any] | None) ->
         second += ' (канал не тянет даже минимум)'
     rows.append(('сейчас', second))
 
-    width_col = max(len(name) for name, _ in rows)
-    body = '\n'.join(f'{name.ljust(width_col)}   {value}' for name, value in rows)
-    return body
+    return '\n\n'.join(f'{name.upper()}\n{value}' for name, value in rows)

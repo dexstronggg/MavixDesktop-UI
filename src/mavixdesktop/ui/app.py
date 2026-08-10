@@ -56,6 +56,8 @@ from mavixdesktop.ui.state import SessionState
 if TYPE_CHECKING:
     from mavixdesktop.joystick.input import JoystickInput
 
+_KEYFRAME_STALE_MS = 1000.0
+
 
 class _QgcFindWorker(QThread):
     found = Signal(object)
@@ -388,6 +390,7 @@ class App(QMainWindow):
         self._state.cam_index = cam_index
         self._update_camera_settings_ui()
         self._send_focus(cam_index)
+        self._request_keyframe()
 
     def _send_focus(self, cam_index: int) -> None:
         cameras = self._state.cameras
@@ -699,6 +702,7 @@ class App(QMainWindow):
             on_close=self._handle_flight_closed,
             fc_kind=fc_kind,
             passive=passive,
+            shift_cam=self._video.shift_cam,
         )
         self._flight_window.showFullScreen()
         self._flight_window.raise_()
@@ -815,9 +819,11 @@ class App(QMainWindow):
         if self._quality_ticks % 5 == 0:
             self._advice_text = self._compute_advice(snap)
         advice_block = f'\n\n{self._advice_text}' if self._advice_text else ''
-        self.drone_view_page.set_stats_text(format_stats_table(snap) + advice_block)
+        stats_text = format_stats_table(snap) + advice_block
+        self.drone_view_page.set_stats_text(stats_text)
         if self._flight_window is not None:
             self._flight_window.update_quality(*format_quality_line(snap))
+            self._flight_window.set_stats_text(stats_text)
         self._maybe_request_keyframe(snap)
 
     def _compute_advice(self, snap: LinkSnapshot) -> str:
@@ -842,8 +848,12 @@ class App(QMainWindow):
     def _maybe_request_keyframe(self, snap: LinkSnapshot) -> None:
         freeze_grew = snap.freeze_count > self._last_freeze_count
         self._last_freeze_count = snap.freeze_count
-        if snap.loss_pct <= 2.0 and not freeze_grew:
+        stale = snap.staleness_ms >= _KEYFRAME_STALE_MS
+        if snap.loss_pct <= 2.0 and not freeze_grew and not stale:
             return
+        self._request_keyframe()
+
+    def _request_keyframe(self) -> None:
         coord = self._conn.coordinator
         if coord is None:
             return

@@ -19,7 +19,14 @@ from mavixdesktop.core.logger import logger
 from mavixdesktop.fc.encoder import build_rc_frame
 from mavixdesktop.joystick.input import JoystickInput
 from mavixdesktop.ui.screens.help_dialog import HelpDialog
-from mavixdesktop.ui.screens.utils import overlay_btn, overlay_icon_btn
+from mavixdesktop.ui.screens.utils import (
+    build_stats_scroll,
+    fit_stats_scroll,
+    overlay_btn,
+    overlay_icon_btn,
+    stats_label_qss,
+    stats_panel_width,
+)
 from mavixdesktop.ui.screens.widgets import StickWidget
 from mavixdesktop.ui.style import theme
 
@@ -62,6 +69,7 @@ class FlightWindow(QWidget):
         on_close: Callable[[], None],
         fc_kind: str = 'crsf',
         passive: bool = False,
+        shift_cam: Callable[[int], int] | None = None,
     ) -> None:
         super().__init__()
         self.setWindowTitle('Flight')
@@ -69,6 +77,7 @@ class FlightWindow(QWidget):
         self._signalling = signalling
         self._get_frame = get_frame
         self._cam_count = cam_count
+        self._shift_cam = shift_cam
         self._loop = loop
         self._on_close = on_close
         self._cam_index = 0
@@ -167,6 +176,15 @@ class FlightWindow(QWidget):
         """)
         self._lost_lbl.hide()
 
+        self._stats_lbl = QLabel('')
+        self._stats_lbl.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
+        )
+        self._stats_lbl.setWordWrap(True)
+        self._stats_lbl.setStyleSheet(stats_label_qss())
+        self._stats_scroll = build_stats_scroll(self._stats_lbl, self)
+        self._stats_scroll.hide()
+
         corner_qss = f"""
             QLabel {{
                 background: rgba(0,0,0,0.45);
@@ -232,12 +250,25 @@ class FlightWindow(QWidget):
             (w - self._lost_lbl.width()) // 2, (h - self._lost_lbl.height()) // 2
         )
 
+        top = _PAD + theme.OVERLAY_BTN_CORNER + 34
+        panel_w = stats_panel_width(self, margin=_PAD)
+        free_h = max(0, h - top - self._quality_lbl.height() - 2 * _PAD)
+        fit_stats_scroll(
+            self._stats_scroll, self._stats_lbl, _PAD, top, panel_w, free_h
+        )
+
     def __prev_cam(self) -> None:
+        if self._shift_cam is not None:
+            self._cam_index = self._shift_cam(-1)
+            return
         n = self._cam_count()
         if n > 0:
             self._cam_index = (self._cam_index - 1) % n
 
     def __next_cam(self) -> None:
+        if self._shift_cam is not None:
+            self._cam_index = self._shift_cam(1)
+            return
         n = self._cam_count()
         if n > 0:
             self._cam_index = (self._cam_index + 1) % n
@@ -364,6 +395,18 @@ class FlightWindow(QWidget):
     def toggle_help(self) -> None:
         HelpDialog(self).exec()
 
+    def set_stats_text(self, text: str) -> None:
+        self._stats_lbl.setText(text)
+        self.__reposition()
+
+    def toggle_stats_panel(self) -> bool:
+        visible = self._stats_scroll.isHidden()
+        self._stats_scroll.setVisible(visible)
+        if visible:
+            self._stats_scroll.raise_()
+        self.__reposition()
+        return visible
+
     def keyPressEvent(self, event: QKeyEvent) -> None:
         key = event.key()
         if key == Qt.Key.Key_Escape:
@@ -372,6 +415,8 @@ class FlightWindow(QWidget):
             self.__prev_cam()
         elif key == Qt.Key.Key_Right:
             self.__next_cam()
+        elif key == Qt.Key.Key_S or event.text().lower() in ('s', 'ы'):
+            self.toggle_stats_panel()
         elif key == Qt.Key.Key_I or event.text().lower() in ('i', 'ш'):
             self.toggle_help()
         else:

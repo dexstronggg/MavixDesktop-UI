@@ -20,7 +20,14 @@ from PySide6.QtWidgets import (
 )
 
 from mavixdesktop.ui.screens.help_dialog import HelpDialog
-from mavixdesktop.ui.screens.utils import overlay_btn, overlay_icon_btn
+from mavixdesktop.ui.screens.utils import (
+    build_stats_scroll,
+    fit_stats_scroll,
+    overlay_btn,
+    overlay_icon_btn,
+    stats_label_qss,
+    stats_panel_width,
+)
 from mavixdesktop.ui.style import theme
 
 
@@ -122,22 +129,14 @@ class VideoPanel(QWidget):
         """)
         self.stale_overlay.hide()
 
-        self.stats_panel = QLabel('', self)
+        self.stats_panel = QLabel('')
         self.stats_panel.setAlignment(
             Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
         )
-        self.stats_panel.setStyleSheet(f"""
-            QLabel {{
-                background: rgba(0,0,0,0.72);
-                color: {theme.TEXT_PRIMARY};
-                border: 1px solid rgba(255,255,255,0.12);
-                border-radius: {theme.RADIUS_MD}px;
-                font-family: monospace;
-                font-size: {theme.FONT_SIZE_SM - 1}px;
-                padding: 10px 14px;
-            }}
-        """)
-        self.stats_panel.hide()
+        self.stats_panel.setWordWrap(True)
+        self.stats_panel.setStyleSheet(stats_label_qss())
+        self.stats_scroll = build_stats_scroll(self.stats_panel, self)
+        self.stats_scroll.hide()
 
     def toggle_help(self) -> None:
         HelpDialog(self.window()).exec()
@@ -174,14 +173,13 @@ class VideoPanel(QWidget):
 
     def set_stats_text(self, text: str) -> None:
         self.stats_panel.setText(text)
-        self.stats_panel.adjustSize()
         self.__reposition(self.width(), self.height())
 
     def toggle_stats_panel(self) -> bool:
-        visible = self.stats_panel.isHidden()
-        self.stats_panel.setVisible(visible)
+        visible = self.stats_scroll.isHidden()
+        self.stats_scroll.setVisible(visible)
         if visible:
-            self.stats_panel.raise_()
+            self.stats_scroll.raise_()
         return visible
 
     def __build_calibration_overlay(self) -> None:
@@ -348,7 +346,10 @@ class VideoPanel(QWidget):
 
         self.quality_overlay.move(16, h - self.quality_overlay.height() - 16)
         self.stale_overlay.move((w - self.stale_overlay.width()) // 2, 64)
-        self.stats_panel.move(16, 16 + theme.OVERLAY_BTN_CORNER + 12)
+        top = 16 + theme.OVERLAY_BTN_CORNER + 12
+        panel_w = stats_panel_width(self)
+        free_h = max(0, h - top - self.quality_overlay.height() - 32)
+        fit_stats_scroll(self.stats_scroll, self.stats_panel, 16, top, panel_w, free_h)
 
         hw = min(400, w)
         self.hint_lbl.setFixedWidth(hw)

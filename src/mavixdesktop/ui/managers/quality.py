@@ -312,6 +312,5 @@ def format_stats_table(snap: LinkSnapshot) -> str:
         ('доля замираний (10 с)', f'{snap.freeze_ratio * 100:.1f} %'),
         ('запросов ключевого кадра', str(snap.pli)),
     ]
-    width = max(len(name) for name, _ in rows)
-    body = '\n'.join(f'{name.ljust(width)}   {value}' for name, value in rows)
+    body = '\n\n'.join(f'{name.upper()}\n{value}' for name, value in rows)
     return f'КАЧЕСТВО КАНАЛА  (S — скрыть)\n\n{body}'

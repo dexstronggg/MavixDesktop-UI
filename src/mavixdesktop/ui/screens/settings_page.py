@@ -294,12 +294,7 @@ class SettingsPage(QWidget):
         )
         layout.addWidget(h)
 
-        sub = QLabel(
-            'Имитирует корпоративный/университетский firewall: при включении '
-            'все candidate-кандидаты типа host и srflx отбрасываются, '
-            'остаются только relay через TURN-сервер. Полезно чтобы '
-            'воспроизвести «не подключается из универа» из домашней сети.'
-        )
+        sub = QLabel('Принудительно включает TURN')
         sub.setStyleSheet(f'color: {theme.TEXT_MUTED}; font-size: 13px;')
         sub.setWordWrap(True)
         layout.addWidget(sub)
