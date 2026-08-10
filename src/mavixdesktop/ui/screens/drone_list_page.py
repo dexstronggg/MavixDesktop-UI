@@ -111,13 +111,19 @@ class DroneCard(AnimatedCard):
     delete_requested = Signal(str)
 
     def __init__(
-        self, drone_id: str, status: str, index: int, icon_pixmap: QPixmap
+        self,
+        drone_id: str,
+        status: str,
+        index: int,
+        icon_pixmap: QPixmap,
+        name: str | None = None,
     ) -> None:
         super().__init__()
         self._drone_id = drone_id
         self._status = status
         self._ready = status == 'ready'
         self._bar_color = _STATUS_COLORS.get(status, theme.ACCENT)
+        self.display_name = name or f'Дрон №{index + 1}'
 
         self.setFixedSize(_CARD_W, _CARD_H)
         if self._ready:
@@ -151,7 +157,7 @@ class DroneCard(AnimatedCard):
         icon_lbl.setPixmap(icon_pixmap if self._ready else _dim_pixmap(icon_pixmap))
         icon_lbl.setStyleSheet('background: transparent; border: none;')
 
-        name_lbl = QLabel(f'Дрон №{index + 1}')
+        name_lbl = QLabel(self.display_name)
         name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name_lbl.setStyleSheet(
             f'color: {theme.TEXT_PRIMARY if self._ready else theme.TEXT_DISABLED};'
@@ -538,13 +544,14 @@ class DroneListPage(QWidget):
         counts = {'ready': 0, 'offline': 0, 'connecting': 0}
         for i, d in enumerate(drones):
             drone_id = d.get('drone_id', d.get('session_id', ''))
+            drone_name = d.get('name')
             if 'online' in d:
                 status = 'ready' if d.get('online') else 'offline'
             else:
                 status = d.get('status', 'unknown')
             if status in counts:
                 counts[status] += 1
-            card = DroneCard(drone_id, status, i, self._icon)
+            card = DroneCard(drone_id, status, i, self._icon, name=drone_name)
             card.clicked.connect(self._on_select)
             if self._on_delete_drone is not None:
                 card.delete_requested.connect(self._on_delete_drone)

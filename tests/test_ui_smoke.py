@@ -69,10 +69,12 @@ def test_drone_list_page_update_with_new_format(qapp):
     )
     page.update(
         [
-            {'drone_id': 'd-1', 'online': True},
+            {'drone_id': 'd-1', 'online': True, 'name': 'боровой-шницель'},
             {'drone_id': 'd-2', 'online': False},
         ]
     )
+    assert page._grid._cards[0].display_name == 'боровой-шницель'
+    assert page._grid._cards[1].display_name == 'Дрон №2'
     page.update([])
 
 
