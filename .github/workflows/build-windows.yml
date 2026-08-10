@@ -48,10 +48,12 @@ jobs:
 
       - name: Verify SDL2 DLLs in bundle
         run: |
-          # pygame/SDL2 живут в dist/_internal/ (onefile) — ищем рекурсивно.
-          $sdl2 = Get-ChildItem -Path dist -Recurse -Filter '*SDL2*.dll' -ErrorAction SilentlyContinue
-          if (-not $sdl2) { throw 'SDL2 DLLs не найдены в dist — pygame не попал в бандл' }
-          Write-Host "SDL2 DLLs: $($sdl2.FullName -join ', ')"
+          # --onefile: на диске лежит только .exe, DLL упакованы внутрь него,
+          # поэтому проверяем оглавление архива, а не файлы в dist.
+          $toc = python -m PyInstaller.utils.cliutils.archive_viewer --list dist/mavixdesktop.exe
+          $sdl2 = $toc | Select-String -Pattern 'SDL2'
+          if (-not $sdl2) { throw 'SDL2 не найден в бандле — pygame не попал в сборку' }
+          Write-Host "SDL2 в бандле: $($sdl2.Count) записей"
 
       - name: Smoke-run (.exe)
         run: |
