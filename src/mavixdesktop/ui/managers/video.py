@@ -48,6 +48,10 @@ class VideoManager:
         self._decoded = 0
         self._rendered = 0
         self._coalesced = 0
+        # диагностика: по какому треку что происходит (см. _log_stats)
+        self._decoded_by_track: dict[str, int] = {}
+        self._shown_by_track: dict[str, int] = {}
+        self._miss_by_track: dict[str, int] = {}
         self._stats_timer = QTimer(interval=self.STATS_INTERVAL_MS)
         self._stats_timer.timeout.connect(self._log_stats)
 
@@ -59,7 +63,13 @@ class VideoManager:
             return
         with self._lock:
             self._track_ids.append(track.id)
-        logger.info('[video] трек получен: id=%s', track.id)
+            index = len(self._track_ids) - 1
+        logger.info(
+            '[video] трек получен: порядковый=%d id=%s (индекс камеры в UI берётся '
+            'из порядка прихода треков)',
+            index,
+            track.id,
+        )
         self._receive_tasks.append(
             asyncio.create_task(self._receive(cast(VideoStreamTrack, track)))
         )
@@ -84,6 +94,9 @@ class VideoManager:
     def _publish(self, track_id: str, img: Any) -> None:
         with self._lock:
             self._decoded += 1
+            self._decoded_by_track[track_id] = (
+                self._decoded_by_track.get(track_id, 0) + 1
+            )
             if track_id in self._pending:
                 self._coalesced += 1
             self._pending[track_id] = img
@@ -101,6 +114,7 @@ class VideoManager:
             if img is None:
                 return
             self._rendered += 1
+            self._shown_by_track[track_id] = self._shown_by_track.get(track_id, 0) + 1
         self._on_frame(img)
         self._notify_shown()
 
@@ -131,6 +145,11 @@ class VideoManager:
             img = self._pending.pop(track_id, None)
             if img is not None:
                 self._rendered += 1
+                self._shown_by_track[track_id] = (
+                    self._shown_by_track.get(track_id, 0) + 1
+                )
+            else:
+                self._miss_by_track[track_id] = self._miss_by_track.get(track_id, 0) + 1
         if img is not None:
             self._notify_shown()
         return img
@@ -215,6 +234,37 @@ class VideoManager:
                 self._coalesced,
             )
             self._decoded = self._rendered = self._coalesced = 0
+            per_track = [
+                (
+                    idx,
+                    tid,
+                    self._decoded_by_track.pop(tid, 0),
+                    self._shown_by_track.pop(tid, 0),
+                    self._miss_by_track.pop(tid, 0),
+                )
+                for idx, tid in enumerate(self._track_ids)
+            ]
+            self._decoded_by_track.clear()
+            self._shown_by_track.clear()
+            self._miss_by_track.clear()
+            active_idx = self._cam_index
+            active_id = self._active_track_id()
+            delivering = self._delivering
+        for idx, tid, dec, shown, miss in per_track:
+            logger.info(
+                '[video] трек %d%s id=%s: принято %d, показано %d, пусто %d',
+                idx,
+                ' (активный)' if tid == active_id else '',
+                tid[:8],
+                dec,
+                shown,
+                miss,
+            )
+        logger.info(
+            '[video] активная камера в UI: индекс=%d, доставка на экран просмотра=%s',
+            active_idx,
+            'вкл' if delivering else 'выкл',
+        )
         if not decoded and not rendered:
             return
         secs = self.STATS_INTERVAL_MS / 1000
