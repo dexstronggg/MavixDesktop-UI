@@ -15,18 +15,29 @@ class _RelayProtocol(asyncio.DatagramProtocol):
     def __init__(self, on_packet: PacketCallback) -> None:
         self._on_packet = on_packet
         self.transport: asyncio.DatagramTransport | None = None
+        self.from_qgc = 0
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         self.transport = cast(asyncio.DatagramTransport, transport)
 
-    def datagram_received(self, data: bytes, _addr: object) -> None:
+    def datagram_received(self, data: bytes, addr: object) -> None:
+        self.from_qgc += 1
+        if self.from_qgc == 1 or self.from_qgc % 100 == 0:
+            logger.info(
+                '[mavlink-relay] <-QGC пакет #%d от %s len=%d head=%s',
+                self.from_qgc,
+                addr,
+                len(data),
+                data[:6].hex(),
+            )
         try:
             self._on_packet(data)
         except Exception as exc:
             logger.warning('[mavlink-relay] ошибка колбэка: %s', exc)
 
     def error_received(self, exc: Exception) -> None:
-        logger.debug('[mavlink-relay] error_received: %s', exc)
+        # на Windows ICMP «порт недоступен» приходит сюда как WSAECONNRESET
+        logger.warning('[mavlink-relay] error_received: %r', exc)
 
 
 class MavlinkRelay:
@@ -38,6 +49,7 @@ class MavlinkRelay:
         self._transport: asyncio.DatagramTransport | None = None
         self._protocol: _RelayProtocol | None = None
         self._bound_port: int = 0
+        self._to_qgc = 0
 
     @property
     def is_running(self) -> bool:
@@ -86,6 +98,15 @@ class MavlinkRelay:
             data = data.tobytes()
         elif not isinstance(data, (bytes, bytearray)):
             data = bytes(data)
+        self._to_qgc += 1
+        if self._to_qgc == 1 or self._to_qgc % 500 == 0:
+            logger.info(
+                '[mavlink-relay] ->QGC пакет #%d на %s:%d (от QGC получено %d)',
+                self._to_qgc,
+                self._qgc_host,
+                self._qgc_port,
+                self._protocol.from_qgc if self._protocol else -1,
+            )
         try:
             self._transport.sendto(data, (self._qgc_host, self._qgc_port))
         except OSError as exc:

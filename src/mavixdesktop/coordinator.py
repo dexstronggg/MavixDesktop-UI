@@ -63,6 +63,7 @@ class SessionCoordinator:
         self._fc_kind: str = 'none'
         self._latest_drones: list[dict[str, Any]] = []
         self._latest_cameras: list[dict[str, Any]] = []
+        self._qgc_uplink = 0
         self._reconnect_drone_id: str | None = None
         self._connect_request_at: float | None = None
         self._last_keyframe_ts: float | None = None
@@ -573,11 +574,32 @@ class SessionCoordinator:
             self._mavlink.send_to_qgc(data)
 
     def _on_qgc_packet(self, data: bytes) -> None:
+        # молчаливый выход здесь означал бы, что запросы QGC (параметры, миссии)
+        # просто исчезают — логируем причину, иначе её не видно
+        self._qgc_uplink += 1
+        loud = self._qgc_uplink == 1 or self._qgc_uplink % 100 == 0
         if self._manager is None or self._manager.channels is None:
+            if loud:
+                logger.warning(
+                    '[coord] пакет QGC #%d отброшен: нет активной сессии',
+                    self._qgc_uplink,
+                )
             return
         packet = self._manager.channels.packet
         if packet is None:
+            if loud:
+                logger.warning(
+                    '[coord] пакет QGC #%d отброшен: packet-channel отсутствует',
+                    self._qgc_uplink,
+                )
             return
+        if loud:
+            logger.info(
+                '[coord] пакет QGC #%d -> борт, len=%d, канал открыт=%s',
+                self._qgc_uplink,
+                len(data),
+                getattr(packet, 'is_open', 'n/a'),
+            )
         packet.send_bytes(data)
 
     async def _teardown_session(self) -> None:
