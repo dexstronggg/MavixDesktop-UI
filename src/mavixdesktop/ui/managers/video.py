@@ -50,6 +50,8 @@ class VideoManager:
         self._coalesced = 0
         # диагностика: по какому треку что происходит (см. _log_stats)
         self._decoded_by_track: dict[str, int] = {}
+        self._convert_ms: dict[str, float] = {}
+        self._queue_depth: dict[str, int] = {}
         self._shown_by_track: dict[str, int] = {}
         self._miss_by_track: dict[str, int] = {}
         self._stats_timer = QTimer(interval=self.STATS_INTERVAL_MS)
@@ -79,17 +81,30 @@ class VideoManager:
         try:
             while True:
                 frame = cast(VideoFrame, await track.recv())
+                started = time.monotonic()
                 img = await loop.run_in_executor(
                     None,
                     cast(
                         Callable[[], Any], lambda f=frame: f.to_ndarray(format='bgr24')
                     ),
                 )
+                self._note_receive(track, time.monotonic() - started)
                 self._publish(track.id, img)
         except asyncio.CancelledError:
             return
         except (MediaStreamError, RuntimeError):
             pass
+
+    def _note_receive(self, track: VideoStreamTrack, convert_s: float) -> None:
+        """Глубина очереди aiortc и цена конвертации — растут, если не успеваем."""
+        queue = getattr(track, '_queue', None)
+        depth = queue.qsize() if queue is not None else -1
+        with self._lock:
+            tid = track.id
+            self._convert_ms[tid] = max(
+                self._convert_ms.get(tid, 0.0), convert_s * 1000
+            )
+            self._queue_depth[tid] = max(self._queue_depth.get(tid, 0), depth)
 
     def _publish(self, track_id: str, img: Any) -> None:
         with self._lock:
@@ -250,17 +265,24 @@ class VideoManager:
             active_idx = self._cam_index
             active_id = self._active_track_id()
             delivering = self._delivering
+            depth = dict(self._queue_depth)
+            convert = dict(self._convert_ms)
+            self._queue_depth.clear()
+            self._convert_ms.clear()
         for idx, tid, dec, shown, miss in per_track:
-            logger.debug(
-                '[video] трек %d%s id=%s: принято %d, показано %d, пусто %d',
+            logger.info(
+                '[video] трек %d%s id=%s: принято %d, показано %d, пусто %d, '
+                'очередь до %d, конвертация до %.1f мс',
                 idx,
                 ' (активный)' if tid == active_id else '',
                 tid[:8],
                 dec,
                 shown,
                 miss,
+                depth.get(tid, 0),
+                convert.get(tid, 0.0),
             )
-        logger.debug(
+        logger.info(
             '[video] активная камера в UI: индекс=%d, доставка на экран просмотра=%s',
             active_idx,
             'вкл' if delivering else 'выкл',
