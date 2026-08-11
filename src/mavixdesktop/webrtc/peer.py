@@ -89,11 +89,9 @@ def _entry_scheme(entry: dict[str, Any]) -> str:
 
 
 def _build_configuration(ice_servers: list[dict[str, Any]]) -> RTCConfiguration:
-    from mavixdesktop.webrtc.decoder_patch import install_decoder_patch
     from mavixdesktop.webrtc.jitter_patch import install_jitter_patch
 
     install_jitter_patch()
-    install_decoder_patch()
     use_relay = bool(getattr(settings, 'force_relay', False))
     mode = 'RELAY (только TURN)' if use_relay else 'DIRECT (STUN+TURN)'
     logger.info(
