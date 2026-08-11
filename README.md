@@ -13,18 +13,6 @@ cp .env-example .env
 
 Без доступного сервера приложение само переключается в демо-режим (мок-данные, любой email/пароль). Флаги: `--demo` — форсировать демо-режим, `--headless` — без GUI (только координатор).
 
-Скрипты локального запуска делают всё то же самое одной командой — создают venv, ставят зависимости, пишут локальный `.env` и проверяют, отвечает ли сервер:
-
-```bash
-./local_launch_lin.sh              # Linux
-```
-
-```powershell
-.\local_launch_win.ps1             # Windows
-```
-
-Флаги передаются насквозь: `.\local_launch_win.ps1 --demo`. Если PowerShell откажется выполнять скрипт, один раз разрешите: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
-
 ## Подробнее
 
 - [TECHNICAL.md](TECHNICAL.md) — архитектура, установка (`.deb`/dev), конфигурация, debug-режим.
