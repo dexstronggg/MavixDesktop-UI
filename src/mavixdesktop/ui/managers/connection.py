@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import platform
 import threading
 from collections.abc import Awaitable, Callable, Coroutine
 from typing import TYPE_CHECKING, Any, cast
@@ -149,10 +150,26 @@ class ConnectionManager:
             if own_session:
                 await api.close()
 
+    @staticmethod
+    def _new_loop() -> asyncio.AbstractEventLoop:
+        """На Windows берём Selector вместо Proactor.
+
+        В Proactor-транспорте приём датаграмм не перепланируется после OSError
+        (cpython#127057): один WSAECONNRESET — и цикл чтения UDP умирает
+        навсегда, до пересоздания сессии. ICMP «порт недоступен» от ещё не
+        запущенного QGroundControl такую ошибку как раз и порождает.
+        """
+        if platform.system() == 'Windows':
+            selector = getattr(asyncio, 'SelectorEventLoop', None)
+            if selector is not None:
+                logger.info('[connection] Windows: SelectorEventLoop (cpython#127057)')
+                return cast(asyncio.AbstractEventLoop, selector())
+        return asyncio.new_event_loop()
+
     def _ensure_loop_started(self) -> None:
         if self._loop is not None:
             return
-        self._loop = asyncio.new_event_loop()
+        self._loop = self._new_loop()
         self._thread = threading.Thread(target=self._loop.run_forever, daemon=True)
         self._thread.start()
         logger.info('[connection] поток event loop запущен')
