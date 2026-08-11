@@ -376,6 +376,7 @@ class App(QMainWindow):
 
     def _on_cameras_received(self, cameras: list[dict[str, object]]) -> None:
         self._state.cameras = cameras
+        self._video.set_camera_count(len(cameras))
         self.drone_view_page.save_btn.setEnabled(True)
         self._update_camera_settings_ui()
         self._send_focus(self._video.cam_index)
