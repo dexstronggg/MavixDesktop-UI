@@ -593,13 +593,6 @@ class SessionCoordinator:
                     self._qgc_uplink,
                 )
             return
-        if loud:
-            logger.info(
-                '[coord] пакет QGC #%d -> борт, len=%d, канал открыт=%s',
-                self._qgc_uplink,
-                len(data),
-                getattr(packet, 'is_open', 'n/a'),
-            )
         packet.send_bytes(data)
 
     async def _teardown_session(self) -> None:

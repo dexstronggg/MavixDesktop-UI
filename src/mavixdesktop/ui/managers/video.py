@@ -251,7 +251,7 @@ class VideoManager:
             active_id = self._active_track_id()
             delivering = self._delivering
         for idx, tid, dec, shown, miss in per_track:
-            logger.info(
+            logger.debug(
                 '[video] трек %d%s id=%s: принято %d, показано %d, пусто %d',
                 idx,
                 ' (активный)' if tid == active_id else '',
@@ -260,7 +260,7 @@ class VideoManager:
                 shown,
                 miss,
             )
-        logger.info(
+        logger.debug(
             '[video] активная камера в UI: индекс=%d, доставка на экран просмотра=%s',
             active_idx,
             'вкл' if delivering else 'выкл',
