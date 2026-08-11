@@ -643,3 +643,37 @@ def test_stats_panel_height_follows_content(qapp):
     assert short_h < tall_h, 'высота должна зависеть от содержимого'
     assert short_h < 200, f'короткая таблица не должна занимать {short_h} px'
     window.close()
+
+
+def test_flight_window_starts_on_the_camera_that_was_shown(qapp):
+    """Борт держит неактивные камеры на IDLE_FPS: старт с чужого трека давал
+    вечное «нет свежего кадра»."""
+    from mavixdesktop.ui.screens.flight_window import FlightWindow
+
+    class FakeJoystick:
+        def is_connected(self):
+            return True
+
+        def read(self):
+            return {'thr': 0.0, 'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
+
+        def is_armed(self):
+            return False
+
+    asked: list[int] = []
+    window = FlightWindow(
+        joystick_input=FakeJoystick(),
+        signalling=None,
+        get_frame=lambda idx: asked.append(idx),
+        cam_count=lambda: 2,
+        loop=None,
+        on_close=lambda: None,
+        fc_kind='crsf',
+        passive=True,
+        cam_index=1,
+    )
+    assert window._cam_index == 1
+    window.resize(640, 480)
+    window._FlightWindow__update_video_frame()
+    assert asked == [1], 'опрашивается та камера, что была на экране просмотра'
+    window.close()

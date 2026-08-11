@@ -703,7 +703,11 @@ class App(QMainWindow):
             fc_kind=fc_kind,
             passive=passive,
             shift_cam=self._video.shift_cam,
+            cam_index=self._video.cam_index,
         )
+        # подтверждаем борту активную камеру: за время в окне просмотра он мог
+        # остаться на другой, и та, что мы собираемся показывать, идёт на IDLE_FPS
+        self._on_cam_changed(self._video.cam_index)
         self._flight_window.showFullScreen()
         self._flight_window.raise_()
         self._flight_window.activateWindow()

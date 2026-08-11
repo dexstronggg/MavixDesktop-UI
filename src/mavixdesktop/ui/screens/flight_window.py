@@ -70,6 +70,7 @@ class FlightWindow(QWidget):
         fc_kind: str = 'crsf',
         passive: bool = False,
         shift_cam: Callable[[int], int] | None = None,
+        cam_index: int = 0,
     ) -> None:
         super().__init__()
         self.setWindowTitle('Flight')
@@ -80,7 +81,9 @@ class FlightWindow(QWidget):
         self._shift_cam = shift_cam
         self._loop = loop
         self._on_close = on_close
-        self._cam_index = 0
+        # не 0, а та камера, что была на экране просмотра: борт держит остальные
+        # на IDLE_FPS, и опрос чужого трека даёт вечное «нет свежего кадра»
+        self._cam_index = cam_index
         self._help_shown = False
         self._passive = bool(passive)
 
