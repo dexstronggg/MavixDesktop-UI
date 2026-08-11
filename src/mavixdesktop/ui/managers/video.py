@@ -34,6 +34,9 @@ class VideoManager:
         self._on_frame_shown = on_frame_shown
 
         self._track_ids: list[str] = []
+        # камеры сводятся бортом в одну дорожку, поэтому их число приходит
+        # списком по config-channel, а не выводится из числа треков
+        self._logical_cams: int = 0
         self._receive_tasks: list[asyncio.Task[None]] = []
         self._cam_index: int = 0
 
@@ -179,9 +182,10 @@ class VideoManager:
 
     def shift_cam(self, delta: int) -> int:
         with self._lock:
-            if not self._track_ids:
+            total = self._logical_cams or len(self._track_ids)
+            if total <= 0:
                 return self._cam_index
-            self._cam_index = (self._cam_index + delta) % len(self._track_ids)
+            self._cam_index = (self._cam_index + delta) % total
         if self._on_cam_changed:
             self._on_cam_changed(self._cam_index)
         self._schedule_active()
@@ -194,7 +198,12 @@ class VideoManager:
     @property
     def cam_count(self) -> int:
         with self._lock:
-            return len(self._track_ids)
+            return self._logical_cams or len(self._track_ids)
+
+    def set_camera_count(self, count: int) -> None:
+        """Сколько камер у борта — из его списка камер, а не из числа дорожек."""
+        with self._lock:
+            self._logical_cams = max(0, count)
 
     def start(self) -> None:
         with self._lock:

@@ -677,3 +677,18 @@ def test_flight_window_starts_on_the_camera_that_was_shown(qapp):
     window._FlightWindow__update_video_frame()
     assert asked == [1], 'опрашивается та камера, что была на экране просмотра'
     window.close()
+
+
+def test_camera_count_comes_from_the_board_list_not_tracks(qapp):
+    """Борт сводит камеры в одну дорожку: считать камеры по трекам нельзя,
+    иначе переключение пропадёт."""
+    from mavixdesktop.ui.managers.video import VideoManager
+
+    vm = VideoManager(on_frame=lambda img: None)
+    vm._track_ids = ['единственный-трек']
+    assert vm.cam_count == 1
+
+    vm.set_camera_count(2)
+    assert vm.cam_count == 2
+    assert vm.shift_cam(1) == 1, 'переключение работает при одной дорожке'
+    assert vm.shift_cam(1) == 0, 'и заворачивается по числу камер'
