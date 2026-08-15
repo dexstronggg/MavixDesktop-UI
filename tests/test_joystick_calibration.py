@@ -76,3 +76,21 @@ def test_create_parent_dirs(tmp_path):
     nested = tmp_path / 'nested' / 'deeper'
     p = calibration.save(_valid_cal(), 'X', data_dir=nested)
     assert p.parent == nested
+
+
+def test_release_button_is_optional_for_old_files():
+    """Калибровки, снятые до появления шага сброса, должны оставаться валидными."""
+    cal = _valid_cal()
+    assert 'release_button_index' not in cal
+    ok, err = calibration.validate(cal)
+    assert ok is True, err
+
+
+def test_release_button_survives_roundtrip(tmp_path):
+    cal = _valid_cal()
+    cal['release_button_index'] = 3
+    calibration.save(cal, 'Pad', data_dir=tmp_path)
+    loaded = calibration.load('Pad', data_dir=tmp_path)
+    assert loaded['release_button_index'] == 3
+    ok, _ = calibration.validate(loaded)
+    assert ok is True

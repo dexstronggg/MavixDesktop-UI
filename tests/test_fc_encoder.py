@@ -61,6 +61,37 @@ def test_unused_channels_centered():
         assert ch == CH_CENTER
 
 
+def test_aux_values_land_on_channels_six_and_up():
+    aux = [CH_MAX] + [CH_MIN] * 10
+    frame = build_rc_frame(0, 0, 0, 0, armed=False, aux=aux)
+    channels = _decode_channels(frame)
+    assert channels[5] == CH_MAX
+    assert channels[6:] == [CH_MIN] * 10
+
+
+def test_aux_does_not_disturb_sticks_or_arm():
+    aux = [CH_MAX] * 11
+    frame = build_rc_frame(-1.0, 0.0, 0.0, 0.0, armed=True, aux=aux)
+    channels = _decode_channels(frame)
+    assert channels[0] == CH_MIN
+    assert channels[1] == channels[2] == channels[3] == CH_CENTER
+    assert channels[4] == CH_MAX
+
+
+def test_short_aux_list_is_padded_with_center():
+    frame = build_rc_frame(0, 0, 0, 0, armed=False, aux=[CH_MAX])
+    channels = _decode_channels(frame)
+    assert channels[5] == CH_MAX
+    assert channels[6:] == [CH_CENTER] * 10
+
+
+def test_overlong_aux_list_cannot_overflow_the_frame():
+    frame = build_rc_frame(0, 0, 0, 0, armed=False, aux=[CH_MAX] * 40)
+    channels = _decode_channels(frame)
+    assert len(channels) == 16
+    assert channels[4] == CH_MIN
+
+
 def test_taer_order_roll_is_channel_2():
     frame = build_rc_frame(0, roll=1.0, pitch=0, yaw=0, armed=False)
     channels = _decode_channels(frame)

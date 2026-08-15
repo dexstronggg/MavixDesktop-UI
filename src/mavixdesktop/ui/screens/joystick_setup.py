@@ -80,25 +80,28 @@ _STEP_PITCH_MIN = 6
 _STEP_ROLL_MAX = 7
 _STEP_ROLL_MIN = 8
 _STEP_ARM = 9
-_STEP_DONE = 10
+_STEP_RELEASE = 10
+_STEP_DONE = 11
 
 _STEPS = [
-    'Шаг 1/10: установите все стики в ЦЕНТР — Далее',
-    'Шаг 2/10: ГАЗ — потяните вверх (МАКСИМУМ) — Далее',
-    'Шаг 3/10: ГАЗ — потяните вниз (МИНИМУМ) — Далее',
-    'Шаг 4/10: РЫСКАНИЕ — поверните вправо (МАКСИМУМ) — Далее',
-    'Шаг 5/10: РЫСКАНИЕ — поверните влево (МИНИМУМ) — Далее',
-    'Шаг 6/10: ТАНГАЖ — наклоните вперёд (МАКСИМУМ) — Далее',
-    'Шаг 7/10: ТАНГАЖ — наклоните назад (МИНИМУМ) — Далее',
-    'Шаг 8/10: КРЕН — наклоните вправо (МАКСИМУМ) — Далее',
-    'Шаг 9/10: КРЕН — наклоните влево (МИНИМУМ) — Далее',
-    'Шаг 10/10: нажмите кнопку ARM/DISARM на пульте',
+    'Шаг 1/11: установите все стики в ЦЕНТР — Далее',
+    'Шаг 2/11: ГАЗ — потяните вверх (МАКСИМУМ) — Далее',
+    'Шаг 3/11: ГАЗ — потяните вниз (МИНИМУМ) — Далее',
+    'Шаг 4/11: РЫСКАНИЕ — поверните вправо (МАКСИМУМ) — Далее',
+    'Шаг 5/11: РЫСКАНИЕ — поверните влево (МИНИМУМ) — Далее',
+    'Шаг 6/11: ТАНГАЖ — наклоните вперёд (МАКСИМУМ) — Далее',
+    'Шаг 7/11: ТАНГАЖ — наклоните назад (МИНИМУМ) — Далее',
+    'Шаг 8/11: КРЕН — наклоните вправо (МАКСИМУМ) — Далее',
+    'Шаг 9/11: КРЕН — наклоните влево (МИНИМУМ) — Далее',
+    'Шаг 10/11: нажмите кнопку ARM/DISARM на пульте',
+    'Шаг 11/11: нажмите кнопку СБРОСА ГРУЗА.\n\n'
+    'Если сброса нет — нажмите «Пропустить».',
     'Калибровка завершена!\n\nНажмите «Готово» для сохранения.',
 ]
 
 
 class _StepProgress(QWidget):
-    _TOTAL = 10
+    _TOTAL = 11
     _DOT_SIZE = 8
     _DOT_GAP = 12
     _HALO_PAD = 4
@@ -921,6 +924,66 @@ class JoystickCalibrationDialog(QDialog):
             get_val('axis_roll', 'roll_max', 2), get_val('axis_pitch', 'pitch_max', 3)
         )
 
+        if self._step == _STEP_RELEASE:
+            captured = (
+                'release_button_index' in self._data
+                or 'release_axis_index' in self._data
+            )
+            if not captured and self._arm_btn_states is not None:
+                reserved = self._data.get('arm_button_index')
+                for i in range(self._js.get_numbuttons()):
+                    if i >= len(self._arm_btn_states):
+                        continue
+                    if i == reserved:
+                        if self._js.get_button(i) != self._arm_btn_states[i]:
+                            self._instruction.setText(
+                                f'Кнопка {i} уже назначена на ARM.\n\n'
+                                'Выберите другую или нажмите «Пропустить».'
+                            )
+                        continue
+                    if self._js.get_button(i) != self._arm_btn_states[i]:
+                        self._data['release_type'] = 'button'
+                        self._data['release_button_index'] = i
+                        self._instruction.setText(
+                            f'Кнопка {i} назначена на СБРОС ГРУЗА (канал 6).\n\n'
+                            'Нажмите «Далее».'
+                        )
+                        self._next_btn.setText(f'Далее (кнопка {i})')
+                        break
+            # тумблеры Radiomaster приходят осями, а не кнопками — ловим и их
+            if (
+                'release_axis_index' not in self._data
+                and 'release_button_index' not in self._data
+                and self._arm_axis_states is not None
+            ):
+                busy = {
+                    self._data.get('axis_thr'): 'стик газа',
+                    self._data.get('axis_yaw'): 'стик рыскания',
+                    self._data.get('axis_pitch'): 'стик тангажа',
+                    self._data.get('axis_roll'): 'стик крена',
+                    self._data.get('arm_axis_index'): 'ARM',
+                }
+                for i in range(self._js.get_numaxes()):
+                    if i >= len(self._arm_axis_states):
+                        continue
+                    moved = (self._js.get_axis(i) > 0.5) != self._arm_axis_states[i]
+                    if i in busy:
+                        if moved:
+                            self._instruction.setText(
+                                f'Ось {i} уже занята: {busy[i]}.\n\n'
+                                'Выберите другую или нажмите «Пропустить».'
+                            )
+                        continue
+                    if moved:
+                        self._data['release_type'] = 'axis'
+                        self._data['release_axis_index'] = i
+                        self._instruction.setText(
+                            f'Тумблер (ось {i}) назначен на СБРОС ГРУЗА '
+                            '(канал 6).\n\nНажмите «Далее».'
+                        )
+                        self._next_btn.setText(f'Далее (ось {i})')
+                        break
+
         if self._step == _STEP_ARM:
             arm_captured = (
                 'arm_button_index' in self._data or 'arm_axis_index' in self._data
@@ -1021,7 +1084,7 @@ class JoystickCalibrationDialog(QDialog):
             return
 
         self._step += 1
-        if self._step == _STEP_ARM:
+        if self._step in (_STEP_ARM, _STEP_RELEASE):
             pygame.event.pump()
             self._arm_btn_states = [
                 self._js.get_button(i) for i in range(self._js.get_numbuttons())
@@ -1035,8 +1098,43 @@ class JoystickCalibrationDialog(QDialog):
     def _update_ui(self) -> None:
         self._instruction.setText(_STEPS[self._step])
         self._progress.set_current(self._step)
+        if self._step == _STEP_RELEASE:
+            self._next_btn.setText('Пропустить')
         if self._step == _STEP_DONE:
             self._next_btn.setText('Готово')
+            self._instruction.setText(self._summary_text())
+
+    def _summary_text(self) -> str:
+        """Что куда назначено — с этой таблицей идут в конфигуратор полётника."""
+        from mavixdesktop.joystick.channels import CH_ARM, CH_RELEASE, auto_bindings
+
+        lines = [
+            'Калибровка завершена!',
+            '',
+            f'CH1-4 — стики,  CH{CH_ARM} — ARM',
+        ]
+        release = self._data.get('release_button_index')
+        if isinstance(release, int) and not isinstance(release, bool):
+            lines.append(f'CH{CH_RELEASE} — сброс груза (кнопка {release})')
+        try:
+            bindings = auto_bindings(
+                self._data,
+                self._js.get_numbuttons(),
+                self._js.get_numaxes(),
+                self._js.get_numhats(),
+            )
+        except Exception:
+            bindings = []
+        for b in bindings:
+            lines.append(f'CH{b.channel} — {b.label}')
+        if bindings:
+            lines += [
+                '',
+                'Назначить им режимы можно в конфигураторе полётника',
+                '(Betaflight / iNav, вкладка Modes).',
+            ]
+        lines += ['', 'Нажмите «Готово» для сохранения.']
+        return '\n'.join(lines)
 
     def _build_calibration(self) -> None:
         c = self._data
@@ -1060,6 +1158,9 @@ class JoystickCalibrationDialog(QDialog):
             'arm_button_index': c.get('arm_button_index', 0),
             'arm_type': c.get('arm_type', 'button'),
             'arm_axis_index': c.get('arm_axis_index', None),
+            'release_type': c.get('release_type', None),
+            'release_button_index': c.get('release_button_index', None),
+            'release_axis_index': c.get('release_axis_index', None),
         }
         try:
             guid = self._js.get_guid()

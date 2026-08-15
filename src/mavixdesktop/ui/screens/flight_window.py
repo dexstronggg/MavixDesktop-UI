@@ -90,6 +90,8 @@ class FlightWindow(QWidget):
         self._fc_kind = (fc_kind or 'crsf').lower()
         self._last_armed: bool | None = None
         self._js_lost = False
+        self._last_aux: list[int] | None = None
+        self._release_done = False
 
         self.__build_ui()
         self._timer = QTimer(interval=10)
@@ -148,6 +150,12 @@ class FlightWindow(QWidget):
         self._arm_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._arm_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self._arm_label.setStyleSheet(_DISARM_STYLE)
+
+        self._release_label = QLabel('ГРУЗ НА БОРТУ', self)
+        self._release_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._release_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self._release_label.setStyleSheet(_DISARM_STYLE)
+        self._release_label.setVisible(self._has_release())
 
         self._stick_left = StickWidget(
             'Тяга/Рыск', self, bg_alpha=160, label_font_px=18
@@ -238,6 +246,8 @@ class FlightWindow(QWidget):
 
         arm_w = 100
         self._arm_label.setGeometry((w - arm_w) // 2, stick_y - 26, arm_w, 20)
+        rel_w = 180
+        self._release_label.setGeometry((w - rel_w) // 2, stick_y - 46, rel_w, 20)
 
         self._quality_lbl.move(_PAD, h - self._quality_lbl.height() - _PAD)
         self._stale_lbl.move(
@@ -310,11 +320,38 @@ class FlightWindow(QWidget):
         self._stick_right.set_position(roll, pitch)
         self._arm_label.setText('ARM' if armed else 'DISARM')
         self._arm_label.setStyleSheet(_ARM_STYLE if armed else _DISARM_STYLE)
+        self.__update_release_label()
 
         if self._passive:
             return
 
         self.__tick_crsf(thr, yaw, pitch, roll, armed)
+
+    def _has_release(self) -> bool:
+        try:
+            return bool(self._js.has_release())
+        except Exception:
+            return False
+
+    def __update_release_label(self) -> None:
+        """Надпись показываем только когда кнопка сброса назначена.
+
+        Сброшенный груз назад не возвращается, поэтому надпись залипает:
+        вернуть тумблер можно (чтобы закрыть замок), но «ГРУЗ НА БОРТУ»
+        после сброса уже не покажем — груза там нет.
+        """
+        if not self._has_release():
+            self._release_label.setVisible(False)
+            return
+        if not self._release_done:
+            try:
+                self._release_done = bool(self._js.is_released())
+            except Exception:
+                return
+        self._release_label.setVisible(True)
+        done = self._release_done
+        self._release_label.setText('ГРУЗ СБРОШЕН' if done else 'ГРУЗ НА БОРТУ')
+        self._release_label.setStyleSheet(_ARM_STYLE if done else _DISARM_STYLE)
 
     def __handle_joystick_lost(self) -> None:
         if self._js_lost:
@@ -345,7 +382,11 @@ class FlightWindow(QWidget):
         if self._fc_kind == 'mavlink':
             return
         try:
-            self._send_packet(build_rc_frame(-1.0, 0.0, 0.0, 0.0, armed=False))
+            # тумблеры замораживаем: обнуление в момент потери джойстика
+            # дёрнуло бы сброс груза
+            self._send_packet(
+                build_rc_frame(-1.0, 0.0, 0.0, 0.0, armed=False, aux=self._last_aux)
+            )
         except Exception as exc:
             logger.debug('[FlightWindow] ошибка аварийной отправки crsf: %s', exc)
 
@@ -353,7 +394,11 @@ class FlightWindow(QWidget):
         self, thr: float, yaw: float, pitch: float, roll: float, armed: bool
     ) -> None:
         try:
-            packet = build_rc_frame(thr, roll, pitch, yaw, armed)
+            self._last_aux = self._js.get_aux_channels()
+        except Exception as exc:
+            logger.debug('[FlightWindow] ошибка чтения тумблеров: %s', exc)
+        try:
+            packet = build_rc_frame(thr, roll, pitch, yaw, armed, aux=self._last_aux)
         except Exception as exc:
             logger.debug('[FlightWindow] ошибка кодирования CRSF: %s', exc)
             return
